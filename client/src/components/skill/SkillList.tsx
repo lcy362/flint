@@ -45,7 +45,9 @@ export function skillToEntity(
     badges: skillBadges(item),
     tags: (item.tags ?? []).map((t) => ({ label: t, onClick: onTag ? () => onTag(item, t) : undefined })),
     meta: <>{item.source}</>,
-    toggle: onToggle ? (
+    // 未纳管的项（本地自有目录 / 外部软链）不由本工具分发，开关对它没有意义，
+    // 改用「收编到仓库 / 删除」等操作表达可做的事，避免"使用中却开关关闭"这类自相矛盾。
+    toggle: onToggle && item.state !== 'unmanaged' ? (
       <Switch
         aria-label={item.toggleDisabled ? `${item.name}：由标签自动纳入，不可直接关闭` : on ? `停用 ${item.name}` : `启用 ${item.name}`}
         checked={on}
@@ -55,7 +57,7 @@ export function skillToEntity(
     ) : undefined,
     actions: <SkillActions item={item} onAction={onAction} />,
     onClick: onOpen ? () => onOpen(item) : undefined,
-    // 仅「未启用」置灰；无 state（技能库）保持正常态
+    // 仅「已停用」置灰；未纳管与无 state（技能库）保持正常态
     muted: item.state === 'off',
   };
 }

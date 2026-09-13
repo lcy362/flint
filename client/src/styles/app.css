@@ -176,6 +176,29 @@
   overflow: hidden;
 }
 
+/* ============ Notice ============ */
+/* 非阻塞提示条：说明当前状态与改动的副作用范围 */
+.notice {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--c-line);
+  border-left: 3px solid var(--c-warn);
+  border-radius: var(--r-md);
+  background: var(--c-warn-soft);
+  font-size: var(--fs-13);
+  color: var(--c-ink-2);
+}
+.notice__title {
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-1);
+}
+.notice__body {
+  min-width: 0;
+}
+
 /* ============ Button ============ */
 .btn {
   display: inline-flex;

@@ -376,7 +376,23 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     setList('explicitOn'); setList('explicitOff');
     cfg.data.agents[key] = over;
     cfg.save();
-    if (cfg.data.activeAgents.includes(key)) touch();
+    if (cfg.data.activeAgents.includes(key)) {
+      // 活跃 Agent：走全局同步，顺带修正其它活跃 Agent 的漂移
+      touch();
+    } else {
+      // 非活跃 Agent：用户在这里的显式操作应立即落盘，只同步该 Agent。
+      // 「活跃」只决定是否跟随 preset / 仓库等间接变更自动同步，不该拦住手动操作。
+      const def = findAgentDef(cfg.data, key);
+      const dir = def ? resolveGlobalDir(def, over.globalDir) : undefined;
+      if (dir && fs.existsSync(dir)) {
+        const result = syncActive(cfg, library().skills, [key], 'route:agent-op')[0];
+        log.info('http', '非活跃 Agent 手动同步', {
+          agent: key,
+          created: result?.created.length ?? 0,
+          removed: result?.removed.length ?? 0,
+        });
+      }
+    }
     res.json(cfg.data.agents[key]);
   });
   r.get('/agents/:key/skills', (req, res) => {

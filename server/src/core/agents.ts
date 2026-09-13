@@ -130,6 +130,38 @@ export function expandTilde(p: string): string {
   return p.startsWith('~/') || p === '~' ? path.join(os.homedir(), p.slice(2)) : p;
 }
 
+/** 自有仓库的 skill 根目录（与 scanner.scanRepo 的换算保持一致） */
+function repoSkillRoots(cfg: HubConfig): string[] {
+  return cfg.repos.map((r) => (r.root ? expandTilde(r.root) : path.join(expandTilde(r.path), 'skills')));
+}
+
+/** 解析真实路径；目标不存在时退回字面绝对路径 */
+function realOrResolve(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
+/**
+ * 判断软链目标是否由本工具部署（落在某个自有仓库的 skill 根之下）。
+ *
+ * 这条判断同时服务两件事：
+ * - 展示：区分「本工具分发的软链」与「外部工具 / 手工创建的软链」，后者不该被标成"预设引入"；
+ * - 安全：同步的清理阶段只回收本工具自己部署的软链，绝不误删外部软链。
+ */
+export function isManagedLinkTarget(cfg: HubConfig, target: string | undefined, baseDir?: string): boolean {
+  if (!target) return false;
+  // readlink 可能给出相对路径，需相对软链所在目录解析
+  const link = path.isAbsolute(target) ? target : path.resolve(baseDir ?? process.cwd(), target);
+  const abs = realOrResolve(link);
+  return repoSkillRoots(cfg).some((root) => {
+    const r = realOrResolve(root);
+    return abs === r || abs.startsWith(r + path.sep);
+  });
+}
+
 export interface AgentView extends AgentDef {
   globalDir: string;
   projectDirResolved?: string;
@@ -202,8 +234,10 @@ export interface AgentSkillRow {
   store: 'symlink' | 'copy' | 'own' | 'pending';
   /** 软链目标路径（store=symlink 时） */
   linkTarget?: string;
-  /** 来源原因：套餐基准 / 手动覆盖 / 自带 */
-  reason: 'preset' | 'manual' | 'own';
+  /** 来源原因：套餐基准 / 手动覆盖 / 自带(本地目录) / 外部软链 */
+  reason: 'preset' | 'manual' | 'own' | 'external';
+  /** 软链目标不在任何自有仓库内：由本工具之外的来源创建，本工具既不分发它也不清理它 */
+  externalLink?: boolean;
   /** 套餐基准里被显式关闭（offOverride）→ 该行不 wanted，提示"套餐成员·已停用" */
   offOverride?: boolean;
   /** 来源套餐名（reason=preset 时） */
@@ -272,16 +306,18 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
     if (!ent) continue;
     const isLink = ent === 'symlink' || (typeof ent !== 'string' && ent.isSymbolicLink());
     if (isLink) {
-      // 软链但不期望：来自套餐但已被关闭 / 或旧遗留 → 残留行
-      const offOverride = ctx.baselineNames.has(name) && isOff(name);
-      const src = allSkills.find((s) => s.name === name);
+      // 软链但不期望：区分两种来源 —— 本工具分发的残留（已停用）／外部工具创建的（不归本工具管）
       const p = path.join(dir, name);
+      const target = linkTo(p);
+      const externalLink = !isManagedLinkTarget(cfg, target, dir);
+      const offOverride = !externalLink && ctx.baselineNames.has(name) && isOff(name);
+      const src = allSkills.find((s) => s.name === name);
       rows.push({
         name, title: name,
         description: readSkill(p)?.description, // readSkill 顺着软链读到目标
         source: 'managed', wanted: false, present: true, store: 'symlink',
-        linkTarget: linkTo(p),
-        reason: 'preset', offOverride,
+        linkTarget: target,
+        reason: externalLink ? 'external' : 'preset', offOverride, externalLink,
         preset: ctx.presetOf.get(name),
         skillId: src?.id, repo: src?.source,
         dir: p, link: true,

@@ -57,7 +57,7 @@ export interface RepoView { id: string; name?: string; path: string; layout: str
 export interface SourceView { id: string; name: string; path: string; layout: string; linked: boolean }
 
 /* ---------- 统一技能展示契约（三处上下文共用） ---------- */
-export type SkillReason = 'own' | 'preset' | 'manual';
+export type SkillReason = 'own' | 'preset' | 'manual' | 'external';
 export type SkillStore = 'symlink' | 'copy' | 'own' | 'pending';
 /** detail 仅客户端使用：技能库里打开技能详情 */
 export type SkillActionKind = 'toggle' | 'collect' | 'merge' | 'delete' | 'detail';
@@ -67,8 +67,11 @@ export interface SkillCardView {
   tags: string[];
   reason: SkillReason;
   store: SkillStore;
-  /** 缺省表示该上下文没有启用/停用语义（如技能库资产池），此时不展示状态徽标 */
-  state?: 'on' | 'off' | 'own-in-use';
+  /**
+   * 缺省表示该上下文没有启用/停用语义（如技能库资产池），此时不展示状态徽标。
+   * on = 在分发名单内；off = 本工具分发的产物但已停用；unmanaged = 不属于本工具管理范围。
+   */
+  state?: 'on' | 'off' | 'unmanaged';
   /** 覆盖行首开关的选中态（缺省由 state 推导）；预设等以名单为准的上下文显式传入 */
   toggleOn?: boolean;
   /** 开关置为不可交互（如预设中由标签自动纳入的技能，只能解锁标签来停用） */

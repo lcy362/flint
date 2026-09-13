@@ -3,7 +3,7 @@ import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import { Skill } from './skill.js';
 import { effectiveTags } from './tags.js';
-import { findAgentDef, resolveGlobalDir, expandTilde } from './agents.js';
+import { findAgentDef, resolveGlobalDir, expandTilde, isManagedLinkTarget } from './agents.js';
 import { log } from '../infra/logger.js';
 
 export interface SyncResult {
@@ -188,16 +188,17 @@ export function deployAgent(cfg: ConfigStore, agentKey: string, desired: Map<str
     }
   }
 
-  // 清理不再需要的项：仅删除明显的软链（避免误删 agent 自身真实 skill）
+  // 清理不再需要的项：只回收「本工具自己部署的」软链。
+  // 真实目录（agent 自带 skill）与外部工具创建的软链都不归本工具管，误删会直接破坏用户环境。
   for (const entry of fs.readdirSync(agentsDir)) {
     if (seen.has(entry)) continue;
     const p = path.join(agentsDir, entry);
     try {
       const st = fs.lstatSync(p);
-      if (st.isSymbolicLink()) {
-        fs.unlinkSync(p);
-        result.removed.push(entry);
-      }
+      if (!st.isSymbolicLink()) continue;
+      if (!isManagedLinkTarget(cfg.data, fs.readlinkSync(p), agentsDir)) continue;
+      fs.unlinkSync(p);
+      result.removed.push(entry);
     } catch { /* skip */ }
   }
   if (result.created.length || result.removed.length || result.failed.length) {

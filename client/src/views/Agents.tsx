@@ -122,7 +122,8 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
   const busy = async (fn: () => Promise<unknown>) => {
     try {
       await fn();
-      toast.push('已更新', 'good');
+      // 非活跃 Agent 的显式改动由服务端就地同步，因此与活跃态一样是「已同步」
+      toast.push('已更新并同步', 'good');
       reload();
       onChanged();
     } catch (e) {
@@ -230,6 +231,16 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
         </div>
       </div>
 
+      {!agent.active && (
+        <div className="notice">
+          <span className="notice__title">此 Agent 未加入活跃集合</span>
+          <span className="notice__body">
+            你在本页的改动会立即同步到它；但预设、仓库等变更不会自动跟随，需要在这里手动点「同步」。
+            加入活跃集合即可自动跟随。
+          </span>
+        </div>
+      )}
+
       <div className="panel">
         <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>分发策略</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--sp-3)' }}>
@@ -280,7 +291,7 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
         {(resp) => (
           <div className="panel">
             <SkillList
-              title={`已管理技能（${resp.skills.length}）`}
+              title={`本 Agent 技能（${resp.skills.length}）`}
               items={resp.skills}
               onToggle={handleToggle}
               onAction={handleAction}
