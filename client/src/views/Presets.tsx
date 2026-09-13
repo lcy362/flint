@@ -254,7 +254,6 @@ function PresetDetail({
   onChanged: () => void;
 }) {
   const toast = useToast();
-  const [newTag, setNewTag] = useState('');
   const [q, setQ] = useState('');
   /** 来源筛选默认只选中自有仓库 */
   const [srcs, setSrcs] = useState<string[]>(ownSources);
@@ -303,11 +302,6 @@ function PresetDetail({
   };
 
   const setTags = (tags: string[]) => void save({ tags });
-  const addTag = () => {
-    const t = newTag.trim();
-    setNewTag('');
-    if (t && !preset.tags.includes(t)) void save({ tags: [...preset.tags, t] });
-  };
 
   const toggleSkill = (id: string, on: boolean) => {
     const next = on ? [...current, id] : current.filter((x) => x !== id);
@@ -355,6 +349,20 @@ function PresetDetail({
     skills.forEach((s) => s.tags?.forEach((t) => { m[t] = (m[t] ?? 0) + 1; }));
     return m;
   }, [skills]);
+
+  /**
+   * 关联标签候选项 = 全库现存标签 ∪ 预设里的历史标签。
+   * 后者包含早期版本手动创建、如今已无技能使用的标签，命中数为 0，点一下即可移除。
+   */
+  const tagOptions = useMemo(
+    () =>
+      [...allTags, ...preset.tags.filter((t) => !allTags.includes(t))].map((t) => ({
+        label: t,
+        value: t,
+        count: tagCounts[t] ?? 0,
+      })),
+    [allTags, preset.tags, tagCounts]
+  );
 
   const sourceCounts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -580,20 +588,15 @@ function PresetDetail({
             <>
               <p className="panel__hint">
                 打有这些标签的技能会自动纳入本预设，与「按技能纳入」取并集，当前关联 {preset.tags.length} 个标签。
-                点击候选即添加/移除，也可输入新标签并回车创建。
+                点击即添加/移除，标签后的数字是全库中使用该标签的技能数（0 表示还没有技能打这个标签）。
               </p>
-              <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-2)' }}>
-                <div style={{ flex: 1 }}>
-                  <FieldInput placeholder="新标签" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTag()} />
-                </div>
-                <Button onClick={addTag}>添加</Button>
-              </div>
-              <Chip
-                options={[...allTags, ...preset.tags.filter((t) => !allTags.includes(t))].map((t) => ({ label: t, value: t }))}
-                selected={preset.tags}
-                multiple
-                onChange={setTags}
-              />
+              {tagOptions.length === 0 ? (
+                <p className="panel__hint" style={{ marginBottom: 0 }}>
+                  技能库还没有任何标签。先去技能库给技能打上标签，这里就能勾选，命中的技能会自动纳入本预设。
+                </p>
+              ) : (
+                <Chip size="lg" options={tagOptions} selected={preset.tags} multiple onChange={setTags} />
+              )}
             </>
           )}
         </div>

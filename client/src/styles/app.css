@@ -418,6 +418,15 @@ select.field {
   opacity: 0.6;
   margin-left: 2px;
 }
+/* 大号 chip：用于承担主选择职责的标签组（如预设的关联标签），默认档不受影响 */
+.chip--lg {
+  font-size: var(--fs-14);
+  padding: 7px 16px;
+  gap: 6px;
+}
+.chip--lg .chip__count {
+  opacity: 0.75;
+}
 
 /* ============ Segment ============ */
 .seg {
@@ -741,6 +750,10 @@ select.field {
   gap: var(--sp-2);
   flex-wrap: wrap;
   align-items: center;
+}
+/* 大号 chip 组：放宽间距，避免放大的胶囊挤在一起 */
+.filter-row--loose {
+  gap: var(--sp-3);
 }
 
 /* 路径输入 + 系统文件选择器 */

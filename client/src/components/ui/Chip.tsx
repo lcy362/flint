@@ -11,6 +11,8 @@ interface ChipProps<T extends string = string> {
   onChange: (selected: T[]) => void;
   /** 允许多选；默认单选 */
   multiple?: boolean;
+  /** 尺寸：md 为工具栏筛选的默认档，lg 用于需要承担主选择职责的场景 */
+  size?: 'md' | 'lg';
 }
 
 /**
@@ -23,6 +25,7 @@ export default function Chip<T extends string = string>({
   selected,
   onChange,
   multiple = false,
+  size = 'md',
 }: ChipProps<T>) {
   const toggle = (v: T) => {
     if (multiple) {
@@ -33,14 +36,14 @@ export default function Chip<T extends string = string>({
   };
 
   return (
-    <div className="filter-row">
+    <div className={`filter-row${size === 'lg' ? ' filter-row--loose' : ''}`}>
       {options.map((o) => {
         const on = selected.includes(o.value);
         return (
           <button
             key={o.value}
             type="button"
-            className={`chip ${on ? 'is-on' : ''}`}
+            className={`chip ${on ? 'is-on' : ''} ${size === 'lg' ? 'chip--lg' : ''}`.trim()}
             aria-pressed={on}
             onClick={() => toggle(o.value)}
           >
