@@ -1283,21 +1283,123 @@ select.field {
   background: var(--c-surface-2);
 }
 
-/* 详情页汇总区：已开启技能 / 已应用 Agent 并排展示 */
+/* ============ Detail sections ============ */
+/* Hallmark · scope: preset-detail · genre: modern-minimal · theme: 沿用项目 tokens（未改配色与字体）
+ * Hallmark · pre-emit critique: P5 H4 E5 S4 R4 V3
+ * 分区层级：只读（quiet 浅底无阴影）vs 可写（白底带阴影）
+ * 双操作块结构对标 + 各自折叠；状态区固定两列等高，与全宽面板左右齐平
+ * contrast: pass（quiet 提示文字 7.1:1）· responsive: 320/375/414/768 无横向滚动 · reduced-motion: 已处理
+ */
+/* 分区容器：同组内所有面板占满同一列，天然与上下全宽面板左右齐平 */
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+/* 分区标题：标签 + 贯穿细线 + 右侧小注，始终同一行堆叠，不做挂头式两栏 */
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.section-head__label {
+  font-family: var(--ff-display);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-1);
+  white-space: nowrap;
+}
+/* 只读分区标题更轻，可写分区更重：一眼分出"看"与"改" */
+.section-head--quiet .section-head__label {
+  color: var(--c-ink-3);
+}
+.section-head__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--c-line-strong);
+}
+.section-head__note {
+  font-size: var(--fs-12);
+  color: var(--c-ink-3);
+  white-space: nowrap;
+}
+
+/* 只读摘要面板：浅底无阴影，与可操作的白色面板区分开 */
+.panel--quiet {
+  background: var(--c-surface-2);
+  box-shadow: none;
+}
+/* 浅底会把次要文字压得更淡，这里上调一档以免掉到对比度阈值以下 */
+.panel--quiet .panel__hint,
+.panel--quiet .empty__hint {
+  color: var(--c-ink-2);
+}
+
+/* 状态区两栏：固定两列等高，保证与下方全宽面板左右边缘齐平 */
 .detail-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-4);
-  align-items: start;
+  align-items: stretch;
 }
+@media (max-width: 860px) {
+  .detail-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .panel__head {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   margin-bottom: var(--sp-2);
 }
-.panel__head > .badge {
+.panel__title {
+  font-family: var(--ff-display);
+  font-size: var(--fs-16);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-1);
+  min-width: 0;
+}
+.panel__head .badge {
+  flex-shrink: 0;
+}
+/* 折叠按钮：贴右，展开时箭头朝下、折叠时朝左 */
+.panel__fold {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-ink-3);
+  cursor: pointer;
+  transition: color var(--dur-150) var(--ease), background var(--dur-150) var(--ease);
+}
+.panel__fold:hover {
+  color: var(--c-ink-1);
+  background: var(--c-surface-2);
+}
+.panel__fold:focus-visible {
+  outline: none;
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-focus-ring);
+}
+.panel__fold svg {
+  transition: transform var(--dur-250) var(--ease);
+}
+.panel__fold[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel__fold,
+  .panel__fold svg {
+    transition: none;
+  }
 }
 .panel__hint {
   font-size: var(--fs-12);

@@ -17,6 +17,7 @@ import { FieldInput } from '../components/ui/Field';
 import { useToast } from '../components/ui/Toast';
 import { useAsync } from '../state/useAsync';
 import { useViewMode } from '../state/viewMode';
+import { useCollapsed } from '../state/collapse';
 import { navigate, useRoute } from '../state/router';
 
 /** 技能 id → 部署目录名（与后端 nameOf 一致，用于按技能名归一去重） */
@@ -63,6 +64,23 @@ function effectiveSkills(preset: PresetView, skills: SkillView[]): EffectiveSkil
   return out;
 }
 
+/** 面板折叠按钮：箭头随展开态旋转，折叠后头部仍保留计数供快速判读 */
+function FoldButton({ expanded, label, onClick }: { expanded: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="panel__fold"
+      aria-expanded={expanded}
+      aria-label={expanded ? `折叠${label}` : `展开${label}`}
+      onClick={onClick}
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
 /**
  * 预设（PR-05）：先添加（只填名称），随后进入预设详情页
  * 增删显式关联技能、管理关联标签。标签命中的技能会自动纳入预设，
@@ -70,6 +88,8 @@ function effectiveSkills(preset: PresetView, skills: SkillView[]): EffectiveSkil
  *
  * 展示口径统一到「最终生效」：主页卡片只给技能总数，详情页汇总已开启技能
  * 与已施加到哪些 Agent，避免把中间态（显式名单 / 标签列表）抛给用户。
+ * 详情页按「当前状态（只读）」与「调整方式（可写）」两组分区，「调整方式」
+ * 下的两个操作块结构对齐，各自可折叠。
  */
 export default function Presets() {
   const { data, loading, error, reload } = useAsync<StateView>(() => api('/state'));
@@ -244,6 +264,9 @@ function PresetDetail({
   const [draftSkills, setDraftSkills] = useState<string[] | null>(null);
   /** 「已应用的 Agent」里待生效名单的展开态 */
   const [showPending, setShowPending] = useState(false);
+  /** 两个操作块的折叠态：各自独立，分别持久化 */
+  const [tagsCollapsed, toggleTagsCollapsed] = useCollapsed('lsh.collapsed.preset.tags');
+  const [skillsCollapsed, toggleSkillsCollapsed] = useCollapsed('lsh.collapsed.preset.skills');
   const [synced, setSynced] = useState<string | null>(null);
   if (preset.name !== synced) {
     setSynced(preset.name);
@@ -380,8 +403,6 @@ function PresetDetail({
     return out;
   }, [current, autoIds, skills]);
 
-  const explicitCount = current.length;
-  const autoCount = autoIds.size;
   const enabledExplicit = enabled.filter((e) => e.via === 'explicit').length;
   const enabledAuto = enabled.length - enabledExplicit;
 
@@ -458,138 +479,175 @@ function PresetDetail({
         </div>
       </div>
 
-      <div className="detail-summary">
-        <div className="panel">
-          <div className="panel__head">
-            <span className="page-head__title" style={{ fontSize: 'var(--fs-16)' }}>已开启技能</span>
-            <Badge tone={enabled.length ? 'good' : 'neutral'}>{enabled.length}</Badge>
-          </div>
-          <p className="panel__hint">
-            本预设最终会开启以下技能：显式纳入 {enabledExplicit} 个
-            {enabledAuto > 0 ? `，按关联标签自动纳入 ${enabledAuto} 个` : ''}。
-          </p>
-          {enabled.length === 0 ? (
-            <EmptyState title="尚未开启任何技能" hint="在下方技能列表中打开开关，或在上方添加关联标签。" />
-          ) : (
-            <div className="skill-pills">
-              {enabled.map((e) => (
-                <span
-                  key={e.name}
-                  className={`skill-pill${e.via === 'tag' ? ' skill-pill--auto' : ''}`}
-                  title={e.skill?.description ?? e.name}
-                >
-                  <span className="skill-pill__name">{e.name}</span>
-                  <span className="skill-pill__via">{e.via === 'tag' ? '标签' : '显式'}</span>
-                </span>
-              ))}
+      <section className="detail-section">
+        <h3 className="section-head section-head--quiet">
+          <span className="section-head__label">当前状态</span>
+          <span className="section-head__rule" aria-hidden="true" />
+          <span className="section-head__note">分发结果，只读</span>
+        </h3>
+
+        <div className="detail-summary">
+          <div className="panel panel--quiet">
+            <div className="panel__head">
+              <span className="panel__title">已开启技能</span>
+              <Badge tone={enabled.length ? 'good' : 'neutral'}>{enabled.length}</Badge>
             </div>
+            <p className="panel__hint">
+              本预设最终会开启以下技能：显式纳入 {enabledExplicit} 个
+              {enabledAuto > 0 ? `，按关联标签自动纳入 ${enabledAuto} 个` : ''}。
+            </p>
+            {enabled.length === 0 ? (
+              <EmptyState title="尚未开启任何技能" hint="在下方「调整方式」里打开技能开关，或添加关联标签。" />
+            ) : (
+              <div className="skill-pills">
+                {enabled.map((e) => (
+                  <span
+                    key={e.name}
+                    className={`skill-pill${e.via === 'tag' ? ' skill-pill--auto' : ''}`}
+                    title={e.skill?.description ?? e.name}
+                  >
+                    <span className="skill-pill__name">{e.name}</span>
+                    <span className="skill-pill__via">{e.via === 'tag' ? '标签' : '显式'}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="panel panel--quiet">
+            <div className="panel__head">
+              <span className="panel__title">已应用的 Agent</span>
+              <Badge tone={agentItems.length ? 'good' : 'neutral'}>{agentItems.length}</Badge>
+            </div>
+            <p className="panel__hint">
+              {preset.active
+                ? '显式关联本预设、或未指定预设而跟随已启用预设的 Agent，都会接收本预设的技能。'
+                : '本预设尚未启用：只有显式关联它的 Agent 会接收技能，跟随已启用预设的 Agent 不会。'}
+              标注「已分发」表示技能已实际写入该 Agent 的本地目录。
+            </p>
+            <EntityList
+              mode="list"
+              toggle={false}
+              items={agentItems}
+              empty={
+                <EmptyState
+                  title="暂无 Agent 应用此预设"
+                  hint={
+                    preset.active
+                      ? '把 Agent 的管理模式设为「预设模式」并关联本预设，或把它加入活跃集合以跟随本预设。'
+                      : '启用本预设，或在 Agent 详情里显式关联它，技能才会分发到该 Agent。'
+                  }
+                />
+              }
+            />
+            {pendingAgents.length > 0 && (
+              <>
+                <button type="button" className="link-btn" onClick={() => setShowPending((v) => !v)}>
+                  {showPending ? '收起' : `另有 ${pendingAgents.length} 个 Agent 跟随已启用预设，但未加入活跃集合、暂不会分发`}
+                </button>
+                {showPending && (
+                  <div className="skill-pills" style={{ maxHeight: 190, marginTop: 'var(--sp-2)' }}>
+                    {pendingAgents.map((a) => (
+                      <span key={a.key} className="skill-pill" title={a.globalDir}>
+                        <span className="skill-pill__name">{a.name}</span>
+                        <span className="skill-pill__via">未分发</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="detail-section">
+        <h3 className="section-head">
+          <span className="section-head__label">调整方式</span>
+          <span className="section-head__rule" aria-hidden="true" />
+          <span className="section-head__note">改动立即生效并同步</span>
+        </h3>
+
+        <div className="panel">
+          <div className="panel__head">
+            <span className="panel__title">按标签纳入</span>
+            <Badge tone={enabledAuto ? 'accent' : 'neutral'} title="经由关联标签自动纳入的技能数">
+              {enabledAuto} 个技能
+            </Badge>
+            <FoldButton expanded={!tagsCollapsed} label="按标签纳入" onClick={toggleTagsCollapsed} />
+          </div>
+          {!tagsCollapsed && (
+            <>
+              <p className="panel__hint">
+                打有这些标签的技能会自动纳入本预设，与「按技能纳入」取并集，当前关联 {preset.tags.length} 个标签。
+                点击候选即添加/移除，也可输入新标签并回车创建。
+              </p>
+              <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-2)' }}>
+                <div style={{ flex: 1 }}>
+                  <FieldInput placeholder="新标签" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTag()} />
+                </div>
+                <Button onClick={addTag}>添加</Button>
+              </div>
+              <Chip
+                options={[...allTags, ...preset.tags.filter((t) => !allTags.includes(t))].map((t) => ({ label: t, value: t }))}
+                selected={preset.tags}
+                multiple
+                onChange={setTags}
+              />
+            </>
           )}
         </div>
 
         <div className="panel">
           <div className="panel__head">
-            <span className="page-head__title" style={{ fontSize: 'var(--fs-16)' }}>已应用的 Agent</span>
-            <Badge tone={agentItems.length ? 'good' : 'neutral'}>{agentItems.length}</Badge>
+            <span className="panel__title">按技能纳入</span>
+            <Badge tone={enabledExplicit ? 'accent' : 'neutral'} title="显式开启的技能数">
+              {enabledExplicit} 个技能
+            </Badge>
+            <FoldButton expanded={!skillsCollapsed} label="按技能纳入" onClick={toggleSkillsCollapsed} />
           </div>
-          <p className="panel__hint">
-            {preset.active
-              ? '显式关联本预设、或未指定预设而跟随已启用预设的 Agent，都会接收本预设的技能。'
-              : '本预设尚未启用：只有显式关联它的 Agent 会接收技能，跟随已启用预设的 Agent 不会。'}
-            标注「已分发」表示技能已实际写入该 Agent 的本地目录。
-          </p>
-          <EntityList
-            mode="list"
-            toggle={false}
-            items={agentItems}
-            empty={
-              <EmptyState
-                title="暂无 Agent 应用此预设"
-                hint={
-                  preset.active
-                    ? '把 Agent 的管理模式设为「预设模式」并关联本预设，或把它加入活跃集合以跟随本预设。'
-                    : '启用本预设，或在 Agent 详情里显式关联它，技能才会分发到该 Agent。'
-                }
-              />
-            }
-          />
-          {pendingAgents.length > 0 && (
+          {!skillsCollapsed && (
             <>
-              <button type="button" className="link-btn" onClick={() => setShowPending((v) => !v)}>
-                {showPending ? '收起' : `另有 ${pendingAgents.length} 个 Agent 跟随已启用预设，但未加入活跃集合、暂不会分发`}
-              </button>
-              {showPending && (
-                <div className="skill-pills" style={{ maxHeight: 190, marginTop: 'var(--sp-2)' }}>
-                  {pendingAgents.map((a) => (
-                    <span key={a.key} className="skill-pill" title={a.globalDir}>
-                      <span className="skill-pill__name">{a.name}</span>
-                      <span className="skill-pill__via">未分发</span>
-                    </span>
-                  ))}
-                </div>
-              )}
+              <p className="panel__hint">
+                开关控制该技能是否显式纳入本预设。打「按标签纳入」标记的技能由上方标签自动纳入，开关已锁定，去掉对应标签即可停用。
+              </p>
+              <FilterBar
+                search={{ value: q, onChange: setQ, placeholder: '搜索技能名称 / 描述' }}
+                controls={
+                  <>
+                    <MultiSelect
+                      label="来源"
+                      options={allSources.map((s) => ({ label: s, value: s, count: sourceCounts[s] }))}
+                      selected={srcs}
+                      onChange={setSrcs}
+                      emptyHint="尚无技能来源。"
+                    />
+                    <MultiSelect
+                      label="标签"
+                      options={allTags.map((t) => ({ label: t, value: t, count: tagCounts[t] }))}
+                      selected={facets}
+                      onChange={setFacets}
+                      emptyHint="技能都还没有标签。"
+                    />
+                  </>
+                }
+                hasFilters={hasFilter}
+                onReset={clearFilters}
+                view={{ value: viewMode, onChange: setViewMode }}
+              />
+              <div style={{ marginTop: 'var(--sp-4)' }}>
+                <SkillList
+                  title={`${hasFilter ? '筛选结果' : '全部技能'} · ${shown.length}${hasFilter ? ` / ${cards.length}` : ''}`}
+                  items={shown}
+                  onToggle={(item) => toggleSkill(item.id, !current.includes(item.id))}
+                  hideToggle
+                  empty={hasFilter ? <EmptyState title="没有匹配的技能" /> : <EmptyState title="技能库为空" hint="先在技能库登记并导入技能。" />}
+                />
+              </div>
             </>
           )}
         </div>
-      </div>
-
-      <div className="panel">
-        <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>关联标签</div>
-        <p style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 0 }}>
-          打有这些标签的技能会自动纳入本预设，与下方显式技能取并集。点击候选即添加/移除，也可输入新标签并回车创建。
-        </p>
-        <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-2)' }}>
-          <div style={{ flex: 1 }}>
-            <FieldInput placeholder="新标签" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTag()} />
-          </div>
-          <Button onClick={addTag}>添加</Button>
-        </div>
-        <Chip
-          options={[...allTags, ...preset.tags.filter((t) => !allTags.includes(t))].map((t) => ({ label: t, value: t }))}
-          selected={preset.tags}
-          multiple
-          onChange={setTags}
-        />
-      </div>
-
-      <div className="panel">
-        <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>技能</div>
-        <p style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 0 }}>
-          开关控制该技能是否显式纳入本预设（已纳入 {explicitCount}）。打「按标签纳入」标记的技能由关联标签自动纳入（当前 {autoCount} 个），开关已锁定为开启，去掉对应标签即可停用。
-        </p>
-        <FilterBar
-          search={{ value: q, onChange: setQ, placeholder: '搜索技能名称 / 描述' }}
-          controls={
-            <>
-              <MultiSelect
-                label="来源"
-                options={allSources.map((s) => ({ label: s, value: s, count: sourceCounts[s] }))}
-                selected={srcs}
-                onChange={setSrcs}
-                emptyHint="尚无技能来源。"
-              />
-              <MultiSelect
-                label="标签"
-                options={allTags.map((t) => ({ label: t, value: t, count: tagCounts[t] }))}
-                selected={facets}
-                onChange={setFacets}
-                emptyHint="技能都还没有标签。"
-              />
-            </>
-          }
-          hasFilters={hasFilter}
-          onReset={clearFilters}
-          view={{ value: viewMode, onChange: setViewMode }}
-        />
-        <div style={{ marginTop: 'var(--sp-4)' }}>
-          <SkillList
-            title={`${hasFilter ? '筛选结果' : '全部技能'} · ${shown.length}${hasFilter ? ` / ${cards.length}` : ''}`}
-            items={shown}
-            onToggle={(item) => toggleSkill(item.id, !current.includes(item.id))}
-            hideToggle
-            empty={hasFilter ? <EmptyState title="没有匹配的技能" /> : <EmptyState title="技能库为空" hint="先在技能库登记并导入技能。" />}
-          />
-        </div>
-      </div>
+      </section>
     </>
   );
 }
