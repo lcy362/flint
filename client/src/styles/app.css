@@ -1260,6 +1260,82 @@ select.field {
   background: var(--c-surface-2);
 }
 
+/* 详情页汇总区：已开启技能 / 已应用 Agent 并排展示 */
+.detail-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--sp-4);
+  align-items: start;
+}
+.panel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.panel__head > .badge {
+  margin-left: auto;
+}
+.panel__hint {
+  font-size: var(--fs-12);
+  color: var(--c-ink-3);
+  margin-bottom: var(--sp-3);
+}
+/* 面板内的次级文字按钮（如展开待生效名单） */
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--sp-3);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--c-accent);
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+.link-btn:hover {
+  text-decoration: underline;
+}
+.skill-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.skill-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--c-line);
+  background: var(--c-surface-2);
+  font-size: var(--fs-12);
+  color: var(--c-ink-1);
+  line-height: 1.6;
+}
+.skill-pill__name {
+  font-family: var(--ff-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skill-pill__via {
+  flex-shrink: 0;
+  color: var(--c-ink-3);
+}
+/* 由关联标签自动纳入的技能：与显式纳入区分开 */
+.skill-pill--auto {
+  background: var(--c-accent-soft);
+  border-color: color-mix(in srgb, var(--c-accent) 38%, transparent);
+}
+.skill-pill--auto .skill-pill__via {
+  color: var(--c-accent);
+}
+
 .meta-list {
   display: flex;
   flex-direction: column;

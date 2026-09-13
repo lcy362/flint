@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
-import { api, type PresetView, type StateView, type SkillCardView, type SkillView } from '../api/types';
+import { api, type AgentView, type PresetView, type StateView, type SkillCardView, type SkillView } from '../api/types';
 import SkillList from '../components/skill/SkillList';
 import { skillViewToCard } from '../components/skill/adapters';
-import EntityList from '../components/common/EntityList';
+import EntityList, { type EntityItem } from '../components/common/EntityList';
 import FilterBar from '../components/common/FilterBar';
 import MultiSelect from '../components/ui/MultiSelect';
 import PageHeader from '../components/ui/PageHeader';
@@ -19,10 +19,57 @@ import { useAsync } from '../state/useAsync';
 import { useViewMode } from '../state/viewMode';
 import { navigate, useRoute } from '../state/router';
 
+/** 技能 id → 部署目录名（与后端 nameOf 一致，用于按技能名归一去重） */
+function skillDirName(id: string): string {
+  const at = id.lastIndexOf('@');
+  return at >= 0 ? id.slice(0, at) : id;
+}
+
+/** 预设最终生效的一项技能 */
+interface EffectiveSkill {
+  /** 部署目录名：同名视为同一个技能（与后端并集口径一致） */
+  name: string;
+  skill?: SkillView;
+  /** 纳入方式：显式枚举 / 由关联标签命中 */
+  via: 'explicit' | 'tag';
+}
+
+/**
+ * 计算预设最终生效的技能集合 = 显式名单 ∪ 关联标签命中的技能。
+ * 口径与后端 desiredContext 的基准集合保持一致：按部署目录名归一去重，
+ * 且只统计技能库中真实存在的技能（已被删除的引用不会生效）。
+ */
+function effectiveSkills(preset: PresetView, skills: SkillView[]): EffectiveSkill[] {
+  const out: EffectiveSkill[] = [];
+  const seen = new Set<string>();
+  for (const id of preset.skills) {
+    const n = skillDirName(id);
+    const sk = skills.find((s) => s.id === id) ?? skills.find((s) => s.name === n);
+    if (sk && !seen.has(sk.name)) {
+      seen.add(sk.name);
+      out.push({ name: sk.name, skill: sk, via: 'explicit' });
+    }
+  }
+  const tagSet = new Set(preset.tags);
+  if (tagSet.size > 0) {
+    for (const s of skills) {
+      if (seen.has(s.name)) continue;
+      if ((s.tags ?? []).some((t) => tagSet.has(t))) {
+        seen.add(s.name);
+        out.push({ name: s.name, skill: s, via: 'tag' });
+      }
+    }
+  }
+  return out;
+}
+
 /**
  * 预设（PR-05）：先添加（只填名称），随后进入预设详情页
  * 增删显式关联技能、管理关联标签。标签命中的技能会自动纳入预设，
  * 与显式技能取并集。详情态由地址 sub 决定，可直达、可刷新复原。
+ *
+ * 展示口径统一到「最终生效」：主页卡片只给技能总数，详情页汇总已开启技能
+ * 与已施加到哪些 Agent，避免把中间态（显式名单 / 标签列表）抛给用户。
  */
 export default function Presets() {
   const { data, loading, error, reload } = useAsync<StateView>(() => api('/state'));
@@ -76,15 +123,15 @@ export default function Presets() {
           state={{ loading, error, data }}
           empty={{ title: '还没有预设', hint: '先「新建预设」填个名称，再进入详情页添加技能、关联标签。', icon: '□' }}
         >
-          {() => (
+          {(state) => (
             <EntityList
               items={presets.map((p) => {
-                const tagText = p.tags.length ? p.tags.map((t) => `#${t}`).join(' ') : '无标签';
+                // 主页只暴露最终结果：本预设最终会开启多少个技能（含按标签自动纳入）
+                const on = effectiveSkills(p, state.skills);
                 return {
                   id: p.name,
                   title: p.name,
-                  sub: `${p.skills.length} 个显式技能 · ${tagText}`,
-                  status: p.active ? <Badge tone="good" dot="good">启用</Badge> : <Badge tone="neutral" dot="neutral">未启用</Badge>,
+                  sub: on.length ? `已开启 ${on.length} 个技能` : '尚未开启任何技能',
                   toggle: (
                     <Switch
                       aria-label={`启用 ${p.name}`}
@@ -195,14 +242,19 @@ function PresetDetail({
   const [viewMode, setViewMode] = useViewMode();
   /** 技能名单的本地草稿：连点多个开关时不丢操作；保存失败或切换预设后回退到服务端数据 */
   const [draftSkills, setDraftSkills] = useState<string[] | null>(null);
+  /** 「已应用的 Agent」里待生效名单的展开态 */
+  const [showPending, setShowPending] = useState(false);
   const [synced, setSynced] = useState<string | null>(null);
   if (preset.name !== synced) {
     setSynced(preset.name);
     setDraftSkills(null);
+    setShowPending(false);
   }
   const current = draftSkills ?? preset.skills;
   /** 技能全量覆盖的 PUT 串行队列，避免连点开关时后发先至覆盖掉前面的操作 */
   const skillQueue = useRef<Promise<void>>(Promise.resolve());
+  /** Agent 列表：用于展示本预设已应用到哪些 Agent（走全局刷新总线，变更后自动重取） */
+  const { data: agents } = useAsync<AgentView[]>(() => api('/agents'));
 
   /** 统一保存入口：PUT 覆盖 skills/tags 并刷新；silent 用于开关这类高频操作 */
   const save = async (patch: { skills?: string[]; tags?: string[]; active?: boolean }, opts?: { silent?: boolean; noReload?: boolean }) => {
@@ -306,8 +358,86 @@ function PresetDetail({
     setQ(''); setSrcs([]); setFacets([]);
   };
 
-  const autoCount = autoIds.size;
+  /** 最终生效技能 = 显式名单 ∪ 标签命中；跟随本地草稿即时更新 */
+  const enabled = useMemo(() => {
+    const out: EffectiveSkill[] = [];
+    const seen = new Set<string>();
+    for (const id of current) {
+      const n = skillDirName(id);
+      const sk = skills.find((s) => s.id === id) ?? skills.find((s) => s.name === n);
+      if (sk && !seen.has(sk.name)) {
+        seen.add(sk.name);
+        out.push({ name: sk.name, skill: sk, via: 'explicit' });
+      }
+    }
+    for (const id of autoIds) {
+      const sk = skills.find((s) => s.id === id);
+      if (sk && !seen.has(sk.name)) {
+        seen.add(sk.name);
+        out.push({ name: sk.name, skill: sk, via: 'tag' });
+      }
+    }
+    return out;
+  }, [current, autoIds, skills]);
+
   const explicitCount = current.length;
+  const autoCount = autoIds.size;
+  const enabledExplicit = enabled.filter((e) => e.via === 'explicit').length;
+  const enabledAuto = enabled.length - enabledExplicit;
+
+  /** 预设模式下显式关联本预设的 Agent（配置层面的关联，与是否活跃无关） */
+  const boundAgents = useMemo(
+    () => (agents ?? []).filter((a) => a.mode === 'preset' && a.preset === preset.name),
+    [agents, preset.name]
+  );
+  /** 未指定预设、跟随所有「已启用预设」的 Agent */
+  const followerAgents = useMemo(() => (agents ?? []).filter((a) => a.mode === 'preset' && !a.preset), [agents]);
+
+  /**
+   * 已应用本预设的 Agent：
+   * - 显式关联本预设的：无论预设是否启用，都会收到本预设的技能；
+   * - 预设已启用时，未指定预设但已加入活跃集合、会真正分发的跟随型 Agent。
+   * 只有加入活跃集合的 Agent 才会把技能写入本地目录，故单独标注分发状态。
+   */
+  const appliedAgents = useMemo(() => {
+    const list = preset.active ? [...boundAgents, ...followerAgents.filter((a) => a.active)] : [...boundAgents];
+    const seen = new Set<string>();
+    const merged: AgentView[] = [];
+    for (const a of list) {
+      if (seen.has(a.key)) continue;
+      seen.add(a.key);
+      merged.push(a);
+    }
+    return merged.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
+  }, [boundAgents, followerAgents, preset.active]);
+
+  /** 待生效：预设已启用，但跟随型 Agent 尚未加入活跃集合，暂不会实际分发 */
+  const pendingAgents = useMemo(
+    () => (preset.active ? followerAgents.filter((a) => !a.active) : []),
+    [followerAgents, preset.active]
+  );
+
+  const agentItems: EntityItem[] = appliedAgents.map((a) => ({
+    id: a.key,
+    title: a.name,
+    sub: <span className="mono">{a.globalDir}</span>,
+    badges: (
+      <>
+        {a.preset ? (
+          <Badge tone="accent" title="该 Agent 显式关联到本预设">显式关联</Badge>
+        ) : (
+          <Badge tone="info" title="未指定预设，跟随所有已启用的预设（本预设已启用）">跟随已启用预设</Badge>
+        )}
+        {a.active ? (
+          <Badge tone="good" dot="good" title="已加入活跃集合，技能已实际分发到本地目录">已分发</Badge>
+        ) : (
+          <Badge tone="neutral" dot="neutral" title="未加入活跃集合，技能暂不会实际分发">未分发</Badge>
+        )}
+        {!a.installed && <Badge tone="neutral" title="本地尚未创建该 Agent 的技能目录">未安装</Badge>}
+      </>
+    ),
+    onClick: () => navigate({ tab: 'agents', sub: a.key, query: new URLSearchParams() }),
+  }));
 
   return (
     <>
@@ -318,14 +448,87 @@ function PresetDetail({
           {preset.active ? '启用' : '未启用'}
         </Badge>
         <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
-          {explicitCount} 个显式技能 · {preset.tags.length} 个标签
-          {autoCount > 0 ? ` · 另 ${autoCount} 个按标签纳入` : ''}
+          已开启 {enabled.length} 个技能{enabledAuto > 0 ? `（含 ${enabledAuto} 个按标签纳入）` : ''}
         </span>
         <div className="detail-actions">
           <Button size="sm" variant={preset.active ? 'ghost' : 'primary'} onClick={() => void save({ active: !preset.active })}>
             {preset.active ? '停用' : '启用'}
           </Button>
           <Button size="sm" variant="danger" onClick={() => void removePreset()}>删除</Button>
+        </div>
+      </div>
+
+      <div className="detail-summary">
+        <div className="panel">
+          <div className="panel__head">
+            <span className="page-head__title" style={{ fontSize: 'var(--fs-16)' }}>已开启技能</span>
+            <Badge tone={enabled.length ? 'good' : 'neutral'}>{enabled.length}</Badge>
+          </div>
+          <p className="panel__hint">
+            本预设最终会开启以下技能：显式纳入 {enabledExplicit} 个
+            {enabledAuto > 0 ? `，按关联标签自动纳入 ${enabledAuto} 个` : ''}。
+          </p>
+          {enabled.length === 0 ? (
+            <EmptyState title="尚未开启任何技能" hint="在下方技能列表中打开开关，或在上方添加关联标签。" />
+          ) : (
+            <div className="skill-pills">
+              {enabled.map((e) => (
+                <span
+                  key={e.name}
+                  className={`skill-pill${e.via === 'tag' ? ' skill-pill--auto' : ''}`}
+                  title={e.skill?.description ?? e.name}
+                >
+                  <span className="skill-pill__name">{e.name}</span>
+                  <span className="skill-pill__via">{e.via === 'tag' ? '标签' : '显式'}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="panel">
+          <div className="panel__head">
+            <span className="page-head__title" style={{ fontSize: 'var(--fs-16)' }}>已应用的 Agent</span>
+            <Badge tone={agentItems.length ? 'good' : 'neutral'}>{agentItems.length}</Badge>
+          </div>
+          <p className="panel__hint">
+            {preset.active
+              ? '显式关联本预设、或未指定预设而跟随已启用预设的 Agent，都会接收本预设的技能。'
+              : '本预设尚未启用：只有显式关联它的 Agent 会接收技能，跟随已启用预设的 Agent 不会。'}
+            标注「已分发」表示技能已实际写入该 Agent 的本地目录。
+          </p>
+          <EntityList
+            mode="list"
+            toggle={false}
+            items={agentItems}
+            empty={
+              <EmptyState
+                title="暂无 Agent 应用此预设"
+                hint={
+                  preset.active
+                    ? '把 Agent 的管理模式设为「预设模式」并关联本预设，或把它加入活跃集合以跟随本预设。'
+                    : '启用本预设，或在 Agent 详情里显式关联它，技能才会分发到该 Agent。'
+                }
+              />
+            }
+          />
+          {pendingAgents.length > 0 && (
+            <>
+              <button type="button" className="link-btn" onClick={() => setShowPending((v) => !v)}>
+                {showPending ? '收起' : `另有 ${pendingAgents.length} 个 Agent 跟随已启用预设，但未加入活跃集合、暂不会分发`}
+              </button>
+              {showPending && (
+                <div className="skill-pills" style={{ maxHeight: 190, marginTop: 'var(--sp-2)' }}>
+                  {pendingAgents.map((a) => (
+                    <span key={a.key} className="skill-pill" title={a.globalDir}>
+                      <span className="skill-pill__name">{a.name}</span>
+                      <span className="skill-pill__via">未分发</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -351,7 +554,7 @@ function PresetDetail({
       <div className="panel">
         <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>技能</div>
         <p style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 0 }}>
-          开关控制该技能是否显式纳入本预设（已纳入 {explicitCount}）。打「按标签纳入」标记的技能由关联标签自动纳入，开关已锁定为开启，去掉对应标签即可停用。
+          开关控制该技能是否显式纳入本预设（已纳入 {explicitCount}）。打「按标签纳入」标记的技能由关联标签自动纳入（当前 {autoCount} 个），开关已锁定为开启，去掉对应标签即可停用。
         </p>
         <FilterBar
           search={{ value: q, onChange: setQ, placeholder: '搜索技能名称 / 描述' }}
