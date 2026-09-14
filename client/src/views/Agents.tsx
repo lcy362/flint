@@ -797,6 +797,8 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
               <span>接管在归集完成后执行：</span>
               {collectItem?.reason === 'external' ? (
                 <span>· 本目录这条软链改为<strong>指向仓库副本</strong>；它指向的外部目录不受影响，原链接不再保留。</span>
+              ) : previewExists && !collectOverwrite ? (
+                <span>· 本目录里的这条技能会被移除：你选的是「保持仓库现状」，本目录这版内容不会进仓库，接管后该 Agent 读到的是仓库那一版。</span>
               ) : (
                 <span>· 本目录里的这条技能<strong>直接移除</strong>（内容已在仓库副本里，不会丢失）。</span>
               )}

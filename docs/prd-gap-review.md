@@ -41,7 +41,7 @@
 | **A1 常驻 watcher 默认开启** | 改为 `config.watchers` 开关，**默认关闭**；且仅在存在复制模式 agent 时才真正启动。全局 skill 同步回到触发式（PRD §3/§8.4/C10） |
 | **A2 INDEX.md 第二事实源** | `projectedSkills` 不再读回 INDEX.md；期望集纯由 config 推导。INDEX.md 降级为纯产物 |
 | **B1 首启强制引导** | 删除 `Onboarding` 视图与 `onboarded` 状态；其能力并入「整合向导」「归集」「登记库」 |
-| **B4 takeover 隐藏备份** | 保留为 API（IM-03），但不进主流程 |
+| **B4 takeover** | **已进主流程**：技能库「从 Agent 归集」里的「接管」按钮、智能体详情「归集到仓库」弹窗的「同时接管」（先归集、再接管）。隐藏备份 `.original-<name>` 已移除——调用方先归集把内容复制进仓库，故直接替换源条目不丢内容 |
 | **孤儿 API** | `takeover`/`tags-migrate`/`repos/:id` PUT 等保留但不再假装被用；`collect`、`import/preview`、`filesystem/pick`、`filesystem/pick-file` 已修好并接线（见 §五） |
 
 ---

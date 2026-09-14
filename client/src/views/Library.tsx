@@ -335,7 +335,7 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
     });
   };
 
-  /** 把指向外部的软链改指仓库本体（takeover：软链源直接替换，原位置不受影响） */
+  /** 接管：把指向外部的软链改指仓库副本（软链只换链接，原位置不受影响） */
   const adjust = async (agentKey: string, name: string) => {
     setAdjusting(`${agentKey}:${name}`);
     try {
@@ -343,8 +343,8 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
         `/repos/${encodeURIComponent(repo.id)}/takeover`,
         { method: 'POST', body: JSON.stringify({ agentKey, name, confirm: true }) }
       );
-      if (res.linked) toast.push(`${name} 已改指仓库本体`, 'good');
-      else toast.push(res.reason ?? '调整失败', 'bad');
+      if (res.linked) toast.push(`已接管 ${name}：本目录已指向仓库副本`, 'good');
+      else toast.push(res.reason ?? '接管失败', 'bad');
       reload();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
@@ -604,10 +604,10 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
               title: it.name,
               sub: <span className="mono">{it.symlink ? `软链 → ${it.linkTarget ?? '(悬空)'}` : '真实目录'}</span>,
               desc: it.description,
-              status: it.exists ? (
-                <Badge tone="neutral" title="仓库已有同名技能，归集时将自动去重跳过">已在仓库</Badge>
-              ) : it.symlink && it.inRepo ? (
-                <Badge tone="info" title={`软链指向仓库本体：${it.linkTarget}`}>仓库本体</Badge>
+              status: it.symlink && it.inRepo ? (
+                <Badge tone="info" title={`已接管：本目录这条软链指向仓库本体 ${it.linkTarget}`}>仓库本体</Badge>
+              ) : it.exists ? (
+                <Badge tone="neutral" title="仓库已有同名技能，归集时默认去重跳过">已在仓库</Badge>
               ) : it.symlink ? (
                 <Badge tone="accent">软链</Badge>
               ) : undefined,
@@ -623,9 +623,9 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
                   size="sm"
                   loading={adjusting === `${a.agentKey}:${it.name}`}
                   onClick={() => adjust(a.agentKey, it.name)}
-                  title="此软链当前指向外部位置；仓库内已有同名副本，点击后改为指向仓库本体（原外部链接将被替换）"
+                  title="接管：这条软链当前指向仓库之外，而仓库内已有同名副本；接管后本目录改指仓库副本（外部原目录不受影响，原链接不再保留）"
                 >
-                  改指仓库
+                  接管
                 </Button>
               ) : undefined,
             }))}

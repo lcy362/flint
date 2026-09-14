@@ -151,7 +151,7 @@ function readDir(dir: string): fs.Dirent[] {
  * 用于判断「goal 位置已有的实体目录」是否就是本工具部署的副本：
  * 只有内容一致时才允许把它重建为软链/副本——否则那是用户自己的内容，绝不删除。
  */
-export function dirsEqual(a: string, b: string): boolean {
+function dirsEqual(a: string, b: string): boolean {
   const ae = readDir(a);
   const be = readDir(b);
   if (ae.length === 0 && be.length === 0) return false;

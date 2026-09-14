@@ -19,9 +19,11 @@
 
 **A2 接管（差距1，核心）** 新增 `server/src/core/takeover.ts`
 - 复用 `integrate.collectCandidates` 定位 agent 候选、`sync.symlinkSkill`、`repo-tags`。
-- `takeover(cfg, agentKey, name, repoId)`：校验 repo 已含同名副本且源目录存在 → 把 agent 原目录改名为隐藏备份 `.original-<name>` → 用 `symlinkSkill` 建软链 `agentDir/<name> → repo/skills/<name>`（软链使 agent 实时读到副本迭代）。返回 `{ linked, backupDir }`。
-- 安全：仅当副本已存在；内容不一致才警告需确认；操作需显式确认参数 `confirm:true`（不可逆语义，原目录保留为备份即未删数据）。区别于收编：收编只 cp 入 repo；接管替换源并留备份。
+- `takeover(cfg, agentKey, name, repoId)`：校验仓库已含同名副本且源目录存在 → 把 agent 目录里的条目替换为软链 `agentDir/<name> → repo/skills/<name>`（软链使 agent 实时读到副本迭代）。
+- **实现已更新（2026-09）**：最初版本会把源目录改名为隐藏备份 `.original-<name>` 并返回 `backupDir`；现改为直接替换、不另做备份——调用方先归集把内容复制进仓库，故移除本目录条目不丢内容。仍守住两条底线：仓库副本不存在则拒绝；本目录条目就是仓库本体（agent 技能目录整体软链到仓库）则不做任何事。源条目本身是软链时只换链接，外部目标目录不受影响。
+- 安全：需显式确认参数 `confirm:true`（未确认前返回 `needConfirm`）。区别于归集：归集只 cp 入 repo、不动 agent 目录；接管替换源位置为软链。
 - `routes.ts` 新增 `POST /repos/:id/takeover`，body `{ agentKey, name, confirm }`，失败 400。
+- **入口（已更新）**：技能库「从 Agent 归集」面板的条目行尾「接管」按钮（仅"软链 + 指向仓库外 + 仓库已有同名"时出现）；智能体详情「归集到仓库」弹窗里的「同时接管」开关（先归集、再接管）。
 
 **A3 第三方库两套标签体系（差距2）** 补 `routes.ts` /sources
 - `POST /sources`：合并 body 的 `tagSystems`({upstream,hub}) 落库。
