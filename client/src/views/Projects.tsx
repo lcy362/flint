@@ -221,14 +221,6 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
         </div>
       </div>
 
-      <div className="panel">
-        <EntityList
-          title="部署到 Agent"
-          items={deployItems}
-          empty={<EmptyState title="暂无已登记的 Agent" />}
-        />
-      </div>
-
       <LoadingBoundary state={{ loading, error, data }} empty={{ title: '该项目暂无技能', icon: '○' }}>
         {(resp) => (
           <div className="panel">
@@ -236,6 +228,16 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
           </div>
         )}
       </LoadingBoundary>
+
+      <div className="panel">
+        <EntityList
+          title="部署到 Agent"
+          items={deployItems}
+          collapsible
+          storageKey="lsh.collapsed.project.agents"
+          empty={<EmptyState title="暂无已登记的 Agent" />}
+        />
+      </div>
 
       <Modal open={addOpen} title="添加技能" onClose={() => setAddOpen(false)}
         footer={<Button variant="ghost" onClick={() => setAddOpen(false)}>关闭</Button>}>
