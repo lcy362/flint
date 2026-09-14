@@ -4,7 +4,7 @@ import { ConfigStore } from '../config/store.js';
 import { Skill } from './skill.js';
 import { readSkill } from './skill.js';
 import { effectiveTags } from './tags.js';
-import { listAgents, resolveProjectDir, findAgentDef } from './agents.js';
+import { listAgents, resolveProjectDir, findAgentDef, isManagedLinkTarget } from './agents.js';
 import { expandTilde, repoSkillRoot } from './agents.js';
 import { ProjectLink } from '../config/types.js';
 
@@ -25,6 +25,19 @@ export function writeIndex(agentsRoot: string, managed: { name: string; title?: 
   }
   if (lines.length) lines.push('');
   fs.writeFileSync(path.join(agentsRoot, INDEX_NAME), lines.join('\n'), 'utf-8');
+}
+
+/**
+ * 读取上一次同步写入的 INDEX.md，得到「曾经由本工具投放」的技能名。
+ * 仅用于安全回收残留副本，绝不参与期望集推导（期望集只能由 config 推导）。
+ */
+function readIndexNames(agentsRoot: string): Set<string> {
+  const names = new Set<string>();
+  try {
+    const text = fs.readFileSync(path.join(agentsRoot, INDEX_NAME), 'utf-8');
+    for (const m of text.matchAll(/\]\(([^)/]+)\/SKILL\.md\)/g)) names.add(m[1]);
+  } catch { /* 首次同步：无历史记录，视为没有受管项 */ }
+  return names;
 }
 
 /**
@@ -62,7 +75,10 @@ export interface ProjectSkillRow {
   source: 'managed' | 'owned';
   wanted: boolean;
   present: boolean;
-  store: 'copy' | 'pending' | 'own';
+  /** symlink = 已接管（指向仓库副本的软链）；copy = 本工具复制的副本；own = 自带本体；pending = 待部署 */
+  store: 'symlink' | 'copy' | 'pending' | 'own';
+  /** 已接管：该条目是指向任一自有仓库内技能的软链（系统口径，指向仓库外的不算） */
+  takenOver?: boolean;
   /** 来源原因：标签命中 / 逐个开启 / 自带 */
   reason: 'tag' | 'manual' | 'own';
   /** 标签命中但被逐个关闭 */
@@ -71,6 +87,11 @@ export interface ProjectSkillRow {
   disableVia?: 'off' | 'on';
   repo?: string;
   dir?: string;
+}
+
+/** 读取软链原始目标；非软链或读不到时返回 undefined */
+function linkTo(p: string): string | undefined {
+  try { return fs.readlinkSync(p); } catch { return undefined; }
 }
 
 /** 构建项目技能行：期望集（并按项目配置覆盖）∪ 目录已存在。与 agent 技能行逻辑对齐。 */
@@ -95,17 +116,24 @@ export function projectSkillRows(cfg: ConfigStore, proj: ProjectLink, allSkills:
   for (const s of desired) {
     const inTag = effectiveTags(cfg.data, s).some((t) => (proj.tags ?? []).includes(t));
     const inOn = onIds.has(s.id) || onIds.has(s.name);
-    const present = presentNames.has(s.name) && !presentIsLink.get(s.name);
+    const exists = presentNames.has(s.name);
+    const isLink = presentIsLink.get(s.name) ?? false;
+    // present 保持原语义（真实目录才算「已落地副本」），供可补入清单判断
+    const present = exists && !isLink;
     const off = offIds.has(s.id) || offIds.has(s.name);
+    const entry = path.join(agentsRoot, s.name);
+    const linkTarget = exists && isLink ? linkTo(entry) : undefined;
     rows.push({
       skillId: s.id, name: s.name, title: s.name, description: s.description,
       source: 'managed', wanted: true, present,
-      store: present ? 'copy' : 'pending',
+      // 已接管（软链）→ symlink；已落地的真实副本 → copy；未落地 → pending
+      store: !exists ? 'pending' : isLink ? 'symlink' : 'copy',
+      takenOver: !!linkTarget && isManagedLinkTarget(cfg.data, linkTarget, agentsRoot),
       reason: inOn ? 'manual' : 'tag',
       offOverride: inTag && off ? true : undefined,
       disableVia: inTag ? 'off' : 'on',
       repo: s.source,
-      dir: present ? path.join(agentsRoot, s.name) : undefined,
+      dir: exists ? entry : undefined,
     });
   }
 
@@ -232,23 +260,34 @@ export function syncProject(cfg: ConfigStore, projectPath: string, allSkills: Sk
   for (const s of desired) {
     seen.add(s.name);
     const dest = path.join(agentsRoot, s.name);
-    // 目标已是真实目录（非软链）则视为已落地，保持幂等
-    if (fs.existsSync(dest) && !fs.lstatSync(dest).isSymbolicLink()) continue;
-    if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
+    const st = fs.lstatSync(dest, { throwIfNoEntry: false });
+    if (st) {
+      if (st.isSymbolicLink()) {
+        // 已是指向该技能本体的软链（接管后的形态）→ 保持，不再复制出第二份
+        try { if (fs.realpathSync(dest) === fs.realpathSync(s.dir)) continue; } catch { /* 失效软链，继续重建 */ }
+      } else if (st.isDirectory()) {
+        continue; // 真实目录视为已落地，保持幂等
+      }
+    }
+    if (st) fs.rmSync(dest, { recursive: true, force: true });
     try {
       fs.cpSync(s.dir, dest, { recursive: true });
       res.copied.push(s.name);
     } catch (e) { res.errors.push(`${s.name}: ${(e as Error).message}`); }
   }
 
-  // 清理 .agents 里已不在期望集的受管目录（仅 dir，不删软链）
+  // 清理 .agents 里「曾由本工具投放、现已不在期望集」的副本（仅 dir，不删软链）。
+  // 以同步产物 INDEX.md 作为上一轮的投放记录：只回收本工具自己写入过的名字，
+  // 用户手动放进来的自带技能从不出现在清单里，因此绝不会被同步误删。
+  const prevManaged = readIndexNames(agentsRoot);
   for (const entry of fs.readdirSync(agentsRoot)) {
     if (seen.has(entry) || entry === INDEX_NAME) continue;
+    if (!prevManaged.has(entry)) continue; // 自带内容：不归本工具管，保留
     const p = path.join(agentsRoot, entry);
     try {
       if (fs.lstatSync(p).isDirectory() && !fs.lstatSync(p).isSymbolicLink()) {
-        // 仅清理含 SKILL.md 的受管项，避免误删用户自己的内容
-        if (fs.existsSync(path.join(p, 'SKILL.md'))) { fs.rmSync(p, { recursive: true, force: true }); res.removed.push(entry); }
+        fs.rmSync(p, { recursive: true, force: true });
+        res.removed.push(entry);
       }
     } catch { /* skip */ }
   }

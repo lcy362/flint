@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api, type ProjectSkillsResp, type SkillCardView, type SkillAction, type AddableSkill, type AgentView, type RepoView, type ProjectPushResult } from '../api/types';
 import SkillList from '../components/skill/SkillList';
+import CollectSkillModal, { projectCollectSource } from '../components/skill/CollectSkillModal';
 import AddableSkillList from '../components/skill/AddableSkillList';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
 import PageHeader from '../components/ui/PageHeader';
@@ -139,6 +140,9 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
   const [pushOpen, setPushOpen] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pushResult, setPushResult] = useState<ProjectPushResult | null>(null);
+  // 归集到仓库：自带技能与 Agent 页共用同一个弹窗，这里只提供「项目 .agents/skills」来源适配器
+  const [collectItem, setCollectItem] = useState<SkillCardView | null>(null);
+  const collectApi = useMemo(() => projectCollectSource(project.id), [project.id]);
   const deployed = project.agents ?? [];
 
   const busy = async (fn: () => Promise<unknown>) => {
@@ -159,14 +163,19 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
       await api(`/projects/${project.id}/agents`, { method: 'PUT', body: JSON.stringify({ agents: next }) });
     });
 
-  // 项目技能行的操作按 kind 分发：删除走删除接口，其余（启用等）走开关接口
-  const handleAction = (item: SkillCardView, action: SkillAction) =>
+  // 项目技能行的操作按 kind 分发：归集/接管交给共用弹窗，删除走删除接口，其余（启用等）走开关接口
+  const handleAction = (item: SkillCardView, action: SkillAction) => {
+    if (action.kind === 'collect') {
+      setCollectItem(item);
+      return;
+    }
     void busy(() => {
       if (action.kind === 'delete') {
         return api(`/projects/${project.id}/skills/${encodeURIComponent(item.name)}`, { method: 'DELETE' });
       }
       return api(`/projects/${project.id}/skills`, { method: 'PUT', body: JSON.stringify({ skill: item.name, on: true }) });
     });
+  };
 
   const collectAddable = (item: AddableSkill) =>
     void busy(() =>
@@ -238,6 +247,13 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
           empty={<EmptyState title="暂无已登记的 Agent" />}
         />
       </div>
+
+      <CollectSkillModal
+        item={collectItem}
+        source={collectApi}
+        onClose={() => setCollectItem(null)}
+        onDone={() => { setCollectItem(null); reload(); onChanged(); }}
+      />
 
       <Modal open={addOpen} title="添加技能" onClose={() => setAddOpen(false)}
         footer={<Button variant="ghost" onClick={() => setAddOpen(false)}>关闭</Button>}>

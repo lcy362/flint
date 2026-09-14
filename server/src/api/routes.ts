@@ -18,9 +18,9 @@ import { syncActive, diffSync, computeDesired, desiredContext } from '../core/sy
 import { collectCandidates } from '../core/integrate.js';
 import { addProject, syncProject, projectSkillRows, projectAddable, deployedAgents, pushProjectToRepo } from '../core/projects.js';
 import { importDirs, previewImportDirs } from '../core/import.js';
-import { previewCollect, collectAgentSkill } from '../core/collect.js';
+import { previewCollect, collectAgentSkill, previewCollectSource, collectFromSource, projectCollectSource } from '../core/collect.js';
 import { migrateTagsToFrontmatter } from '../core/repo-tags.js';
-import { takeover } from '../core/takeover.js';
+import { takeover, takeoverInSource } from '../core/takeover.js';
 import { applyFix } from '../core/fix.js';
 import { diagnose } from '../core/diagnose.js';
 import { mergeSkill } from '../core/merge.js';
@@ -623,6 +623,76 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     fs.rmSync(target, { recursive: true, force: true });
     log.info('http', '删除项目技能', { project: id, name });
     res.json({ ok: true, removed: name });
+  });
+
+  // 项目「自带」技能的归集 / 接管：与 Agent 目录共用同一套核心逻辑（collect.ts / takeover.ts），
+  // 因此用户看到的流程与 Agent 页完全一致（选仓库 → 预览 → 可选「同时接管」）。
+  r.get('/projects/:id/collect/preview', (req, res) => {
+    const id = Number(req.params.id);
+    const proj = cfg.data.projects[id];
+    if (!proj) return res.status(404).json({ error: 'project not found' });
+    const repo = cfg.data.repos.find((x) => x.id === String(req.query.repo ?? ''));
+    if (!repo) return res.status(400).json({ error: 'repo required' });
+    const source = projectCollectSource(proj.path, id);
+    // 复用 AgentCollectPreview 形状（agentKey 用 sourceRef 填充），前端共用同一个归集弹窗
+    res.json({
+      sourceRef: source.ref,
+      agentKey: source.ref,
+      agentName: proj.path,
+      installedDir: source.dir,
+      items: previewCollectSource(repo, source),
+    });
+  });
+  r.post('/projects/:id/collect', (req, res) => {
+    const id = Number(req.params.id);
+    const proj = cfg.data.projects[id];
+    if (!proj) return res.status(404).json({ error: 'project not found' });
+    const { repoId, name, names, replaceNames } = req.body ?? {};
+    const repo = cfg.data.repos.find((x) => x.id === String(repoId ?? '')) ?? cfg.data.repos[0];
+    if (!repo) return res.status(400).json({ error: '无仓库可归集' });
+    const want = name ? [String(name)] : Array.isArray(names) ? names.map(String) : undefined;
+    try {
+      const result = collectFromSource(
+        cfg, repo, projectCollectSource(proj.path, id), want,
+        Array.isArray(replaceNames) ? replaceNames.map(String) : undefined,
+      );
+      touch();
+      log.info('http', '项目技能归集到仓库', { project: proj.path, repo: repo.id, collected: result.collected.length, skipped: result.skipped.length });
+      res.json(result);
+    } catch (e) {
+      log.error('http', `项目技能归集失败: ${(e as Error).message}`, { proj: proj.path });
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  r.post('/projects/:id/takeover', (req, res) => {
+    const id = Number(req.params.id);
+    const proj = cfg.data.projects[id];
+    if (!proj) return res.status(404).json({ error: 'project not found' });
+    const { name, repoId, confirm } = req.body ?? {};
+    if (!name) return res.status(400).json({ error: 'name required' });
+    try {
+      const result = takeoverInSource(
+        cfg, projectCollectSource(proj.path, id), String(name),
+        repoId ? String(repoId) : undefined, confirm === true,
+      );
+      // 接管成功即登记为项目期望项：与 Agent 接管后「登记为启用」对齐，之后由本工具维护它
+      if (result.linked) {
+        const onSet = new Set(proj.explicitOn ?? []);
+        const offSet = new Set(proj.explicitOff ?? []);
+        onSet.add(String(name));
+        offSet.delete(String(name));
+        proj.explicitOn = onSet.size ? [...onSet] : undefined;
+        proj.explicitOff = offSet.size ? [...offSet] : undefined;
+        cfg.save();
+      }
+      log.info('http', '项目技能接管', {
+        project: proj.path, name: String(name), repo: repoId ? String(repoId) : undefined, linked: result.linked,
+      });
+      res.json(result);
+    } catch (e) {
+      log.error('http', `项目技能接管失败: ${(e as Error).message}`, { proj: proj.path });
+      res.status(500).json({ error: (e as Error).message });
+    }
   });
   r.post('/projects/:id/sync', (req, res) => {
     const id = Number(req.params.id);

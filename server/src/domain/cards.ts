@@ -47,25 +47,20 @@ function stateOf(r: CommonRow): SkillState {
   return r.wanted ? 'on' : 'off';
 }
 
-/** 卡片上下文：同一个技能在不同页面能做的事不同 */
-export type CardContext = 'agent' | 'project';
-
 /**
  * 依据 reason 推导可执行操作。
  *
  * - 「归集到仓库」= 把该目录里的技能复制进自有仓库（源目录保持不动，PRD 流程二-A）。
- *   只有 Agent 目录能被归集（collect 按 agent 扫描），项目目录不适用，故仅在 agent 上下文出现。
+ *   Agent 全局目录与项目 .agents/skills 共用同一条链路：归集后可再「接管」（源位置改为指向仓库副本的软链）。
  * - 不再单出「合并保留」：合并是「同一技能名有多个来源」时的仲裁，只有在技能库的
  *   归集确认页里才有齐全的候选（并列各版本 / 来源）可比，单独一颗按钮既没有可比对象也容易误解。
  */
-function acts(r: CommonRow, ctx: CardContext): SkillAction[] {
+function acts(r: CommonRow): SkillAction[] {
   if (r.reason === 'own' || r.reason === 'external') {
-    const out: SkillAction[] = [];
-    if (ctx === 'agent') {
-      out.push(action('collect', '归集到仓库', { title: '把这个技能复制进你的仓库，之后各 Agent / 项目都能共享；本目录里的原技能保持不动' }));
-    }
-    out.push(action('delete', '删除', { title: '从本目录移除这个技能（不可撤销）' }));
-    return out;
+    return [
+      action('collect', '归集到仓库', { title: '把这个技能复制进你的仓库，之后各 Agent / 项目都能共享；本目录里的原技能保持不动' }),
+      action('delete', '删除', { title: '从本目录移除这个技能（不可撤销）' }),
+    ];
   }
   // 共享标准目录里的技能由该目录自己的策略管理，本 Agent 无权开关/删除，这里不给操作
   if (r.reason === 'shared') return [];
@@ -86,7 +81,7 @@ export function agentCard(row: AgentSkillRow): SkillCardView {
     state: stateOf(r),
     offOverride: row.offOverride, linkTarget: row.linkTarget, preset: row.preset,
     fromDir: row.fromDir, readVia: row.readVia, takenOver: row.takenOver,
-    actions: acts(r, 'agent'),
+    actions: acts(r),
   };
 }
 
@@ -100,8 +95,8 @@ export function projectCard(row: ProjectSkillRow): SkillCardView {
     name: row.name, title: row.title, description: row.description,
     source: row.repo ?? '', dir: row.dir, tags: [],
     reason: r.reason, store: row.store, state: stateOf(r),
-    offOverride: row.offOverride,
-    actions: acts(r, 'project'),
+    offOverride: row.offOverride, takenOver: row.takenOver,
+    actions: acts(r),
   };
 }
 
