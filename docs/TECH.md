@@ -1,6 +1,6 @@
-# Skills Hub 技术架构（TECH）
+# Flint 技术架构（TECH）
 
-> 本文描述 Skills Hub 的**当前实现**：技术栈、分层、数据模型、核心引擎、HTTP API、前端架构与关键设计约定。
+> 本文描述 Flint 的**当前实现**：技术栈、分层、数据模型、核心引擎、HTTP API、前端架构与关键设计约定。
 > 产品需求见 [`PRD.md`](./PRD.md)，快速上手见 [`../README.md`](../README.md)，开发约定见 [`../AGENTS.md`](../AGENTS.md)。
 
 ---
@@ -26,7 +26,7 @@
 ## 2. 目录结构
 
 ```
-local-skills-hub/
+flint/  (local-skills-hub)
 ├─ package.json            # workspaces + 顶层脚本
 ├─ start.sh                # 一键启动脚本
 ├─ README.md               # 使用说明

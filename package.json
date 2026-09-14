@@ -2,7 +2,7 @@
   "name": "local-skills-hub",
   "version": "0.1.0",
   "private": true,
-  "description": "Skills Hub - local-first personal AI skills asset manager",
+  "description": "Flint · local-skills-hub — local-first personal AI skills asset manager",
   "workspaces": [
     "server",
     "client"

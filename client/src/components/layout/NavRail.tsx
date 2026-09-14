@@ -22,7 +22,7 @@ export default function NavRail({
     <nav className="rail scroll">
       <div className="rail__brand">
         <span className="rail__mark">
-          Skills<b>Hub</b>
+          Flint<b>·</b>
         </span>
         <span className="rail__tag">local</span>
       </div>

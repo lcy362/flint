@@ -7,7 +7,7 @@
 
 ## 1. 项目是什么
 
-Skills Hub（`local-skills-hub`）是一个**本地优先**的个人 AI Skills 资产管理器：以文件系统为唯一事实源，集中管理 skill、打标签、去重，并按预设 / 标签把 skill 分发（软链或复制）到各 AI Agent 目录与项目目录。
+Flint（`local-skills-hub`）是一个**本地优先**的个人 AI Skills 资产管理器：以文件系统为唯一事实源，集中管理 skill、打标签、去重，并按预设 / 标签把 skill 分发（软链或复制）到各 AI Agent 目录与项目目录。
 
 一句话模型：
 

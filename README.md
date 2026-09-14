@@ -1,8 +1,42 @@
-# Skills Hub
+# Flint
+
+> **Flint** · `local-skills-hub`
+> 黑曜石收藏知识,燧石点燃技能。
 
 **让 skill 成为个人资产。**
 
-Skills Hub 是一个本地优先的个人 AI Skills 资产管理器——集中管理你所有 Agent 使用的 skill，统一打标签、筛选、去重、投放到各 Agent 与项目目录。
+Flint 是一个本地优先的个人 AI Skills 资产管理器——集中管理你所有 Agent 使用的 skill，统一打标签、筛选、去重、投放到各 Agent 与项目目录。技能只以普通文件存在于本地磁盘，你可以用 git 或任何喜欢的方式版本化；迁移到别的工具、别的生态，这份资产照常带走、照常使用，不被 Flint 绑定。
+
+## 为什么叫 Flint
+
+黑曜石（Obsidian）是天然锋利的火山玻璃，人类把它打制成刀刃，也用它收藏个人知识——正如 Obsidian 之于知识库。
+
+**Flint（燧石）** 是与黑曜石并肩的另一块「工具之石」。Flint 沿用这条矿物 / 工具的脉络，把燧石的两层特性对应到本项目的两大动作：
+
+- **打制（knapping）**——把一块原石敲成精确趁手的工具：把散落各处的 skill 收拢、去重、打标签，整理成可复用的个人资产。
+- **取火（spark）**——燧石与钢相击迸出火花：把技能投放 / 分发到各个 Agent 与项目目录，让它们真正被点燃、开始干活。
+
+> 你收藏的每一项技能，都是等待被击出火花的一块燧石。
+
+## 与 Obsidian 一脉相承的理念
+
+Flint 的核心思路与 [Obsidian](https://obsidian.md/) 完全一致——只是把管理对象从「知识」换成了「技能」。Obsidian 官网对自己理念的原话是：
+
+> **Sharpen your thinking.** The free and flexible app for your private thoughts.
+>
+> **Your thoughts are yours.** “Obsidian stores notes privately on your device… No one else can read them, not even us.”
+>
+> **Your knowledge should last.** “Obsidian uses open file formats, so you’re never locked in. You own your data for the long term.”
+
+这三条，Flint 逐条对齐：
+
+| Obsidian 的理念 | Flint 的对应 |
+|------|------|
+| **本地即私有**：笔记私密地存在你的设备上，别人读不到，连官方也读不到 | 技能只以普通文件存在你的本地磁盘，无云端、无账号、无上报；元数据落在开源生态共识的位置，而非私有数据库 |
+| **开放格式、永不锁定**：用开放文件格式，你永远不被锁死，长期拥有自己的数据 | skill 本体就是磁盘上的 `SKILL.md` 目录，随时可打开、编辑、diff、用 git 提交；换工具、换生态，这份资产照常带走、照常使用，不被 Flint 绑定 |
+| **磨砺你的思考**：Obsidian 让个人知识库越用越锋利 | Flint 让个人技能库越攒越趁手——收拢、去重、打标签，再一键投放到需要它的 Agent 与项目里 |
+
+一句话：**Obsidian 让你拥有并磨砺自己的知识，Flint 让你拥有并磨砺自己的技能。** 二者共享同一套「本地优先、文件即资产、永不锁定」的底层信念。
 
 ## 文档导航
 
@@ -17,7 +51,7 @@ Skills Hub 是一个本地优先的个人 AI Skills 资产管理器——集中�
 
 ### 让 skill 成为个人资产
 
-就像用 Obsidian 管理个人知识库：你的 skill 仓库是你自己的、**与任何单一系统都不强相关**的个人资产。它只存在于本地文件系统里，你可以用 git 或任何你喜欢的系统进行管理和版本控制；将来迁移到别的工具、别的生态，这份「资产」照常带走照常使用，不被本工具绑定。
+你的 skill 仓库是你自己的、**与任何单一系统都不强相关**的个人资产。它只存在于本地文件系统里，你可以用 git 或任何你喜欢的系统进行管理和版本控制；将来迁移到别的工具、别的生态，这份「资产」照常带走照常使用，不被本工具绑定。
 
 ### 你的 skill 是你的文件
 
@@ -120,7 +154,7 @@ npm run dev
 ## 项目结构
 
 ```
-local-skills-hub/
+flint/  (local-skills-hub)
 ├─ start.sh          # 一键启动（环境 / 依赖 / 端口检查 → 启动 → 打开浏览器）
 ├─ README.md         # 本文件
 ├─ AGENTS.md         # 开发指引（面向 AI 助手 / 贡献者）

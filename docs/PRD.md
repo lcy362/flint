@@ -1,6 +1,6 @@
-# Skills Hub 产品需求文档（PRD）
+# Flint 产品需求文档（PRD）
 
-> 展示名 / 品牌名：**Skills Hub**（仓库名 `local-skills-hub`）。
+> 展示名 / 品牌名：**Flint**（代号，取「燧石」之意）；仓库名 `local-skills-hub`，GitHub `lcy362/flint`。
 > 核心命题：让 skill 成为**个人资产**——一处沉淀、切到即用、跨 Agent 零成本迁移。
 > 本文以**当前代码实现**为准，描述产品已具备的能力、规则与边界；技术实现见 [`TECH.md`](./TECH.md)，快速上手见 [`../README.md`](../README.md)，开发约定见 [`../AGENTS.md`](../AGENTS.md)。
 
@@ -15,7 +15,7 @@ AI 编码 Agent 生态高度碎片化：Cursor、Claude Code、TRAE、Qoder、Wi
 1. 本地已沉淀的 skill 不会被当前正在使用的 Agent 读到（目录不同）。
 2. 切换后，之前配置好的 skill 组合（预设）无法快速、准确地"带过去"。
 
-Skills Hub 用一个本地优先的 Web 应用解决它：以文件系统为唯一事实源，集中管理 skill、统一打标签与去重、按预设 / 标签分发到各 Agent 与项目目录，并让分发在"操作触发点"即时完成。
+Flint 用一个本地优先的 Web 应用解决它：以文件系统为唯一事实源，集中管理 skill、统一打标签与去重、按预设 / 标签分发到各 Agent 与项目目录，并让分发在"操作触发点"即时完成。
 
 ---
 
