@@ -112,6 +112,14 @@ export interface ProjectSkillsResp { skills: SkillCardView[]; addable: AddableSk
 export interface SyncResult { agent: string; created: string[]; removed: string[]; failed: { skill: string; reason: string }[]; warnings?: string[] }
 export enum DiagStatus { ok = 'ok', warn = 'warn', error = 'error' }
 export interface DiagItem { key: string; status: DiagStatus; message: string; detail?: unknown }
+/** sync 诊断项的 detail：期望 / 缺失 / 多余 / 失效软链，供「修复」确认弹窗逐条列出改动 */
+export interface SyncDiff {
+  agent: string;
+  desiredNames: string[];
+  missing: string[];
+  extra: string[];
+  brokenLink: string[];
+}
 export interface DiagnoseResult { config: string; summary: Record<string, { total: number; ok: number; warn: number; error: number }>; groups: Record<string, DiagItem[]>; items: DiagItem[] }
 export interface ProjectSyncResult { project: string; copied: string[]; removed: string[]; agentLinks: { agent: string; created: string[] }[]; errors: string[] }
 export interface ProjectPushResult { project: string; repo: string; pushed: string[]; skipped: string[]; errors: string[] }
