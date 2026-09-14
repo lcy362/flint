@@ -247,7 +247,7 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
           <FieldSelect
             label="管理模式"
             value={agent.mode}
-            hint={agent.mode === 'preset' ? '激活的 preset 即分发到此 Agent' : '仅分发手动开启的技能'}
+            hint={agent.mode === 'preset' ? '所有预设的技能即分发到此 Agent' : '仅分发手动开启的技能'}
             onChange={(e) => void busy(() => api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ mode: e.target.value }) }))}
           >
             <option value="preset">预设模式（默认）</option>
@@ -256,11 +256,11 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
           <FieldSelect
             label="关联预设"
             value={agent.preset ?? ''}
-            hint="不选则跟随所有已激活 preset"
+            hint="不选则跟随所有预设"
             disabled={agent.mode !== 'preset'}
             onChange={(e) => void busy(() => api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ preset: e.target.value || null }) }))}
           >
-            <option value="">跟随已激活预设</option>
+            <option value="">跟随所有预设</option>
             {(presets ?? []).map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
           </FieldSelect>
           <FieldSelect

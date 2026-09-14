@@ -32,7 +32,7 @@ export interface SkillView {
   /** 来源追溯：收编自哪个 Agent / 外部目录（IM-04） */
   origin?: string;
 }
-export interface PresetView { name: string; skills: string[]; tags: string[]; active?: boolean }
+export interface PresetView { name: string; skills: string[]; tags: string[] }
 export interface AgentView {
   key: string; name: string; globalDir: string; installed: boolean;
   sync: 'symlink' | 'copy'; active: boolean; mode: 'preset' | 'manual'; preset?: string;

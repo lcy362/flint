@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { HubConfig, emptyConfig } from './types.js';
+import { HubConfig, Preset, emptyConfig } from './types.js';
 import { CONFIG_PATH } from './defaults.js';
 import { log } from '../infra/logger.js';
 
@@ -16,6 +16,18 @@ const AGENT_KEY_RENAMES: Record<string, string> = {
   'roo-code': 'roo_code',
   'gemini-cli': 'gemini_cli',
 };
+
+/**
+ * 预设已取消「启用开关」：剔除历史配置里残留的 active 字段。
+ * 该字段不再参与任何推导，留着只会让 config 出现无意义的死状态（C5：只存有效决策）。
+ */
+function stripLegacyPresetFields(presets: Preset[]): Preset[] {
+  return presets.map((p) => {
+    const next = { ...p } as Preset & { active?: boolean };
+    delete next.active;
+    return next;
+  });
+}
 
 export class ConfigStore {
   private cfg: HubConfig;
@@ -54,7 +66,7 @@ export class ConfigStore {
       customAgents: parsed.customAgents ?? [],
       agents: parsed.agents ?? {},
       activeAgents: parsed.activeAgents ?? [],
-      presets: parsed.presets ?? [],
+      presets: stripLegacyPresetFields(parsed.presets ?? []),
       skillMeta: parsed.skillMeta ?? {},
       projects: parsed.projects ?? [],
       defaultSync: parsed.defaultSync ?? emptyConfig().defaultSync,

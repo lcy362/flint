@@ -380,11 +380,9 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       // 活跃 Agent：走全局同步，顺带修正其它活跃 Agent 的漂移
       touch();
     } else {
-      // 非活跃 Agent：用户在这里的显式操作应立即落盘，只同步该 Agent。
-      // 「活跃」只决定是否跟随 preset / 仓库等间接变更自动同步，不该拦住手动操作。
-      const def = findAgentDef(cfg.data, key);
-      const dir = def ? resolveGlobalDir(def, over.globalDir) : undefined;
-      if (dir && fs.existsSync(dir)) {
+      // 非活跃 Agent：不跟随预设 / 仓库等间接变更自动同步，但用户在这里的任何手动操作都立即落盘。
+      // 「活跃」只决定是否自动跟随，不该拦住手动操作；目录不存在由部署流程按需创建。
+      if (findAgentDef(cfg.data, key)) {
         const result = syncActive(cfg, library().skills, [key], 'route:agent-op')[0];
         log.info('http', '非活跃 Agent 手动同步', {
           agent: key,
@@ -471,19 +469,19 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       const name = String(req.body?.name ?? '').trim();
       if (!name) return res.status(400).json({ error: 'name required' });
       const p = presets.create(cfg, name);
-      // 兼容前端一次传入 skills/tags/active
+      // 兼容前端一次传入 skills/tags
       if (Array.isArray(req.body?.skills)) p.skills = req.body.skills;
       if (Array.isArray(req.body?.tags)) p.tags = req.body.tags;
-      if (typeof req.body?.active === 'boolean') p.active = req.body.active;
       cfg.save();
       touch();
-      log.info('http', '创建预设', { name, skills: p.skills.length, tags: p.tags.length, active: p.active });
+      log.info('http', '创建预设', { name, skills: p.skills.length, tags: p.tags.length });
       res.json(p);
     } catch (e) {
       log.error('http', `创建预设失败: ${(e as Error).message}`, { name: String(req.body?.name ?? '') });
       res.status(400).json({ error: (e as Error).message });
     }
   });
+  // 改预设立即同步活跃 Agent；非活跃 Agent 不自动跟随，等其详情页手动操作时即时生效。
   r.put('/presets/:name', (req, res) => {
     try {
       const p = presets.update(cfg, req.params.name, req.body ?? {});
@@ -495,19 +493,6 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       res.json(p);
     } catch (e) {
       log.error('http', `更新预设失败: ${(e as Error).message}`, { name: req.params.name });
-      res.status(400).json({ error: (e as Error).message });
-    }
-  });
-  r.post('/presets/:name/activate', (req, res) => {
-    try {
-      const activeFlag = req.body?.active !== false;
-      const changed = presets.setActive(cfg, req.params.name, activeFlag);
-      const lib = library();
-      const results = syncActive(cfg, lib.skills, undefined, 'route');
-      log.info('http', '预设激活切换', { name: req.params.name, active: activeFlag, changed });
-      res.json({ changed, results });
-    } catch (e) {
-      log.error('http', `预设激活失败: ${(e as Error).message}`, { name: req.params.name });
       res.status(400).json({ error: (e as Error).message });
     }
   });

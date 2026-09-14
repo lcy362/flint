@@ -51,7 +51,7 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
 | **来源（Source）** | skill 的来源命名空间：某个仓库名、某个外部 skill 集目录名、或 `external`。用于区分重名 skill。 |
 | **Agent** | 本机某个编码工具。每个 Agent 有一个（或多个）skill 目录，支持全局目录与项目级目录两种形态。 |
 | **活跃 Agent** | 用户在 UI 中手动配置的"当前正在使用"的 Agent。预设/标签变更会**实时同步**到此 Agent。 |
-| **Preset（预设）** | 一组 skill 的命名集合。激活→把集合内 skill 分发到目标 Agent；取消→移除。 |
+| **Preset（预设）** | 一组 skill 的命名集合。预设即决策：成员/标签变更立刻进入期望集并分发到活跃 Agent；**没有单独的启用开关**。 |
 | **标签（Tag）** | 给 skill 或项目打的标签，用于分组、过滤，以及"项目自动关联 skill"。 |
 | **同步策略** | 每条 Agent-仓库同步关系可选 **软链（symlink）**或**复制（copy）**。软链零冗余、实时可见；复制兼容性最好、需同步机制。 |
 
@@ -126,15 +126,15 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
 ### 5.3 活跃 Agent 与实时同步（核心优化）
 
 - **AA-01 活跃 Agent 配置（支持多个）**：UI 提供"活跃 Agent"多选器（≥1），用户手动维护一个**活跃 Agent 集合**（可记忆上次选择）；后续实时同步作用于集合内全部成员。
-- **AA-02 触发式实时同步**：**不需要常驻 watcher**。当用户**操作引发 preset 激活/取消、Agent 切换、标签变更**时，同步动作在该触发点立即执行，把结果实时反映到**活跃 Agent** 的 skill 目录。
+- **AA-02 触发式实时同步**：**不需要常驻 watcher**。当用户**操作引发 preset 增删改、Agent 切换、标签变更**时，同步动作在该触发点立即执行，把结果实时反映到**活跃 Agent** 的 skill 目录。
 - **AA-03 非活跃 Agent 懒同步**：非活跃 Agent 不自动同步，用户手动点到某 Agent 时才刷新/再同步。
 - **AA-04 切换即就位**：用户把某 Agent 加入/移出活跃集合时，即刻将该 Agent 当前应生效的 preset/标签组合同步到其目录（加入即就位、移出可回退），达到"切到即用"。
 
 ### 5.4 Preset（预设）
 
 - **PR-01 创建/编辑/删除**：命名 preset，增删其包含的 skill。
-- **PR-02 激活/取消**：激活→分发集合内 skill 到目标（默认活跃 Agent）；取消→移除。
-- **PR-03 实时同步**：preset 的增删改、激活状态变化，实时同步到**活跃 Agent**；非活跃 Agent 留待手动。
+- **PR-02 成员即分发**：预设成员/关联标签变更即进入期望集并分发到目标（默认活跃 Agent）；**无独立启用开关**。
+- **PR-03 实时同步**：preset 的增删改实时同步到**活跃 Agent**；非活跃 Agent 不自动跟随，其任一手动操作即时全量对账。
 - **PR-04 预设集导入**：兼容 skills-manager 的 preset 集概念，可导入既有 preset 数据。
 - **PR-05 组合适用**：支持 preset 关联一组标签或一组显式 skill，二者皆可。
 
@@ -184,7 +184,7 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
   - **资产库（Library）**：浏览/搜索/过滤全部 skill（标签/来源/名字），打标签、查看详情（SKILL.md 预览）。
   - **Agent 工作台**：每个 Agent 一栏，展示其当前可见 skill、同步状态、同步策略开关；活跃 Agent 明确高亮。
   - **活跃 Agent 切换器**：一键切换活跃 Agent（触发 AA-04 就位同步）。
-  - **Preset 管理**：预设列表、创建/激活/编辑、空间内即时生效。
+  - **Preset 管理**：预设列表、创建/编辑（增删成员、关联标签）、空间内即时生效。
   - **项目级管理**：项目列表、打标签、查看/执行同步与回写。
   - **仓库/来源管理**：多仓库、外部目录关联、批量导入、整合向导。
   - **设置**：活跃 Agent、Agent 自定义目录、仓库路径、同步策略默认值、watcher 开关。
@@ -194,7 +194,7 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
 ## 6. 核心场景：切换 Agent 用免费 token
 
 1. 用户已将 skill 统一沉淀到仓库，并维护好若干 preset（如 `code-review`、`weekly-report`、`react-best-practices`）。
-2. UI 中把"活跃 Agent 集合"设为 `{ trae-cn, qoder }`，并激活 `code-review` preset。
+2. UI 中把"活跃 Agent 集合"设为 `{ trae-cn, qoder }`，并维护好 `code-review` preset（成员变更即分发）。
 3. 触发式同步立即把 preset 内 skill 以软链落到 `trae-cn`、`qoder` 各自的 skill 目录 → 两个当前在用的 Agent 立即可用。
 4. 用户又切到 `qwen_code`（另一家免费 token）：
    - 把 `qwen_code` 加入活跃集合；
@@ -202,7 +202,7 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
    - 其余不在活跃集合的 Agent 保持现状，不被扰动。
 5. 用户在任意活跃 Agent 中改了某个 skill → 回写仓库 → 切回时其他活跃 Agent 也能看到最新版本。
 
-> 全程不常驻后台，同步均在"切换/激活/操作"这一触发点上立即完成，既满足实时就位，又避免后台进程与无谓扫描。
+> 全程不常驻后台，同步均在"切换/修改/操作"这一触发点上立即完成，既满足实时就位，又避免后台进程与无谓扫描。
 
 ---
 
@@ -238,7 +238,7 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
 ### 8.4 同步触发模型
 
 - **全局 skill 同步 = 触发式**（默认无 watcher）：
-  - 触发点：preset 激活/修改、活跃 Agent 切换、标签变更、手动"同步"按钮。
+  - 触发点：preset 创建/修改、活跃 Agent 切换、标签变更、手动"同步"按钮。
   - 在触发点立即对该 Agent/目标执行软链或复制，实时就位。
 - **复制目录级同步 = 可选 watched**：当某 Agent 选择"复制"策略时，可开启该目录的 watcher 做增量同步（仅此开启），否则用手动/按键。
 - **项目 `.agents` 同步 = 手动 / 定期 / 可选 watched**。

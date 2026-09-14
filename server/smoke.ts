@@ -38,7 +38,6 @@ console.log('发现 skills =', lib.skills.map((s) => s.id).sort());
 const alpha = lib.skills.find((s) => s.name === 'alpha');
 presets.create(store, 'demo');
 presets.update(store, 'demo', { skills: [alpha.id] });
-presets.setActive(store, 'demo', true);
 active.set(store, ['trae_cn']);
 
 // 直接调同步引擎（不经过 HTTP）

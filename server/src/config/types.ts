@@ -50,13 +50,17 @@ export interface AgentOverride {
   explicitOff?: string[];
 }
 
+/**
+ * 预设：一组命名的技能集合（显式成员 ∪ 关联标签命中）。
+ * 不设「启用开关」——预设就是决策本身，成员或标签一变即刻进入期望集并分发到活跃 Agent；
+ * 非活跃 Agent 不自动跟随，可在其详情页手动同步（手动操作即时生效）。
+ */
 export interface Preset {
   name: string;
   /** skill id（name@来源） */
   skills: string[];
   /** 关联标签：打有这些标签的 skill 一并纳入本预设（PR-05） */
   tags: string[];
-  active?: boolean;
 }
 
 export interface SkillMeta {

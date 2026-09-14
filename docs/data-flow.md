@@ -13,7 +13,7 @@
 | 不被工具绑定 | 元数据不写私有格式：标签优先写 SKILL.md frontmatter / marketplace.json 等生态共识位置 |
 | 唯一事实源 | **期望集（desired）由配置推导**；各 Agent / 项目目录只是期望集的「物理投影」 |
 | 降低碎片化 | 同名 skill 以 `name` 归一化去重，一个目录名只对应一份投影 |
-| 触发式同步 | 数据流全部由用户操作触发（激活/切换/修改/手动），非常驻（复制 watcher 可选） |
+| 触发式同步 | 数据流全部由用户操作触发（创建/修改/切换/手动），非常驻（复制 watcher 可选） |
 
 **一句话模型**：
 
@@ -46,7 +46,7 @@
 | `foreignSources[]` | 外部来源：id / path / layout / linked(只读 or 收编) | 文件目录 |
 | `agents{}` | 每 Agent 覆盖：globalDir / sync(软链\|复制) / mode(preset\|manual) / preset / **explicitOn[] / explicitOff[]** | — |
 | `activeAgents[]` | 活跃 Agent 集合（实时同步作用域） | agents key |
-| `presets[]` | 套餐：skills[](name@来源) + tags[] + active | skill id |
+| `presets[]` | 套餐：skills[](name@来源) + tags[]（无启用开关，预设即决策） | skill id |
 | `skillMeta{}` | 兼容模式的本地标签（仓库未配 tags 载体时） | skill id |
 | `projects[]` | 项目：path / tags[] / explicitOn[] / explicitOff[] | 文件目录 |
 | `defaultSync` | 默认同步策略 | — |
@@ -159,7 +159,7 @@ flowchart LR
 flowchart LR
     subgraph Trigger["触发点（无 watcher，操作即同步）"]
         direction TB
-        T1[技能套餐 激活/增删改]
+        T1[技能套餐 增删改]
         T2[活跃 Agent 集合变更]
         T3[Agent 手动开关 skill<br/>explicitOn/Off]
         T4[标签变更 PATCH]
@@ -169,7 +169,7 @@ flowchart LR
 
     subgraph Calc["期望集计算 desiredContext(agent)"]
         direction TB
-        BASE["基准 = 指定套餐成员<br/>或全部激活套餐并集<br/>(mode=manual 时为空)"]
+        BASE["基准 = 指定套餐成员<br/>或全部套餐并集<br/>(mode=manual 时为空)"]
         ON["∪ explicitOn"]
         OFF["− explicitOff"]
         D["desired: Map&lt;id, Skill&gt;"]

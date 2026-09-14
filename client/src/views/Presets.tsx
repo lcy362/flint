@@ -9,7 +9,6 @@ import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
-import Switch from '../components/ui/Switch';
 import Chip from '../components/ui/Chip';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingBoundary from '../components/ui/LoadingBoundary';
@@ -86,6 +85,9 @@ function FoldButton({ expanded, label, onClick }: { expanded: boolean; label: st
  * 增删显式关联技能、管理关联标签。标签命中的技能会自动纳入预设，
  * 与显式技能取并集。详情态由地址 sub 决定，可直达、可刷新复原。
  *
+ * 预设没有启用开关：它就是「要分发什么」的决策本身，成员或标签一变即刻同步到活跃 Agent；
+ * 非活跃 Agent 不自动跟随，可在其详情页手动操作（手动操作即时对账）。
+ *
  * 展示口径统一到「最终生效」：主页卡片只给技能总数，详情页汇总已开启技能
  * 与已施加到哪些 Agent，避免把中间态（显式名单 / 标签列表）抛给用户。
  * 详情页按「当前状态（只读）」与「调整方式（可写）」两组分区，「调整方式」
@@ -93,7 +95,6 @@ function FoldButton({ expanded, label, onClick }: { expanded: boolean; label: st
  */
 export default function Presets() {
   const { data, loading, error, reload } = useAsync<StateView>(() => api('/state'));
-  const toast = useToast();
   const route = useRoute();
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -152,15 +153,7 @@ export default function Presets() {
                   id: p.name,
                   title: p.name,
                   sub: on.length ? `已开启 ${on.length} 个技能` : '尚未开启任何技能',
-                  toggle: (
-                    <Switch
-                      aria-label={`启用 ${p.name}`}
-                      checked={!!p.active}
-                      onChange={(v) => void toggle(p, v, reload, toast)}
-                    />
-                  ),
                   onClick: () => open(p.name),
-                  muted: !p.active,
                 };
               })}
               title={`全部预设（${presets.length}）`}
@@ -176,16 +169,6 @@ export default function Presets() {
       />
     </>
   );
-}
-
-async function toggle(p: PresetView, on: boolean, reload: () => void, toast: ReturnType<typeof useToast>) {
-  try {
-    await api(`/presets/${encodeURIComponent(p.name)}`, { method: 'PUT', body: JSON.stringify({ ...p, active: on }) });
-    toast.push('已更新', 'good');
-    reload();
-  } catch (e) {
-    toast.push(e instanceof Error ? e.message : String(e), 'bad');
-  }
 }
 
 /** 新建预设：只填名称，创建后立即进入详情页做后续管理 */
@@ -236,7 +219,7 @@ function CreatePresetModal({ open, onClose, onCreated }: { open: boolean; onClos
   );
 }
 
-/** 预设详情：增删显式技能、管理关联标签、启停与删除 */
+/** 预设详情：增删显式技能、管理关联标签、删除 */
 function PresetDetail({
   preset,
   skills,
@@ -279,7 +262,7 @@ function PresetDetail({
   const { data: agents } = useAsync<AgentView[]>(() => api('/agents'));
 
   /** 统一保存入口：PUT 覆盖 skills/tags 并刷新；silent 用于开关这类高频操作 */
-  const save = async (patch: { skills?: string[]; tags?: string[]; active?: boolean }, opts?: { silent?: boolean; noReload?: boolean }) => {
+  const save = async (patch: { skills?: string[]; tags?: string[] }, opts?: { silent?: boolean; noReload?: boolean }) => {
     try {
       await api(`/presets/${encodeURIComponent(preset.name)}`, { method: 'PUT', body: JSON.stringify(patch) });
       if (!opts?.silent) toast.push('已保存', 'good');
@@ -419,17 +402,17 @@ function PresetDetail({
     () => (agents ?? []).filter((a) => a.mode === 'preset' && a.preset === preset.name),
     [agents, preset.name]
   );
-  /** 未指定预设、跟随所有「已启用预设」的 Agent */
+  /** 未指定预设、跟随所有预设的 Agent */
   const followerAgents = useMemo(() => (agents ?? []).filter((a) => a.mode === 'preset' && !a.preset), [agents]);
 
   /**
    * 已应用本预设的 Agent：
-   * - 显式关联本预设的：无论预设是否启用，都会收到本预设的技能；
-   * - 预设已启用时，未指定预设但已加入活跃集合、会真正分发的跟随型 Agent。
+   * - 显式关联本预设的：都会收到本预设的技能（配置层绑定，与是否活跃无关）；
+   * - 跟随所有预设、且已加入活跃集合的：会真正分发。
    * 只有加入活跃集合的 Agent 才会把技能写入本地目录，故单独标注分发状态。
    */
   const appliedAgents = useMemo(() => {
-    const list = preset.active ? [...boundAgents, ...followerAgents.filter((a) => a.active)] : [...boundAgents];
+    const list = [...boundAgents, ...followerAgents.filter((a) => a.active)];
     const seen = new Set<string>();
     const merged: AgentView[] = [];
     for (const a of list) {
@@ -438,12 +421,12 @@ function PresetDetail({
       merged.push(a);
     }
     return merged.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
-  }, [boundAgents, followerAgents, preset.active]);
+  }, [boundAgents, followerAgents]);
 
-  /** 待生效：预设已启用，但跟随型 Agent 尚未加入活跃集合，暂不会实际分发 */
+  /** 待分发：跟随所有预设、但尚未加入活跃集合的 Agent——不自动跟随变更，可在其详情页手动同步 */
   const pendingAgents = useMemo(
-    () => (preset.active ? followerAgents.filter((a) => !a.active) : []),
-    [followerAgents, preset.active]
+    () => followerAgents.filter((a) => !a.active),
+    [followerAgents]
   );
 
   const agentItems: EntityItem[] = appliedAgents.map((a) => ({
@@ -455,7 +438,7 @@ function PresetDetail({
         {a.preset ? (
           <Badge tone="accent" title="该 Agent 显式关联到本预设">显式关联</Badge>
         ) : (
-          <Badge tone="info" title="未指定预设，跟随所有已启用的预设（本预设已启用）">跟随已启用预设</Badge>
+          <Badge tone="info" title="未指定预设，跟随所有预设">跟随所有预设</Badge>
         )}
         {a.active ? (
           <Badge tone="good" dot="good" title="已加入活跃集合，技能已实际分发到本地目录">已分发</Badge>
@@ -473,16 +456,10 @@ function PresetDetail({
       <div className="detail-head">
         <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>← 返回</Button>
         <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{preset.name}</h2>
-        <Badge tone={preset.active ? 'good' : 'neutral'} dot={preset.active ? 'good' : 'neutral'}>
-          {preset.active ? '启用' : '未启用'}
-        </Badge>
         <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
           已开启 {enabled.length} 个技能{enabledAuto > 0 ? `（含 ${enabledAuto} 个按标签纳入）` : ''}
         </span>
         <div className="detail-actions">
-          <Button size="sm" variant={preset.active ? 'ghost' : 'primary'} onClick={() => void save({ active: !preset.active })}>
-            {preset.active ? '停用' : '启用'}
-          </Button>
           <Button size="sm" variant="danger" onClick={() => void removePreset()}>删除</Button>
         </div>
       </div>
@@ -528,10 +505,9 @@ function PresetDetail({
               <Badge tone={agentItems.length ? 'good' : 'neutral'}>{agentItems.length}</Badge>
             </div>
             <p className="panel__hint">
-              {preset.active
-                ? '显式关联本预设、或未指定预设而跟随已启用预设的 Agent，都会接收本预设的技能。'
-                : '本预设尚未启用：只有显式关联它的 Agent 会接收技能，跟随已启用预设的 Agent 不会。'}
-              标注「已分发」表示技能已实际写入该 Agent 的本地目录。
+              显式关联本预设、或未指定预设（跟随所有预设）的 Agent，都会接收本预设的技能。
+              标注「已分发」表示技能已实际写入该 Agent 的本地目录；
+              未加入活跃集合的 Agent 不自动跟随变更，可在其详情页手动同步。
             </p>
             <EntityList
               mode="list"
@@ -540,18 +516,14 @@ function PresetDetail({
               empty={
                 <EmptyState
                   title="暂无 Agent 应用此预设"
-                  hint={
-                    preset.active
-                      ? '把 Agent 的管理模式设为「预设模式」并关联本预设，或把它加入活跃集合以跟随本预设。'
-                      : '启用本预设，或在 Agent 详情里显式关联它，技能才会分发到该 Agent。'
-                  }
+                  hint="把 Agent 的管理模式设为「预设模式」并关联本预设（或留空跟随所有预设），技能才会分发到该 Agent。"
                 />
               }
             />
             {pendingAgents.length > 0 && (
               <>
                 <button type="button" className="link-btn" onClick={() => setShowPending((v) => !v)}>
-                  {showPending ? '收起' : `另有 ${pendingAgents.length} 个 Agent 跟随已启用预设，但未加入活跃集合、暂不会分发`}
+                  {showPending ? '收起' : `另有 ${pendingAgents.length} 个 Agent 跟随所有预设，但未加入活跃集合、暂不会自动分发`}
                 </button>
                 {showPending && (
                   <div className="skill-pills" style={{ maxHeight: 190, marginTop: 'var(--sp-2)' }}>

@@ -41,11 +41,14 @@ function nameOf(id: string): string {
 /**
  * 解析某 agent 的期望技能上下文。
  * 期望 = 基准 ∪ explicitOn − explicitOff，其中：
- * - 默认 mode=preset（PR-02：激活的 preset 即分发到该 agent）
+ * - 默认 mode=preset（PR-02：preset 即分发到该 agent）
  * - mode=preset + preset：基准 = 该套餐成员 ∪ 该套餐关联标签命中的 skill（PR-05）
- * - mode=preset，未指定 preset：基准 = 所有「激活 presets」成员 ∪ 其标签命中
+ * - mode=preset，未指定 preset：基准 = 所有 presets 成员 ∪ 其标签命中（跟随全部预设）
  * - mode=manual：基准为空（期望全靠 explicitOn）
- * agentKey 为空时，desired 仅含全局激活 presets 成员（兼容全局同步）。
+ * agentKey 为空时，desired 含全部 presets 成员（兼容全局同步）。
+ *
+ * 预设没有启用开关：它就是「要分发什么」的决策本身。是否自动跟随变更由 Agent 自己决定——
+ * 只有加入 activeAgents 的 Agent 会被自动同步；非活跃 Agent 保持现状，等待手动操作即时生效。
  */
 export function desiredContext(cfg: ConfigStore, allSkills: Skill[], agentKey?: string): DesiredContext {
   const ov = agentKey ? cfg.data.agents[agentKey] : undefined;
@@ -79,7 +82,6 @@ export function desiredContext(cfg: ConfigStore, allSkills: Skill[], agentKey?: 
       byTag(p.tags ?? [], p.name, p.name);
     } else {
       for (const q of cfg.data.presets) {
-        if (!q.active) continue;
         for (const id of q.skills) pushBase(id, q.name);
         byTag(q.tags ?? [], q.name, q.name);
       }
