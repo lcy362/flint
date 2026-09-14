@@ -420,8 +420,10 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
   const metaOf = (name: string) => allSkills.find((s) => s.name === name);
 
   // 1) 扫描自身目录，记录是否存在及各目录项类型
+  //    跳过隐藏项：接管留下的 `.original-<name>` 备份不算技能
   if (fs.existsSync(ownDir)) {
     for (const ent of fs.readdirSync(ownDir, { withFileTypes: true })) {
+      if (ent.name.startsWith('.')) continue;
       presentNames.add(ent.name);
       presentLstat.set(ent.name, ent); // isSymbolicLink() 可用
     }
@@ -494,7 +496,7 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
     if (!fs.existsSync(sharedDir)) continue;
     for (const ent of fs.readdirSync(sharedDir, { withFileTypes: true })) {
       const name = ent.name;
-      if (seen.has(name)) continue;
+      if (name.startsWith('.') || seen.has(name)) continue;
       const p = path.join(sharedDir, name);
       const isLink = ent.isSymbolicLink();
       // 共享目录里同样只认「软链」或「真正的技能目录」，避免把无关文件当技能

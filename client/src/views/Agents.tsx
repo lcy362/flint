@@ -171,9 +171,10 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   const [dirOpen, setDirOpen] = useState(false);
   const [lastSync, setLastSync] = useState<SyncResult | null>(null);
   const [syncing, setSyncing] = useState(false);
-  // 归集到仓库：待归集的技能 + 选定的目标仓库
+  // 归集到仓库：待归集的技能 + 选定的目标仓库 + 是否顺带接管
   const [collectItem, setCollectItem] = useState<SkillCardView | null>(null);
   const [collectRepo, setCollectRepo] = useState('');
+  const [collectTakeover, setCollectTakeover] = useState(false);
   const [collecting, setCollecting] = useState(false);
 
   // 直接添加技能：本地草稿（乐观更新）+ 串行提交，连点开关时不丢操作、不后发先至
@@ -219,6 +220,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
     // 归集需要选目标仓库，交给弹窗处理
     if (action.kind === 'collect') {
       setCollectItem(item);
+      setCollectTakeover(false);
       setCollectRepo((prev) => prev || (state?.repos ?? [])[0]?.id || '');
       return;
     }
@@ -231,17 +233,32 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
     });
   };
 
-  // 归集到仓库：把该技能复制进选定仓库（源目录不动）
+  // 归集到仓库：把该技能复制进选定仓库（源目录不动）；勾选「同时接管」时再把它换成指向仓库副本的软链
   const runCollect = async () => {
     if (!collectItem || !collectRepo) return;
+    const name = collectItem.name;
     setCollecting(true);
     try {
       const res = await api<{ collected: string[]; skipped: string[] }>(
         `/repos/${encodeURIComponent(collectRepo)}/collect`,
-        { method: 'POST', body: JSON.stringify({ agentKey: agent.key, names: [collectItem.name] }) }
+        { method: 'POST', body: JSON.stringify({ agentKey: agent.key, names: [name] }) }
       );
-      if (res.collected.length) toast.push(`已归集「${collectItem.name}」到仓库`, 'good');
-      for (const s of res.skipped) toast.push(`跳过：${s}`, 'bad');
+      if (res.collected.length) toast.push(`已归集「${name}」到仓库`, 'good');
+      else toast.push(`未复制到仓库：${res.skipped.join('；') || '无变化'}`, 'bad');
+
+      if (collectTakeover) {
+        const t = await api<{ linked: boolean; reason?: string; backupDir?: string }>(
+          `/repos/${encodeURIComponent(collectRepo)}/takeover`,
+          { method: 'POST', body: JSON.stringify({ agentKey: agent.key, name, confirm: true }) }
+        );
+        if (!t.linked) {
+          toast.push(`接管未完成：${t.reason ?? '未知原因'}`, 'bad');
+        } else {
+          toast.push(t.backupDir ? '已接管：原技能目录已备份，本目录改为指向仓库副本的软链' : '已接管：本目录改为指向仓库副本的软链', 'good');
+          // 登记为该 Agent 的启用项：否则它不在期望集里，下次「同步」会把这颗软链当多余项回收
+          await api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ skill: name, on: true }) });
+        }
+      }
       setCollectItem(null);
       reload();
       onChanged();
@@ -694,7 +711,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
           <p className="panel__hint" style={{ marginBottom: 0 }}>
             把 <span className="mono">{collectItem?.name}</span> 复制进选定仓库，之后各 Agent / 项目都能共享；
-            <strong>本目录里的原技能保持不动</strong>（如需改成指向仓库副本的软链，可在技能库页做「接管」）。
+            <strong>本目录里的原技能保持不动</strong>。
           </p>
           {(state?.repos ?? []).length === 0 ? (
             <EmptyState title="还没有登记仓库" hint="先到「技能库」登记一个自有仓库，再来归集。" />
@@ -702,6 +719,28 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
             <FieldSelect label="目标仓库" value={collectRepo} onChange={(e) => setCollectRepo(e.target.value)}>
               {(state?.repos ?? []).map((r) => <option key={r.id} value={r.id}>{r.name || r.id}</option>)}
             </FieldSelect>
+          )}
+
+          {collectItem?.reason === 'external' && (
+            <p className="panel__hint" style={{ marginBottom: 0 }}>
+              注意：本目录里当前是一个指向别处的软链。归集会把<span className="mono">{collectItem.linkTarget}</span>里的内容复制进仓库
+              （该外部目录本身不会被改动或删除）。
+            </p>
+          )}
+
+          <SwitchLabel checked={collectTakeover} onChange={setCollectTakeover}>
+            同时接管：把本目录里的技能换成指向仓库副本的软链
+          </SwitchLabel>
+          {collectTakeover && (
+            <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
+              <span>接管会在归集完成后执行，具体做这三件事：</span>
+              <span>1. 本目录里的技能先<strong>改名备份</strong>为 <span className="mono">.original-{collectItem?.name}</span>（内容不删除，随时可找回）。</span>
+              <span>2. 在原位置建立<strong>指向仓库副本的软链</strong>：以后改仓库里这份技能，该 Agent 立刻生效，不再有第二份副本。</span>
+              <span>3. 把该技能<strong>登记为这个 Agent 的启用项</strong>——否则它不在分发名单里，下次点「同步」会把这条软链当多余项回收。</span>
+              {collectItem?.reason === 'external' && (
+                <span>其中第 1 步不适用：原本就是软链，会被直接改为指向仓库副本（外部原目录不受影响，原软链不保留、也不另做备份）。</span>
+              )}
+            </div>
           )}
         </div>
       </Modal>
