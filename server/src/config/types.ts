@@ -50,6 +50,11 @@ export interface AgentOverride {
   preset?: string;
   explicitOn?: string[];
   explicitOff?: string[];
+  /**
+   * 显式指定该 Agent 为其技能目录的主 Agent（AG-02 / C18）。
+   * 同一目录至多一个；未指定时按「活跃优先、其次名称序」自动判定。
+   */
+  primary?: boolean;
 }
 
 /**

@@ -144,3 +144,39 @@ let projBase = '';
     !deployed.includes('gamma');
   console.log(ok ? '✅ 同目录别名通过（只有主 Agent 部署，别名沿用其策略）' : '❌ 同目录别名失败');
 }
+
+// ---- 批次6: 显式指定主 Agent smoke（AG-02）----
+{
+  const { listAgents, setPrimary } = await import('./src/core/agents.js');
+  const { desiredContext } = await import('./src/core/sync.js');
+  const sharedDir = path.join(base, 'shared-skills');
+  const lib7 = scanAll(store.data.repos, store.data.foreignSources);
+
+  // 两个都活跃时，自动判定本是 cline（活跃相同 → 名称序）；显式指定 warp 后应以 warp 为准
+  setPrimary(store.data, 'warp', true);
+  store.save();
+  const views = listAgents(store.data);
+  const cline = views.find((a) => a.key === 'cline');
+  const warp = views.find((a) => a.key === 'warp');
+  const ran = syncActive(store, lib7.skills, undefined, 'smoke');
+  const deployed = fs.existsSync(sharedDir) ? fs.readdirSync(sharedDir).sort() : [];
+  const aliasPreset = desiredContext(store, lib7.skills, 'cline').preset;
+  console.log('\n[primary] 指定后 warp.primaryKey =', warp?.primaryKey, '| warp.primaryExplicit =', warp?.primaryExplicit, '| cline.primaryKey =', cline?.primaryKey);
+  console.log('[primary] 生效预设 =', warp?.preset, '| cline 期望预设 =', aliasPreset, '| 部署目标 =', ran.map((r) => r.agent).join(','), '| 目录内容 =', deployed);
+
+  // 取消指定 → 回到自动判定（活跃优先、其次名称序 → cline）
+  setPrimary(store.data, 'warp', false);
+  store.save();
+  const back = listAgents(store.data).find((a) => a.key === 'warp');
+  console.log('[primary] 取消指定后 warp.primaryKey =', back?.primaryKey, '| warp 期望预设 =', desiredContext(store, lib7.skills, 'warp').preset);
+  const ok =
+    warp?.primaryKey === 'warp' &&
+    warp?.primaryExplicit === true &&
+    warp?.preset === 'solo' &&
+    cline?.primaryKey === 'warp' &&
+    aliasPreset === 'solo' &&
+    ran.length === 1 && ran[0].agent === 'warp' &&
+    deployed.includes('gamma') && !deployed.includes('alpha') &&
+    back?.primaryKey === 'cline';
+  console.log(ok ? '✅ 显式指定主 Agent 通过（指定优先于活跃/名称自动判定）' : '❌ 显式指定主 Agent 失败');
+}

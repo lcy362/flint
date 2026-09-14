@@ -178,6 +178,8 @@ export interface AgentView extends AgentDef {
    * 只说明它们走的是同一个路径，策略读取与写入都以主 Agent 为准。
    */
   primaryKey: string;
+  /** 主 Agent 由用户显式指定（而非按活跃 / 名称自动推出） */
+  primaryExplicit?: boolean;
   /** 与哪些 agent 解析到同一目录（自动比对，AG-02） */
   sharedWith: string[];
   /** 文档化跨产品复用 */
@@ -195,17 +197,27 @@ export interface AgentView extends AgentDef {
 }
 
 /**
- * 同一技能目录的主 Agent 挑选规则：活跃优先（只有活跃的会被自动同步，其策略才是
- * 实际持续生效的那套），其次按名称稳定排序。前端卡片、同步目标、策略读写共用它。
+ * 同一技能目录的主 Agent 挑选规则。前端卡片、同步目标、策略读写共用它：
+ * 1. 用户显式指定（`agents[key].primary`，AG-02）优先——这是明确决策，不参与自动判定；
+ * 2. 否则活跃优先（只有活跃的会被自动同步，其策略才是实际持续生效的那套）；
+ * 3. 最后按名称稳定排序。
  */
-export function primaryOf(members: { key: string; name: string; active: boolean }[]): string {
-  return [...members].sort(
-    (a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)
-  )[0].key;
+export function primaryOf(members: { key: string; name: string; active: boolean; primary?: boolean }[]): string {
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+  const designated = members.filter((m) => m.primary).sort(byName);
+  if (designated.length > 0) return designated[0].key;
+  return [...members].sort((a, b) => Number(b.active) - Number(a.active) || byName(a, b))[0].key;
+}
+
+interface DirMember {
+  key: string;
+  name: string;
+  active: boolean;
+  primary?: boolean;
 }
 
 /** 某 Agent 所在目录的全部成员（含自身）；未登记的 key 返回空 */
-function dirMembers(cfg: HubConfig, key: string): { key: string; name: string; active: boolean }[] {
+function dirMembers(cfg: HubConfig, key: string): DirMember[] {
   const def = findAgentDef(cfg, key);
   if (!def) return [];
   const dir = resolveGlobalDir(def, cfg.agents[key]?.globalDir);
@@ -214,6 +226,7 @@ function dirMembers(cfg: HubConfig, key: string): { key: string; name: string; a
       key: d.key,
       name: d.name,
       active: cfg.activeAgents.includes(d.key),
+      primary: cfg.agents[d.key]?.primary,
       dir: resolveGlobalDir(d, cfg.agents[d.key]?.globalDir),
     }))
     .filter((m) => m.dir === dir);
@@ -226,6 +239,49 @@ function dirMembers(cfg: HubConfig, key: string): { key: string; name: string; a
 export function effectiveAgentKey(cfg: HubConfig, key: string): string {
   const members = dirMembers(cfg, key);
   return members.length > 0 ? primaryOf(members) : key;
+}
+
+/**
+ * 指定 / 取消某 Agent 作为其技能目录的主 Agent（AG-02）。
+ * 指定是「组的归属」而非该 Agent 的策略：写在它自己身上，同目录其余成员一律清除，
+ * 保证一个目录至多一个指定（否则配置里会出现两个互斥的"主"）。
+ */
+export function setPrimary(cfg: HubConfig, key: string, on: boolean): void {
+  for (const m of dirMembers(cfg, key)) {
+    if (on && m.key === key) {
+      cfg.agents[m.key] = { ...(cfg.agents[m.key] ?? {}), primary: true };
+      continue;
+    }
+    const ov = cfg.agents[m.key];
+    if (!ov) continue;
+    delete ov.primary;
+    if (Object.keys(ov).length === 0) delete cfg.agents[m.key];
+  }
+}
+
+/**
+ * 清掉同目录中「别名」自己那份策略覆盖（目录覆盖 globalDir / projectDir 保留）。
+ * 别名与主 Agent 共用一份目录，它那份策略永远不生效，留着只会在配置里造成假象（C5）。
+ * 返回被清理的 key，便于日志与测试断言。
+ */
+export function pruneAliasStrategies(cfg: HubConfig, primaryKey: string): string[] {
+  const cleared: string[] = [];
+  for (const m of dirMembers(cfg, primaryKey)) {
+    if (m.key === primaryKey) continue;
+    const ov = cfg.agents[m.key];
+    if (!ov) continue;
+    const had = ov.preset !== undefined || ov.sync !== undefined || ov.skillSync !== undefined
+      || ov.explicitOn !== undefined || ov.explicitOff !== undefined;
+    if (!had) continue;
+    delete ov.preset;
+    delete ov.sync;
+    delete ov.skillSync;
+    delete ov.explicitOn;
+    delete ov.explicitOff;
+    cleared.push(m.key);
+    if (Object.keys(ov).length === 0) delete cfg.agents[m.key];
+  }
+  return cleared;
 }
 
 export function listAgents(cfg: HubConfig): AgentView[] {
@@ -260,7 +316,14 @@ export function listAgents(cfg: HubConfig): AgentView[] {
   for (const v of views) {
     const members = byDir.get(v.globalDir) ?? [];
     v.sharedWith = members.filter((o) => o.key !== v.key).map((o) => o.name);
-    v.primaryKey = primaryOf(members);
+    // 主 Agent 判定要带上「显式指定」标记；该标记只存在配置里，不进 API 契约
+    v.primaryKey = primaryOf(members.map((m) => ({
+      key: m.key,
+      name: m.name,
+      active: m.active,
+      primary: cfg.agents[m.key]?.primary,
+    })));
+    v.primaryExplicit = v.primaryKey === v.key && cfg.agents[v.key]?.primary === true;
   }
   // 策略展示以生效者为准：别名沿用主 Agent 的预设 / 安装方式 / 显式开关
   for (const v of views) {

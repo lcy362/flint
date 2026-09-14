@@ -23,6 +23,12 @@ export interface AgentGroup {
   aliases: AgentView[];
   names: string[];
   keys: string[];
+  /**
+   * 组内是否有任一 Agent 在活跃集合里。
+   * 目录的「会自动跟随变更」由此决定：只要有一个成员活跃，同步就会覆盖这个目录
+   * （同步目标按目录归并到主 Agent），因此不能只看主 Agent 自己的活跃标记。
+   */
+  anyActive: boolean;
   /** 目录是否已存在于本机（同目录必然同结果） */
   installed: boolean;
 }
@@ -48,14 +54,15 @@ export function groupAgentsByDir(agents: AgentView[]): AgentGroup[] {
       aliases,
       names: [primary, ...aliases].map((a) => a.name),
       keys: [primary, ...aliases].map((a) => a.key),
+      anyActive: members.some((a) => a.active),
       installed: members.some((a) => a.installed),
     });
   }
 
-  // 卡片顺序沿用「活跃优先、其次已安装」的直觉排序；目录的活跃只由主 Agent 决定
+  // 卡片顺序沿用「活跃优先、其次已安装」的直觉排序
   return groups.sort(
     (x, y) =>
-      Number(y.primary.active) - Number(x.primary.active) ||
+      Number(y.anyActive) - Number(x.anyActive) ||
       Number(y.installed) - Number(x.installed) ||
       x.primary.name.localeCompare(y.primary.name)
   );

@@ -65,7 +65,7 @@ export default function Agents() {
       title: primary.name,
       sub: <span className="mono">{primary.key}</span>,
       desc: <span className="mono">{g.dir}</span>,
-      status: activeBadge(primary),
+      status: activeBadge({ active: g.anyActive }),
       // 分发策略展示主 Agent 的生效值：目录只有一份，策略也只有一套
       badges: (
         <>
@@ -77,7 +77,7 @@ export default function Agents() {
       // 别名只说明「与主 Agent 走同一个路径」，点进去仍是各自那个 Agent
       tags: g.aliases.map((a) => ({ label: `别名 ${a.name}`, onClick: () => openAgent(a.key) })),
       onClick: () => openAgent(primary.key),
-      muted: !primary.active,
+      muted: !g.anyActive,
     };
   });
 
@@ -219,6 +219,17 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   // 别名（不是本目录主 Agent）：目录只有一份，预设 / 安装方式都落在主 Agent 上
   const isAlias = agent.key !== agent.primaryKey;
   const primaryAgent = siblings.find((o) => o.key === agent.primaryKey);
+  // 该目录的全部成员；主 Agent 可显式指定（AG-02），未指定则按活跃 / 名称自动判定
+  const members = [agent, ...siblings];
+  const designatedKey = members.find((m) => m.primaryExplicit)?.key ?? 'auto';
+  // 同目录里活跃的其它成员：它们让这个目录持续自动同步，即使本 Agent 自己不活跃
+  const activeSiblings = siblings.filter((o) => o.active).map((o) => o.name);
+  const setPrimaryAgent = (v: string) =>
+    void busy(() =>
+      v === 'auto'
+        ? api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ primary: null }) })
+        : api(`/agents/${encodeURIComponent(v)}`, { method: 'PUT', body: JSON.stringify({ primary: true }) })
+    );
 
   const failedItems: EntityItem[] = (lastSync?.failed ?? []).map((f) => ({
     id: f.skill,
@@ -249,6 +260,9 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>← 返回</Button>
         <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{agent.name}</h2>
         {activeBadge(agent)}
+        {siblings.length > 0 && (isAlias
+          ? <Badge tone="neutral" title="同一技能目录的别名：预设 / 安装方式以主 Agent 为准">别名</Badge>
+          : <Badge tone="accent" title="该技能目录的主 Agent：预设 / 安装方式与同步都以它为准">主 Agent</Badge>)}
         {familyBadge(agent)}
         <div className="detail-actions">
           <Button size="sm" variant={agent.active ? 'ghost' : 'primary'} onClick={toggleActive} title="加入/移出活跃集合（加入即刻就位）">
@@ -266,8 +280,9 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         <div className="notice">
           <span className="notice__title">此 Agent 未加入活跃集合</span>
           <span className="notice__body">
-            你在本页的改动会立即同步到它；但预设、仓库等变更不会自动跟随，需要在这里手动点「同步」。
-            加入活跃集合即可自动跟随。
+            {activeSiblings.length > 0
+              ? `它所在的技能目录由 ${activeSiblings.join('、')} 的活跃状态保持自动同步（策略仍以主 Agent 为准）；本 Agent 的改动会立即落盘。`
+              : '你在本页的改动会立即同步到它；但预设、仓库等变更不会自动跟随，需要在这里手动点「同步」。加入活跃集合即可自动跟随。'}
           </span>
         </div>
       )}
@@ -287,6 +302,17 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
           分发策略{isAlias ? `（作用于主 Agent ${primaryAgent?.name ?? agent.primaryKey}）` : ''}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--sp-3)' }}>
+          {siblings.length > 0 && (
+            <FieldSelect
+              label="主 Agent"
+              value={designatedKey}
+              hint="同一个目录只有一套策略，由主 Agent 决定；换主 Agent 即换这套策略"
+              onChange={(e) => setPrimaryAgent(e.target.value)}
+            >
+              <option value="auto">自动（活跃优先，其次名称序）</option>
+              {members.map((m) => <option key={m.key} value={m.key}>{m.name}</option>)}
+            </FieldSelect>
+          )}
           <FieldSelect
             label="关联预设"
             value={agent.preset ?? ''}
@@ -302,8 +328,8 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
             hint="可在下方按技能单独覆盖"
             onChange={(e) => void busy(() => api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ sync: e.target.value }) }))}
           >
-            <option value="symlink">软链</option>
-            <option value="copy">复制</option>
+            <option value="symlink">软链安装（不复制文件，即时生效）</option>
+            <option value="copy">复制安装（独立副本，需重新同步）</option>
           </FieldSelect>
         </div>
         <div style={{ marginTop: 'var(--sp-3)', display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>

@@ -42,6 +42,8 @@ export interface AgentView {
    * 此处返回的 preset / sync / skillSync 已是「生效值」。
    */
   primaryKey: string;
+  /** 主 Agent 由用户显式指定（而非按活跃 / 名称自动推出） */
+  primaryExplicit?: boolean;
   sync: 'symlink' | 'copy'; active: boolean; preset?: string;
   skillSync?: Record<string, 'symlink' | 'copy'>;
   family?: string; sharedWith: string[]; alsoUsedBy?: string[]; shared?: string; custom?: boolean;
