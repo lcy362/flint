@@ -244,8 +244,6 @@ function PresetDetail({
   const [viewMode, setViewMode] = useViewMode();
   /** 技能名单的本地草稿：连点多个开关时不丢操作；保存失败或切换预设后回退到服务端数据 */
   const [draftSkills, setDraftSkills] = useState<string[] | null>(null);
-  /** 「已应用的 Agent」里待生效名单的展开态 */
-  const [showPending, setShowPending] = useState(false);
   /** 两个操作块的折叠态：各自独立，分别持久化 */
   const [tagsCollapsed, toggleTagsCollapsed] = useCollapsed('lsh.collapsed.preset.tags');
   const [skillsCollapsed, toggleSkillsCollapsed] = useCollapsed('lsh.collapsed.preset.skills');
@@ -253,7 +251,6 @@ function PresetDetail({
   if (preset.name !== synced) {
     setSynced(preset.name);
     setDraftSkills(null);
-    setShowPending(false);
   }
   const current = draftSkills ?? preset.skills;
   /** 技能全量覆盖的 PUT 串行队列，避免连点开关时后发先至覆盖掉前面的操作 */
@@ -423,12 +420,6 @@ function PresetDetail({
     return merged.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
   }, [boundAgents, followerAgents]);
 
-  /** 待分发：跟随所有预设、但尚未加入活跃集合的 Agent——不自动跟随变更，可在其详情页手动同步 */
-  const pendingAgents = useMemo(
-    () => followerAgents.filter((a) => !a.active),
-    [followerAgents]
-  );
-
   const agentItems: EntityItem[] = appliedAgents.map((a) => ({
     id: a.key,
     title: a.name,
@@ -505,9 +496,9 @@ function PresetDetail({
               <Badge tone={agentItems.length ? 'good' : 'neutral'}>{agentItems.length}</Badge>
             </div>
             <p className="panel__hint">
-              显式关联本预设、或未指定预设（跟随所有预设）的 Agent，都会接收本预设的技能。
-              标注「已分发」表示技能已实际写入该 Agent 的本地目录；
-              未加入活跃集合的 Agent 不自动跟随变更，可在其详情页手动同步。
+              显式关联本预设、或跟随所有预设且已加入活跃集合的 Agent，会接收本预设的技能；
+              标注「已分发」表示技能已实际写入该 Agent 的本地目录。
+              其余 Agent 未加入活跃集合，不会自动跟随本预设的变更，可在「设置」页把它加入活跃集合，或在其详情页手动同步。
             </p>
             <EntityList
               mode="list"
@@ -520,23 +511,6 @@ function PresetDetail({
                 />
               }
             />
-            {pendingAgents.length > 0 && (
-              <>
-                <button type="button" className="link-btn" onClick={() => setShowPending((v) => !v)}>
-                  {showPending ? '收起' : `另有 ${pendingAgents.length} 个 Agent 跟随所有预设，但未加入活跃集合、暂不会自动分发`}
-                </button>
-                {showPending && (
-                  <div className="skill-pills" style={{ maxHeight: 190, marginTop: 'var(--sp-2)' }}>
-                    {pendingAgents.map((a) => (
-                      <span key={a.key} className="skill-pill" title={a.globalDir}>
-                        <span className="skill-pill__name">{a.name}</span>
-                        <span className="skill-pill__via">未分发</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
           </div>
         </div>
       </section>
