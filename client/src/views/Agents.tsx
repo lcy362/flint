@@ -24,8 +24,6 @@ import {
   notInstalledBadge,
   presetBadge,
   sharedReadBadge,
-  sharedStrategyBadge,
-  syncBadge,
 } from '../components/agent/agentBadges';
 import { useToast } from '../components/ui/Toast';
 import { useAsync } from '../state/useAsync';
@@ -64,7 +62,6 @@ export default function Agents() {
 
   const items: EntityItem[] = shown.map((g) => {
     const { primary } = g;
-    const multi = g.agents.length > 1;
     return {
       id: g.dir,
       // 标题罗列使用该目录的全部 Agent —— 它们都是真实的 Agent，不把谁叫「别名」；
@@ -76,9 +73,7 @@ export default function Agents() {
       // 一个目录只有一套策略，同目录的 Agent 共用它（系统内存于主 Agent 名下）
       badges: (
         <>
-          {multi && sharedStrategyBadge(primary.name, g.others.map((a) => a.name))}
           {!primary.sharedOwn && sharedReadBadge(primary)}
-          {syncBadge(primary.sync)}
           {presetBadge(primary.preset ?? null)}
           {!g.installed && notInstalledBadge()}
         </>

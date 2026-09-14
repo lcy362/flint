@@ -11,7 +11,7 @@ import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
-import { notInstalledBadge, sharedStrategyBadge } from '../components/agent/agentBadges';
+import { notInstalledBadge } from '../components/agent/agentBadges';
 import AgentNamesTitle from '../components/agent/AgentNamesTitle';
 import { groupAgentsByDir } from '../components/agent/agentGroups';
 import Chip from '../components/ui/Chip';
@@ -428,7 +428,6 @@ function PresetDetail({
         ) : (
           <Badge tone="neutral" dot="neutral" title="这个技能目录没有 Agent 在活跃集合里：本预设的变更不会自动同步，需到 Agent 详情页手动同步">未分发</Badge>
         )}
-        {g.agents.length > 1 && sharedStrategyBadge(g.primary.name, g.others.map((a) => a.name))}
         {!g.installed && notInstalledBadge()}
       </>
     ),
