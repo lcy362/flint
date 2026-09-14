@@ -8,10 +8,21 @@ import LoadingBoundary from '../components/ui/LoadingBoundary';
 import { useAsync } from '../state/useAsync';
 import { useToast } from '../components/ui/Toast';
 
-/** 诊断 summary / 分组 键的本地化映射 */
+/**
+ * 诊断 summary / 分组 键的本地化映射。
+ * 服务端维度 key 用单数（见 core/diagnose.ts 的 DIMS），这里补齐；
+ * 复数形态一并保留，兼容历史结果的键名。
+ */
 const KEY_LABEL: Record<string, string> = {
-  repos: '仓库', skills: '技能', agents: '智能体', presets: '预设',
-  projects: '项目', sources: '来源', sync: '同步', config: '配置',
+  agent: '智能体',
+  sync: '同步',
+  dup: '重复技能',
+  durability: '失效软链',
+  config: '配置',
+  repo: '仓库',
+  project: '项目',
+  agents: '智能体', repos: '仓库', skills: '技能', presets: '预设',
+  projects: '项目', sources: '来源',
 };
 
 /** 可一键修复的诊断项 key 判定 */

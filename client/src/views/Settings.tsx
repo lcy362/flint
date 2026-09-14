@@ -119,10 +119,11 @@ export default function Settings() {
 
       <div className="panel">
         <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>
-          活跃 Agent（实时同步作用域 · AA-01）
+          活跃 Agent（自动同步的作用域）
         </div>
         <p style={{ color: 'var(--c-ink-2)', fontSize: 'var(--fs-13)', marginBottom: 'var(--sp-4)' }}>
-          加入集合即刻把当前生效的 preset / 标签组合同步到该 Agent 目录；移出则不再被自动改动。
+          加入集合后，它会自动跟随预设与技能库的变更（改动立即同步到对应技能目录）；移出则保持现状，不再被自动改动。
+          共用同一个技能目录的 Agent 只需其中一个设为活跃——同步是按目录生效的。
         </p>
         <LoadingBoundary state={{ loading, error, data: activeRes }} empty={{ title: '暂无 Agent', icon: '◉' }}>
           {() => (
@@ -146,6 +147,11 @@ export default function Settings() {
                   badges: (
                     <>
                       {installBadge(a)}
+                      {a.primaryKey !== a.key && (
+                        <Badge tone="info" title="它与同目录的主 Agent 共用一个技能目录：目录只需其中一个设为活跃即可；具体安装方式与预设以主 Agent 为准">
+                          同目录
+                        </Badge>
+                      )}
                       {familyBadge(a)}
                     </>
                   ),
@@ -172,25 +178,27 @@ export default function Settings() {
         <LoadingBoundary state={{ loading, error, data: settings }} empty={{ title: '无设置', icon: '⚙' }}>
           {(s) => (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
-              <div style={{ maxWidth: 260 }}>
+              <div style={{ maxWidth: 300 }}>
                 <FieldSelect
                   label="默认安装方式"
                   value={s.defaultSync}
+                  hint="新建 Agent 的默认值；可在各 Agent 详情页单独覆盖"
                   onChange={(e) => void putSetting({ defaultSync: e.target.value as SettingsView['defaultSync'] })}
                 >
-                  <option value="symlink">软链（零冗余，默认）</option>
-                  <option value="copy">复制（兼容性最好）</option>
+                  <option value="symlink">软链安装（不复制文件，即时生效）</option>
+                  <option value="copy">复制安装（独立副本，需重新同步）</option>
                 </FieldSelect>
               </div>
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
                   <Switch checked={s.watchers} onChange={(v) => void putSetting({ watchers: v })} />
                   <span style={{ color: 'var(--c-ink-2)', fontSize: 'var(--fs-13)' }}>
-                    复制模式目录级 watcher（可选，默认关闭）
+                    自动跟随技能库变化（可选，默认关闭）
                   </span>
                 </label>
                 <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 'var(--sp-1)' }}>
-                  开启后监听仓库变化并增量同步到「复制」策略的 Agent；全局 skill 同步始终是触发式，无需常驻。
+                  开启后会监听技能库的变化，自动把改动同步给用「复制安装」的 Agent（复制出来的副本不会自己更新）。
+                  平时同步都由操作触发，不需要常驻进程。
                 </div>
               </div>
             </div>
