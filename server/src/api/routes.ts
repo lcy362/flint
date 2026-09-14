@@ -605,6 +605,25 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const result = syncProject(cfg, proj.path, lib.skills);
     res.json({ ...result });
   });
+  // 删除项目目录里「自带」的技能（真实目录）。受管技能需先停用；软链不在此列。
+  r.delete('/projects/:id/skills/:name', (req, res) => {
+    const id = Number(req.params.id);
+    const proj = cfg.data.projects[id];
+    if (!proj) return res.status(404).json({ error: 'project not found' });
+    const name = req.params.name;
+    const target = path.join(proj.path, '.agents', 'skills', name);
+    const st = fs.lstatSync(target, { throwIfNoEntry: false });
+    if (!st) return res.status(404).json({ error: 'skill not found' });
+    if (!st.isDirectory() || st.isSymbolicLink()) {
+      return res.status(400).json({ error: '只能删除项目目录里的真实技能目录' });
+    }
+    const lib = library();
+    const row = projectSkillRows(cfg, proj, lib.skills).find((r) => r.name === name);
+    if (row?.wanted) return res.status(400).json({ error: '该技能正处于启用状态；请先关闭（移除期望）再删除' });
+    fs.rmSync(target, { recursive: true, force: true });
+    log.info('http', '删除项目技能', { project: id, name });
+    res.json({ ok: true, removed: name });
+  });
   r.post('/projects/:id/sync', (req, res) => {
     const id = Number(req.params.id);
     const proj = cfg.data.projects[id];

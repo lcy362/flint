@@ -171,6 +171,10 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   const [dirOpen, setDirOpen] = useState(false);
   const [lastSync, setLastSync] = useState<SyncResult | null>(null);
   const [syncing, setSyncing] = useState(false);
+  // 归集到仓库：待归集的技能 + 选定的目标仓库
+  const [collectItem, setCollectItem] = useState<SkillCardView | null>(null);
+  const [collectRepo, setCollectRepo] = useState('');
+  const [collecting, setCollecting] = useState(false);
 
   // 直接添加技能：本地草稿（乐观更新）+ 串行提交，连点开关时不丢操作、不后发先至
   const [draftOn, setDraftOn] = useState<Record<string, boolean>>({});
@@ -212,19 +216,38 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   };
 
   const handleAction = (item: SkillCardView, action: SkillAction) => {
+    // 归集需要选目标仓库，交给弹窗处理
+    if (action.kind === 'collect') {
+      setCollectItem(item);
+      setCollectRepo((prev) => prev || (state?.repos ?? [])[0]?.id || '');
+      return;
+    }
     void busy(async () => {
-      switch (action.kind) {
-        case 'delete':
-          await api(`/agents/${encodeURIComponent(agent.key)}/skills/${encodeURIComponent(item.name)}`, { method: 'DELETE' });
-          break;
-        case 'collect':
-          await api(`/agents/${encodeURIComponent(agent.key)}/sync`, { method: 'POST' });
-          break;
-        case 'toggle':
-        default:
-          await api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ skill: item.name, on: item.state !== 'on' }) });
+      if (action.kind === 'delete') {
+        await api(`/agents/${encodeURIComponent(agent.key)}/skills/${encodeURIComponent(item.name)}`, { method: 'DELETE' });
+        return;
       }
+      await api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ skill: item.name, on: item.state !== 'on' }) });
     });
+  };
+
+  // 归集到仓库：把该技能复制进选定仓库（源目录不动）
+  const runCollect = async () => {
+    if (!collectItem || !collectRepo) return;
+    setCollecting(true);
+    try {
+      const res = await api<{ collected: string[]; skipped: string[] }>(
+        `/repos/${encodeURIComponent(collectRepo)}/collect`,
+        { method: 'POST', body: JSON.stringify({ agentKey: agent.key, names: [collectItem.name] }) }
+      );
+      if (res.collected.length) toast.push(`已归集「${collectItem.name}」到仓库`, 'good');
+      for (const s of res.skipped) toast.push(`跳过：${s}`, 'bad');
+      setCollectItem(null);
+      reload();
+      onChanged();
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : String(e), 'bad');
+    } finally { setCollecting(false); }
   };
 
   // 每 (skill, Agent) 关系的同步策略（SY-01）
@@ -656,6 +679,32 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
           )}
         </div>
       </section>
+
+      <Modal
+        open={!!collectItem}
+        title="归集到仓库"
+        onClose={() => setCollectItem(null)}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCollectItem(null)}>取消</Button>
+            <Button variant="primary" loading={collecting} disabled={!collectRepo} onClick={() => void runCollect()}>归集</Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+          <p className="panel__hint" style={{ marginBottom: 0 }}>
+            把 <span className="mono">{collectItem?.name}</span> 复制进选定仓库，之后各 Agent / 项目都能共享；
+            <strong>本目录里的原技能保持不动</strong>（如需改成指向仓库副本的软链，可在技能库页做「接管」）。
+          </p>
+          {(state?.repos ?? []).length === 0 ? (
+            <EmptyState title="还没有登记仓库" hint="先到「技能库」登记一个自有仓库，再来归集。" />
+          ) : (
+            <FieldSelect label="目标仓库" value={collectRepo} onChange={(e) => setCollectRepo(e.target.value)}>
+              {(state?.repos ?? []).map((r) => <option key={r.id} value={r.id}>{r.name || r.id}</option>)}
+            </FieldSelect>
+          )}
+        </div>
+      </Modal>
 
       <DirModal
         open={dirOpen}
