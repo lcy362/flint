@@ -91,11 +91,12 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
   for (const a of listAgents(cfg.data)) {
     if (!a.installed) continue;
     const isActive = active.has(a.key);
-    const alias = a.primaryKey !== a.key ? ` · 别名，策略随 ${a.primaryKey}` : '';
+    // 共用同一目录的 Agent：策略只有一套，说明它跟随谁
+    const shared = a.primaryKey !== a.key ? ` · 与 ${a.primaryKey} 同一目录，策略随它` : '';
     groups.agent.push({
       key: `agent:${a.key}`,
       status: isActive ? 'ok' : 'warn',
-      message: `${a.name}: ${a.globalDir} (${a.sync})${isActive ? '' : ' 未设为活跃'}${alias}`,
+      message: `${a.name}: ${a.globalDir} (${a.sync})${isActive ? '' : ' 未设为活跃'}${shared}`,
     });
   }
   for (const k of cfg.data.activeAgents) {

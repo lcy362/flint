@@ -37,9 +37,9 @@ export interface AgentView {
   key: string; name: string; globalDir: string; installed: boolean;
   /**
    * 同一技能目录的主 Agent key（自身即主 Agent 时与 key 相同）。
-   * 目录只有一份实体，预设 / 安装方式 / 显式开关都落在主 Agent 上：
-   * 别名（primaryKey ≠ key）只是同一路径的另一个名字，策略与主 Agent 共用。
-   * 此处返回的 preset / sync / skillSync 已是「生效值」。
+   * 目录只有一份实体，预设 / 安装方式 / 显式开关都落在主 Agent 上；
+   * primaryKey ≠ key 表示它与其它 Agent 共用同一个目录（同样是真实的 Agent，
+   * 只是这套策略不是它定的）。此处返回的 preset / sync / skillSync 已是「生效值」。
    */
   primaryKey: string;
   /** 主 Agent 由用户显式指定（而非按活跃 / 名称自动推出） */

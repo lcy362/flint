@@ -66,6 +66,16 @@ export const FAMILY_META: BadgeMeta = {
   desc: '同系列产品（如国际版 / 国内版）：技能目录各自独立，只是归在一起便于对照。',
 };
 
+/**
+ * 一个目录被多个 Agent 共用时，说明后面的策略徽标反映的是谁的设置。
+ * 不标出「以谁为准」会让用户以为每个 Agent 各有一份策略（C18 已明确：只有一套）。
+ */
+export const OWNER_META: BadgeMeta = {
+  label: '策略随 X',
+  tone: 'accent',
+  desc: '这个目录被多个 Agent 共用，而预设 / 安装方式只有一套：后面的徽标展示的正是「X」这套，改动也落在它身上。可在 Agent 详情页更换主 Agent。',
+};
+
 /** 本机是否已有该技能目录 */
 export const INSTALLED_META: BadgeMeta = {
   label: '已安装',
@@ -120,6 +130,18 @@ export function presetBadge(preset: string | null) {
   );
 }
 
+/** 策略归属：策略随 X（仅当一个目录被多个 Agent 共用时出现） */
+export function ownerBadge(primaryName: string) {
+  return (
+    <Badge
+      tone={OWNER_META.tone}
+      title={`该目录被多个 Agent 共用，而预设 / 安装方式只有一套：后面的徽标展示的正是「${primaryName}」这套，改动也落在它身上。`}
+    >
+      策略随 {primaryName}
+    </Badge>
+  );
+}
+
 /** 产品家族：X 系列；无家族时不出徽标（设置页仍在用） */
 export function familyBadge(agent: Pick<AgentView, 'family'>) {
   if (!agent.family) return null;
@@ -134,6 +156,7 @@ export function familyBadge(agent: Pick<AgentView, 'family'>) {
 export const AGENT_BADGE_LEGEND: BadgeLegendItem[] = [
   { ...ACTIVE_META, dot: 'good' },
   { ...INACTIVE_META, dot: 'neutral' },
+  { ...OWNER_META, label: '策略随 Cline' },
   SYNC_META.symlink,
   SYNC_META.copy,
   { ...PRESET_META, label: '预设 名称' },

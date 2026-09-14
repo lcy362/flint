@@ -21,6 +21,7 @@ import {
   activeBadge,
   familyBadge,
   notInstalledBadge,
+  ownerBadge,
   presetBadge,
   syncBadge,
 } from '../components/agent/agentBadges';
@@ -61,22 +62,42 @@ export default function Agents() {
 
   const items: EntityItem[] = shown.map((g) => {
     const { primary } = g;
+    const multi = g.agents.length > 1;
     return {
       id: g.dir,
-      title: primary.name,
-      sub: <span className="mono">{primary.key}</span>,
+      // 标题罗列使用该目录的全部 Agent —— 它们都是真实的 Agent，不把谁叫「别名」；
+      // 每个名字可单独点开自己的详情，卡片空白处仍进主 Agent
+      title: multi ? (
+        // 外层包一个元素：列表视图的标题是 inline-flex，多个兄弟节点会被拉开间距
+        <span>
+          {g.agents.map((a, i) => (
+            <span key={a.key}>
+              {i > 0 && <span className="entity-title__sep"> / </span>}
+              <button
+                type="button"
+                className="entity-title__link"
+                title={`打开 ${a.name} 的详情`}
+                onClick={(e) => { e.stopPropagation(); openAgent(a.key); }}
+              >
+                {a.name}
+              </button>
+            </span>
+          ))}
+        </span>
+      ) : primary.name,
+      sub: <span className="mono">{g.keys.join(' / ')}</span>,
       desc: <span className="mono">{g.dir}</span>,
       status: activeBadge({ active: g.anyActive }),
-      // 分发策略展示主 Agent 的生效值：目录只有一份，策略也只有一套
+      // 分发策略展示主 Agent 的生效值：目录只有一份，策略也只有一套，
+      // 所以多 Agent 共用一个目录时用「策略随 X」交代这套策略属于谁
       badges: (
         <>
+          {multi && ownerBadge(primary.name)}
           {syncBadge(primary.sync)}
           {presetBadge(primary.preset ?? null)}
           {!g.installed && notInstalledBadge()}
         </>
       ),
-      // 别名只说明「与主 Agent 走同一个路径」，点进去仍是各自那个 Agent
-      tags: g.aliases.map((a) => ({ label: `别名 ${a.name}`, onClick: () => openAgent(a.key) })),
       onClick: () => openAgent(primary.key),
       muted: !g.anyActive,
     };
@@ -114,7 +135,7 @@ export default function Agents() {
                   items={AGENT_BADGE_LEGEND}
                   intro={
                     <>
-                      每张卡片对应一个<strong>实际的技能目录</strong>。多个 Agent 指向同一目录时合成一张卡：卡片标题是其中的<strong>主 Agent</strong>——安装方式、预设、是否活跃都以它为准，策略改动也落在它身上；其余以「别名 X」列出，它们和主 Agent 走的是同一个路径，点芯片可进入各自的详情页。
+                      每张卡片对应一个<strong>实际的技能目录</strong>。多个 Agent 用同一个目录时合成一张卡：标题罗列这些 Agent（可逐个点开各自详情），其中的<strong>主 Agent</strong> 决定这个目录的分发策略——徽标里的「策略随 X」就说明这套设置属于谁，改动也落在它身上（可在 Agent 详情页更换主 Agent）。
                     </>
                   }
                 />
@@ -227,7 +248,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
   const managed = (data?.skills ?? []).filter((s) => s.state === 'on');
 
-  // 别名（不是本目录主 Agent）：目录只有一份，预设 / 安装方式都落在主 Agent 上
+  // 它与别的 Agent 共用同一个目录（不是主 Agent）：目录只有一份，预设 / 安装方式都落在主 Agent 上
   const isAlias = agent.key !== agent.primaryKey;
   const primaryAgent = siblings.find((o) => o.key === agent.primaryKey);
   // 该目录的全部成员；主 Agent 可显式指定（AG-02），未指定则按活跃 / 名称自动判定
@@ -272,7 +293,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{agent.name}</h2>
         {activeBadge(agent)}
         {siblings.length > 0 && (isAlias
-          ? <Badge tone="neutral" title="同一技能目录的别名：预设 / 安装方式以主 Agent 为准">别名</Badge>
+          ? <Badge tone="info" title="它与同目录的主 Agent 共用一个技能目录：预设 / 安装方式以主 Agent 为准">同目录</Badge>
           : <Badge tone="accent" title="该技能目录的主 Agent：预设 / 安装方式与同步都以它为准">主 Agent</Badge>)}
         {familyBadge(agent)}
         <div className="detail-actions">
@@ -300,9 +321,9 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
       {isAlias && (
         <div className="notice">
-          <span className="notice__title">它是主 Agent「{primaryAgent?.name ?? agent.primaryKey}」的别名</span>
+          <span className="notice__title">它与「{primaryAgent?.name ?? agent.primaryKey}」共用一个技能目录</span>
           <span className="notice__body">
-            两者指向同一个技能目录，目录只有一份实体，预设 / 安装方式也只有一套（以主 Agent 为准）。
+            目录只有一份实体，预设 / 安装方式也只有一套，以主 Agent「{primaryAgent?.name ?? agent.primaryKey}」为准。
             在这里改策略等同改主 Agent，两边看到的始终一致。
           </span>
         </div>

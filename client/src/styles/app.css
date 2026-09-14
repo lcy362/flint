@@ -1175,6 +1175,25 @@ select.field {
   line-height: 1.3;
   min-width: 0;
 }
+/* 标题里逐项可点的实体名（如共用同一目录的多个 Agent）：视觉上仍是标题文字 */
+.entity-title__link {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
+  transition: color var(--dur-150) var(--ease), border-color var(--dur-150) var(--ease);
+}
+.entity-title__link:hover {
+  color: var(--c-accent);
+  border-bottom-color: color-mix(in srgb, var(--c-accent) 45%, transparent);
+}
+.entity-title__sep {
+  color: var(--c-ink-3);
+  font-weight: var(--fw-normal);
+}
 .entity-card__sub {
   font-family: var(--ff-mono);
   font-size: var(--fs-12);
