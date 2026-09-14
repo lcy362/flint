@@ -84,7 +84,7 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
 |-----------|------|----------------|-----------|------------|
 | cursor | Cursor | `~/.cursor/skills` | `.cursor/skills` | 另读 `.agents/skills`、`.claude/skills` |
 | claude_code | Claude Code | `~/.claude/skills` | `.claude/skills` | — |
-| codex | Codex CLI | `~/.agents/skills` | `.agents/skills` | **部署于共享 `.agents`**（标准目录原生） |
+| codex | Codex | `~/.agents/skills` | `.agents/skills` | **部署于共享 `.agents`**（标准目录原生） |
 | github_copilot | GitHub Copilot | `~/.copilot/skills` | `.github/skills` | 另读 `.agents/skills`、`.claude/skills` |
 | grok | Grok | `~/.grok/skills` | `.grok/skills` | — |
 | opencode | OpenCode | `~/.config/opencode/skills` | `.opencode/skills` | 全局/项目路径不同;另读 `.agents/skills`、`.claude/skills` |
@@ -96,7 +96,7 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
 | goose | Goose | `~/.config/agents/skills` | `.agents/skills` | **共享 `.config/agents/skills`** |
 | droid | Droid | `~/.factory/skills` | — | — |
 | windsurf | Windsurf | `~/.codeium/windsurf/skills` | `.windsurf/skills` | 另读 `.agents/skills` |
-| trae | TRAE IDE | `~/.trae/skills` | `.trae/skills` | **TRAE 家族·国际** |
+| trae | TRAE | `~/.trae/skills` | `.trae/skills` | **TRAE 家族·国际** |
 | trae_cn | TRAE CN | `~/.trae-cn/skills` | `.trae-cn/skills` | **TRAE 家族·中国**，同源自国际版 |
 | cline | Cline | `~/.cline/skills` | `.cline/skills` | 技能目录独立，**不读共享 `.agents`** |
 | warp | Warp | `~/.agents/skills` | `.agents/skills` | **部署于共享 `.agents`** |
@@ -105,7 +105,7 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
 | deepseek_harness | DeepSeek Harness | `~/.dsh/skills` | `.dsh/skills` | 另只读发现 `.agents/skills` |
 | qoder | Qoder | `~/.qoder/skills` | `.qoder/skills` | **Qoder/千问家族** |
 | qwen_code | Qwen Code | `~/.qwen/skills` | — | **Qoder/千问家族** |
-| qoderwork / qoderworkcn | 千问工作(国际/国内) | `~/.qoderwork/skills` / `~/.qoderworkcn/skills` | 同名项目目录 | **Qoder/千问家族**（pks 补齐） |
+| qoderwork / qoderworkcn | QoderWork / QoderWork CN | `~/.qoderwork/skills` / `~/.qoderworkcn/skills` | 同名项目目录 | **Qoder/千问家族**（pks 补齐） |
 | codebuddy | CodeBuddy | `~/.codebuddy/skills` | — | — |
 | zencoder | Zencoder | `~/.zencoder/skills` | — | — |
 | zcode | ZCode | `~/.zcode/skills` | `.zcode/skills` | — |
