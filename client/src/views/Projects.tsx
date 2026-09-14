@@ -4,6 +4,7 @@ import SkillList from '../components/skill/SkillList';
 import CollectSkillModal, { projectCollectSource } from '../components/skill/CollectSkillModal';
 import AddableSkillList from '../components/skill/AddableSkillList';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
+import FilterBar from '../components/common/FilterBar';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Switch from '../components/ui/Switch';
@@ -143,6 +144,8 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
   // 归集到仓库：自带技能与 Agent 页共用同一个弹窗，这里只提供「项目 .agents/skills」来源适配器
   const [collectItem, setCollectItem] = useState<SkillCardView | null>(null);
   const collectApi = useMemo(() => projectCollectSource(project.id), [project.id]);
+  /** 「部署到 Agent」列表的搜索词（与其它页面同一套 FilterBar 交互） */
+  const [agentQ, setAgentQ] = useState('');
   const deployed = project.agents ?? [];
 
   const busy = async (fn: () => Promise<unknown>) => {
@@ -200,7 +203,14 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
     } finally { setPushing(false); }
   };
 
-  const deployItems: EntityItem[] = (agentData ?? []).map((a) => ({
+  // 先按搜索词过滤 Agent，再映射成列表项（EntityItem.title 是 ReactNode，不便直接搜索）
+  const agentKeyword = agentQ.trim().toLowerCase();
+  const shownAgents = useMemo(() => {
+    const list = agentData ?? [];
+    return agentKeyword ? list.filter((a) => `${a.name} ${a.key}`.toLowerCase().includes(agentKeyword)) : list;
+  }, [agentData, agentKeyword]);
+
+  const deployItems: EntityItem[] = shownAgents.map((a) => ({
     id: a.key,
     title: a.name,
     sub: <span className="mono">{a.key}</span>,
@@ -239,13 +249,30 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
       </LoadingBoundary>
 
       <div className="panel">
-        <EntityList
-          title="部署到 Agent"
-          items={deployItems}
-          collapsible
-          storageKey="lsh.collapsed.project.agents"
-          empty={<EmptyState title="暂无已登记的 Agent" />}
+        <div className="panel__head">
+          <span className="panel__title">部署到 Agent</span>
+          <Badge tone={deployed.length ? 'accent' : 'neutral'} title="已把本项目技能目录投放过去的 Agent 数">
+            {deployed.length} 个已部署
+          </Badge>
+        </div>
+        <p className="panel__hint">
+          打开开关即把本项目 <span className="mono">.agents/skills</span> 投放到该 Agent 的项目技能目录：
+          一套本体、多 Agent 共享，无需各自复制一份。
+        </p>
+        <FilterBar
+          search={{ value: agentQ, onChange: setAgentQ, placeholder: '搜索 Agent 名称 / key' }}
+          hasFilters={agentKeyword !== ''}
+          onReset={() => setAgentQ('')}
         />
+        <div style={{ marginTop: 'var(--sp-4)' }}>
+          <EntityList
+            title={agentKeyword ? `筛选结果 · ${deployItems.length} / ${(agentData ?? []).length}` : `全部 Agent · ${deployItems.length}`}
+            items={deployItems}
+            collapsible
+            storageKey="lsh.collapsed.project.agents"
+            empty={agentKeyword ? <EmptyState title="没有匹配的 Agent" /> : <EmptyState title="暂无已登记的 Agent" />}
+          />
+        </div>
       </div>
 
       <CollectSkillModal
