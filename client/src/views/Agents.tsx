@@ -21,8 +21,8 @@ import {
   activeBadge,
   familyBadge,
   notInstalledBadge,
-  ownerBadge,
   presetBadge,
+  sharedStrategyBadge,
   syncBadge,
 } from '../components/agent/agentBadges';
 import { useToast } from '../components/ui/Toast';
@@ -88,11 +88,10 @@ export default function Agents() {
       sub: <span className="mono">{g.keys.join(' / ')}</span>,
       desc: <span className="mono">{g.dir}</span>,
       status: activeBadge({ active: g.anyActive }),
-      // 分发策略展示主 Agent 的生效值：目录只有一份，策略也只有一套，
-      // 所以多 Agent 共用一个目录时用「策略随 X」交代这套策略属于谁
+      // 一个目录只有一套策略，同目录的 Agent 共用它（系统内存于主 Agent 名下）
       badges: (
         <>
-          {multi && ownerBadge(primary.name)}
+          {multi && sharedStrategyBadge(primary.name, g.others.map((a) => a.name))}
           {syncBadge(primary.sync)}
           {presetBadge(primary.preset ?? null)}
           {!g.installed && notInstalledBadge()}
@@ -135,7 +134,7 @@ export default function Agents() {
                   items={AGENT_BADGE_LEGEND}
                   intro={
                     <>
-                      每张卡片对应一个<strong>实际的技能目录</strong>。多个 Agent 用同一个目录时合成一张卡：标题罗列这些 Agent（可逐个点开各自详情），其中的<strong>主 Agent</strong> 决定这个目录的分发策略——徽标里的「策略随 X」就说明这套设置属于谁，改动也落在它身上（可在 Agent 详情页更换主 Agent）。
+                      每张卡片对应一个<strong>实际的技能目录</strong>。多个 Agent 用同一个目录时合成一张卡：标题罗列这些 Agent（可逐个点开各自详情），它们<strong>共用同一套策略</strong>——一个目录只有一套设置，无所谓"归谁"；系统内这套设置存在其中一个 Agent 名下（只是存放位置，可在 Agent 详情页更换）。
                     </>
                   }
                 />
@@ -293,8 +292,8 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{agent.name}</h2>
         {activeBadge(agent)}
         {siblings.length > 0 && (isAlias
-          ? <Badge tone="info" title="它与同目录的主 Agent 共用一个技能目录：预设 / 安装方式以主 Agent 为准">同目录</Badge>
-          : <Badge tone="accent" title="该技能目录的主 Agent：预设 / 安装方式与同步都以它为准">主 Agent</Badge>)}
+          ? <Badge tone="info" title={`它与同目录的其它 Agent 共用同一个技能目录，也共用同一套预设 / 安装方式；系统内这套设置存在「${primaryAgent?.name ?? agent.primaryKey}」名下`}>同目录</Badge>
+          : <Badge tone="accent" title="同目录的这些 Agent 共用同一套预设 / 安装方式，系统内这套设置存在本 Agent 名下（只是存放位置，不代表策略归它所有）">策略存于此</Badge>)}
         {familyBadge(agent)}
         <div className="detail-actions">
           <Button size="sm" variant={agent.active ? 'ghost' : 'primary'} onClick={toggleActive} title="加入/移出活跃集合（加入即刻就位）">
@@ -313,7 +312,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
           <span className="notice__title">此 Agent 未加入活跃集合</span>
           <span className="notice__body">
             {activeSiblings.length > 0
-              ? `它所在的技能目录由 ${activeSiblings.join('、')} 的活跃状态保持自动同步（策略仍以主 Agent 为准）；本 Agent 的改动会立即落盘。`
+              ? `它所在的技能目录由 ${activeSiblings.join('、')} 的活跃状态保持自动同步（同目录 Agent 共用同一套策略）；本 Agent 的改动会立即落盘。`
               : '你在本页的改动会立即同步到它；但预设、仓库等变更不会自动跟随，需要在这里手动点「同步」。加入活跃集合即可自动跟随。'}
           </span>
         </div>
@@ -323,22 +322,22 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         <div className="notice">
           <span className="notice__title">它与「{primaryAgent?.name ?? agent.primaryKey}」共用一个技能目录</span>
           <span className="notice__body">
-            目录只有一份实体，预设 / 安装方式也只有一套，以主 Agent「{primaryAgent?.name ?? agent.primaryKey}」为准。
-            在这里改策略等同改主 Agent，两边看到的始终一致。
+            目录只有一份实体，所以这些 Agent <strong>共用同一套</strong>预设 / 安装方式：在这里改等同在那里改，两边看到的始终一致。
+            系统内这套设置存在「{primaryAgent?.name ?? agent.primaryKey}」名下——那只是存放位置，不代表策略归它所有。
           </span>
         </div>
       )}
 
       <div className="panel">
         <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>
-          分发策略{isAlias ? `（作用于主 Agent ${primaryAgent?.name ?? agent.primaryKey}）` : ''}
+          分发策略{siblings.length > 0 ? '（与同目录 Agent 共用一套）' : ''}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--sp-3)' }}>
           {siblings.length > 0 && (
             <FieldSelect
-              label="主 Agent"
+              label="策略存放于"
               value={designatedKey}
-              hint="同一个目录只有一套策略，由主 Agent 决定；换主 Agent 即换这套策略"
+              hint="这些 Agent 共用同一套策略；系统内需要存到其中一个 Agent 名下，换到谁名下都不会改变策略内容"
               onChange={(e) => setPrimaryAgent(e.target.value)}
             >
               <option value="auto">自动（活跃优先，其次名称序）</option>
@@ -373,7 +372,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
               {siblings.map((o) => (
                 <Tag key={o.key} onClick={() => onOpenAgent(o.key)}>{o.name}</Tag>
               ))}
-              指向同一个技能目录（目录只有一份，分发一次它们共用）
+              指向同一个技能目录：共用同一套策略，分发一次全部生效（系统内存于「{primaryAgent?.name ?? agent.primaryKey}」名下）
             </span>
           )}
           {agent.alsoUsedBy?.length ? <span>该目录也被 {agent.alsoUsedBy.join('、')} 直接读取，无需单独安装</span> : null}

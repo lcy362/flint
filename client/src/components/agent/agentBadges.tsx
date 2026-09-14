@@ -67,13 +67,16 @@ export const FAMILY_META: BadgeMeta = {
 };
 
 /**
- * 一个目录被多个 Agent 共用时，说明后面的策略徽标反映的是谁的设置。
- * 不标出「以谁为准」会让用户以为每个 Agent 各有一份策略（C18 已明确：只有一套）。
+ * 一个目录被多个 Agent 共用时的「共用」提示。
+ *
+ * 注意口径：这几个 Agent 是**共用同一套策略**，并不是「策略属于某一个 Agent」——
+ * 系统内部把这套设置存在其中一个 Agent 名下（主 Agent），那只是存放位置，
+ * 不表示策略归它所有。因此徽标只讲「共用」，存放位置仅在悬停时交代。
  */
-export const OWNER_META: BadgeMeta = {
-  label: '策略随 X',
+export const SHARED_STRATEGY_META: BadgeMeta = {
+  label: '共用一套策略',
   tone: 'accent',
-  desc: '这个目录被多个 Agent 共用，而预设 / 安装方式只有一套：后面的徽标展示的正是「X」这套，改动也落在它身上。可在 Agent 详情页更换主 Agent。',
+  desc: '这些 Agent 指向同一个技能目录，因此共用同一套预设 / 安装方式：目录只有一份，不存在「各配各的」。系统内这套设置存在其中一个 Agent 名下，可在详情页更换存放位置。',
 };
 
 /** 本机是否已有该技能目录 */
@@ -130,14 +133,18 @@ export function presetBadge(preset: string | null) {
   );
 }
 
-/** 策略归属：策略随 X（仅当一个目录被多个 Agent 共用时出现） */
-export function ownerBadge(primaryName: string) {
+/**
+ * 共用策略提示（仅当一个目录被多个 Agent 共用时出现）。
+ * primaryName 只是系统内存放这套设置的位置，不代表策略归它所有。
+ */
+export function sharedStrategyBadge(primaryName: string, others: string[] = []) {
+  const names = others.length > 0 ? `${primaryName} 与 ${others.join('、')}` : primaryName;
   return (
     <Badge
-      tone={OWNER_META.tone}
-      title={`该目录被多个 Agent 共用，而预设 / 安装方式只有一套：后面的徽标展示的正是「${primaryName}」这套，改动也落在它身上。`}
+      tone={SHARED_STRATEGY_META.tone}
+      title={`${names} 指向同一个技能目录，因此共用同一套预设 / 安装方式：目录只有一份，不存在「各配各的」。系统内这套设置存在「${primaryName}」名下，可在 Agent 详情页更换存放位置。`}
     >
-      策略随 {primaryName}
+      {SHARED_STRATEGY_META.label}
     </Badge>
   );
 }
@@ -156,7 +163,7 @@ export function familyBadge(agent: Pick<AgentView, 'family'>) {
 export const AGENT_BADGE_LEGEND: BadgeLegendItem[] = [
   { ...ACTIVE_META, dot: 'good' },
   { ...INACTIVE_META, dot: 'neutral' },
-  { ...OWNER_META, label: '策略随 Cline' },
+  SHARED_STRATEGY_META,
   SYNC_META.symlink,
   SYNC_META.copy,
   { ...PRESET_META, label: '预设 名称' },

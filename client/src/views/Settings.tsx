@@ -148,7 +148,7 @@ export default function Settings() {
                     <>
                       {installBadge(a)}
                       {a.primaryKey !== a.key && (
-                        <Badge tone="info" title="它与同目录的主 Agent 共用一个技能目录：目录只需其中一个设为活跃即可；具体安装方式与预设以主 Agent 为准">
+                        <Badge tone="info" title="它与同目录的其它 Agent 共用一个技能目录：这些 Agent 共用同一套预设 / 安装方式；目录只需其中一个设为活跃即可">
                           同目录
                         </Badge>
                       )}
