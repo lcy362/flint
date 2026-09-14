@@ -38,6 +38,14 @@ skill 本体就是磁盘上的普通目录（`SKILL.md`），标签等元数据�
 
 环境要求：Node.js ≥ 20。
 
+一键启动（推荐，首次运行会自动安装依赖）：
+
+```bash
+./start.sh
+```
+
+或手动启动：
+
 ```bash
 npm install
 npm run dev
