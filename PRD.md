@@ -1,44 +1,40 @@
-# local-skills-hub — 个人 Skill 资产管理平台 PRD
+# Skills Hub 产品需求文档（PRD）
 
-> 展示名 / 品牌名：**Skills Hub**。仓库名：`local-skills-hub`（本地优先 + 集中仓库）。核心命题：让 skill 成为**个人资产**，一处沉淀、切到即用、跨 Agent 零成本迁移。
-> 针对性场景：**来回切换 Agent 以使用免费 token** 时，skill 状态实时就位、无需手动搬运。
+> 展示名 / 品牌名：**Skills Hub**（仓库名 `local-skills-hub`）。
+> 核心命题：让 skill 成为**个人资产**——一处沉淀、切到即用、跨 Agent 零成本迁移。
+> 本文以**当前代码实现**为准，描述产品已具备的能力、规则与边界；技术实现见 `TECH.md`，快速上手见 `README.md`。
 
 ---
 
 ## 1. 背景与问题
 
-AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Windsurf、Codex、Clawdbot……各 Agent 的 skill 目录、配置格式、加载机制各不相同。个人的 skill 资产散落在各平台目录里，无法统一沉淀、无法复用、无法版本管理。
+AI 编码 Agent 生态高度碎片化：Cursor、Claude Code、TRAE、Qoder、Windsurf、Codex、OpenCode……各家的 skill 目录、配置格式与加载机制各不相同。个人沉淀的 skill 资产散落在各平台目录里，无法统一沉淀、检索、复用与版本管理。
 
-与此同时，一个现实诉求是：**用户会在多个提供免费/不同额度 token 的 Agent 之间来回切换**。切换时有两个痛点：
+一个现实诉求进一步放大了这个问题：**用户会在多个提供免费 / 不同额度 token 的 Agent 之间来回切换**。切换时有两个痛点：
 
-1. 本地已沉淀的 skill 并没有被当前正在使用的 Agent 读到（目录不同）。
-2. 切换 Agent 后，之前配置好的 skill 组合（preset）无法快速、准确地"带过去"。
+1. 本地已沉淀的 skill 不会被当前正在使用的 Agent 读到（目录不同）。
+2. 切换后，之前配置好的 skill 组合（预设）无法快速、准确地"带过去"。
 
-参考落地：
-
-- **personal-skills-manager (pks)**：纯 bash CLI，集中仓库 `~/.local/share/pks/skills/`，15 个内置 Agent，项目级 `.skills/` 软链分发，无 preset/标签/GUI。
-- **xingkongliang/skills-manager**：Tauri 桌面应用（React+TS+Rust+SQLite），支持 15+ 工具，具备 preset、标签、Global/Project/Linked Workspaces、Marketplace、多设备备份同步。
-
-**Skills Hub 吸取二者能力，补齐 pks 缺失的 WebUI/preset/标签，并针对"活跃 Agent + preset 实时就位"做定向优化。**
+Skills Hub 用一个本地优先的 Web 应用解决它：以文件系统为唯一事实源，集中管理 skill、统一打标签与去重、按预设 / 标签分发到各 Agent 与项目目录，并让分发在"操作触发点"即时完成。
 
 ---
 
 ## 2. 产品目标
 
 1. **skill 成为个人资产**：建立可配置、可独立版本管理的非隐藏 skill 仓库，作为唯一事实源（source of truth）。
-2. **跨 Agent 无缝迁移**：任意时刻切到"活跃 Agent"，仓库中的 skill 组合（preset）实时反映到该 Agent 的 skill 目录，无需手动操作。
-3. **一处管理**：扫描、整合、去重、命名、打标签、按 preset/标签分发，全部收敛到一个 WebUI 完成。
-4. **项目级协作**：项目内 skill 以 `.agents` 真实副本为准，符合开源规范，支持团队协作与回写仓库。
+2. **跨 Agent 无缝迁移**：任意时刻把 Agent 加入"活跃集合"，仓库中的 skill 组合（预设）即刻反映到该 Agent 的 skill 目录，无需手动搬运。
+3. **一处管理**：扫描、归集、导入、去重、命名、打标签、按预设 / 标签分发，全部收敛到一个 WebUI 完成。
+4. **项目级协作**：项目内 skill 以 `.agents` 真实副本为准，符合开源规范，可提交 git 供团队共享，并支持把改动回写仓库。
 
 ---
 
-## 3. 非目标（本期不做）
+## 3. 非目标（当前不做）
 
-- 不实现 Marketplace / AI 搜索（skills-manager 的 marketplace 不在本期范围，可后续接入）。
-- 不做多设备云端同步/备份（skills-manager 的 Git 备份功能；仓库本身可被用户自行 git 管理）。
-- 不做 skill 的语义版本冲突合并（依赖版本差异对比可后续补）。
-- 不接管 Agent 的配置生成（如 AGENTS.md/CLAUDE.md 编写在项目级再做基础支持）。
-- 不常驻后台 watcher 实时同步全局 skill（见 §8.4 触发式同步设计；复制模式的目录级同步可选 watched）。
+- **Marketplace / 在线市场**：不做技能市场与在线搜索。
+- **云端多设备同步**：不做云端备份 / 同步（仓库本身可被用户自行 git 管理）。
+- **语义化版本冲突合并**：不做版本差异对比与三方合并；同名交汇时由用户仲裁（合并确认）。
+- **接管 Agent 自有配置生成**：不生成 `AGENTS.md` / `CLAUDE.md` 等 Agent 专属配置。
+- **常驻后台全量 watcher**：全局同步坚持**触发式**；仅复制模式提供可选目录级 watcher（默认关闭）。
 
 ---
 
@@ -46,233 +42,244 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
 
 | 术语 | 说明 |
 |------|------|
-| **Skill** | 一个 skill 目录，含 `SKILL.md`（YAML 前置元数据 + Markdown）及可选附带文件/脚本。以 `name@来源` 全局唯一标识。 |
-| **Skill 仓库（Repository）** | 集中存放 skill 的本体目录，**非隐藏、路径可配置**，可脱离本工具独立编辑/版本管理。可配置多个。 |
-| **来源（Source）** | skill 的来源命名空间：某个仓库名、某个外部 skill 集目录名、或 `external`。用于区分重名 skill。 |
-| **Agent** | 本机某个编码工具。每个 Agent 有一个（或多个）skill 目录，支持全局目录与项目级目录两种形态。 |
-| **活跃 Agent** | 用户在 UI 中手动配置的"当前正在使用"的 Agent。预设/标签变更会**实时同步**到此 Agent。 |
-| **Preset（预设）** | 一组 skill 的命名集合。预设即决策：成员/标签变更立刻进入期望集并分发到活跃 Agent；**没有单独的启用开关**。 |
-| **标签（Tag）** | 给 skill 或项目打的标签，用于分组、过滤，以及"项目自动关联 skill"。 |
-| **同步策略** | 每条 Agent-仓库同步关系可选 **软链（symlink）**或**复制（copy）**。软链零冗余、实时可见；复制兼容性最好、需同步机制。 |
+| **Skill** | 一个含 `SKILL.md`（YAML frontmatter + Markdown）的目录，可附带文件 / 脚本。以 `name@来源` 全局唯一标识。 |
+| **自有仓库（Repository）** | 集中存放 skill 本体的目录，**非隐藏、路径可配置**，可脱离本工具独立编辑 / git 管理。可配置多个。 |
+| **第三方仓库（External Source）** | 外部 / 上游的开放内容库：登记后可只读关联（`linked=true`）纳入发现，不拷贝本体、不写其文件。 |
+| **来源（Source）** | skill 的来源命名空间：某仓库 / 第三方仓库的 id。用于区分重名 skill。 |
+| **Agent** | 本机某个编码工具，有全局技能目录（可选项目级目录）。内置 58 个 + 用户自定义。 |
+| **活跃 Agent（activeAgents）** | 用户选定的"实时同步作用域"集合。结构性变更会自动同步到集合内成员的目录。 |
+| **主 Agent（primary）** | 当多个 Agent 解析到**同一个技能目录**时，该目录的分发策略唯一落点（目录只有一份实体，策略只能存一份）。 |
+| **Preset（预设）** | 一组命名的 skill 集合 = 显式成员 ∪ 关联标签命中。预设即决策，**无独立启用开关**。 |
+| **标签（Tag）** | 给 skill 或项目打的标签：用于过滤浏览、预设关联、项目自动关联。 |
+| **期望集（desired）** | 某 Agent / 项目"应装什么"的运行时计算结果，**不落盘**。 |
+| **投影（projection）** | 把期望集落到物理目录的动作：软链或复制。 |
+| **归集（collect）** | 把来源目录（Agent / 项目）里的 skill **复制**进仓库；源位置不变。 |
+| **接管（takeover）** | 把来源目录里的那条技能替换为**指向仓库副本**的形态（Agent 目录→软链，项目→真实副本）。 |
+| **同步策略** | 每条（skill, Agent）关系可选 **软链（symlink）**或**复制（copy）**；默认软链。 |
 
 ---
 
 ## 5. 功能需求
 
-### 5.1 Skill 仓库管理
+> 编号沿用 `SR / AG / AA / PR / TG / PJ / IM / EK / SY / UI / DG / NFR`，作为需求追溯锚点。
 
-- **SR-01 唯一事实源**：默认仓库为非隐藏目录，路径可配置（保存于配置文件中）。
-- **SR-02 多仓库**：支持配置多个仓库，均为独立可 git 管理/编辑的非隐藏目录。
-- **SR-03 去工具依赖**：仓库内容不使用本工具专有格式，skill 即普通 Markdown 目录，用户可用任意编辑器/工具直接修改或做版本管理。
-- **SR-04 多布局支持**：仓库内默认布局为 `<repo>/skills/<source>/<skill-name>/`（扁平结构），此为标准开放格式，兼容开源社区的主流 skill 库布局（如 `skills.sh` 市场、skills-manager 社区库等）。同时支持**非标准布局**的读取，如嵌套分类式布局（`skills/<category>/<skill-name>/`，如 ume-skills），系统通过 `recursive_scan` 模式扫描深层目录中的 `SKILL.md` 来发现并纳入管理。用户可为每个外部 skill 集/仓库配置布局模式：`flat`（默认）、`nested`（递归扫描）、`auto`（自动检测）。无论何种布局，内部的 skill 都以 `SKILL.md` 文件为准。
+### 5.1 技能仓库管理（SR）
 
-### 5.2 Agent 管理
+- **SR-01 唯一事实源**：默认仓库为非隐藏目录，路径可配置，保存在配置文件 `~/.skills-hub/config.json`。
+- **SR-02 多仓库**：支持配置多个自有仓库；每个仓库有 id（参与 skill 标识 `name@id`、不可变）、可选显示名、路径、布局、可选 `root`（skills 根，缺省 `<path>/skills`）。
+- **SR-03 去工具依赖**：仓库内容不写本工具专有格式；skill 即普通 Markdown 目录，可用任意编辑器 / git 直接管理。
+- **SR-04 多布局支持**：`flat`（`skills/<name>/SKILL.md`）、`nested`（递归发现深层 `SKILL.md`）、`auto`（扫描期自动检测）。另支持读取**带索引清单**的库（如 `skill-store/candidate-catalog.json`）补充元数据并定位本体。
+- **SR-05 仓库 CRUD 与类型转换**：登记 / 编辑 / 删除仓库；编辑时可在"自有仓库 ↔ 第三方仓库"之间切换定位（id 不变，路径按新类型扫描规则自动换算，技能引用不受影响）。
+- **SR-06 仓库目录健康**：扫描根不存在时跳过并记录警告；诊断页可一键创建缺失的 skills 目录。
 
-- **AG-01 覆盖生态**：内置支持 skills-manager 与 pks 清单的**并集**，路径映射以 skills-manager 的 `tool_adapters` 定义为准（含项目级覆盖、`recursive_scan`、`additional_scan_dirs`），并用 pks 补齐 skills-manager 未覆盖的目录（如 qoderwork、qoderworkcn、reasonix、clawdbot 等）。完整参考表见 §5.2.1。
-- **AG-02 家族分组与共享目录标注**：对**家族性产品**在 UI 明确标注其归属与目录关系。包括：
-  - **TRAE 家族**：国际版 `trae` → `~/.trae/skills`，中国版 `trae_cn` → `~/.trae-cn/skills`（同源，目录不同，勿混）。
-  - **Qoder/千问家族**：`qoder`（`.qoder/skills`）、`qwen_code`（`.qwen/skills`）、以及 pks 侧的 `qoderwork`/`qoderworkcn`（国内/国际版），相关但目录各自独立。
-  - **Claw/Clawbot 家族**（Lobster 类个人助理）：`openclaw`、`qclaw`、`easyclaw`、`autoclaw`、`workbuddy`、`hermes`——同属 concierge 架构生态，目录各自独立，标注家族名便于关联。
-  - **共享标准目录（Agent Skills 开放标准，共享 `~/.agents/skills` / `.config/agents/skills`）**：`warp`、`codex`、`openhands` 直接以其为技能目录（放一份即全生效）；`github_copilot`、`opencode`、`cursor`、`roo_code`、`gemini_cli`、`windsurf`、`pi`、`deepseek_harness`、`firebender`、`deepagents` 及 `hermes`（项目级）在自身目录之外**另读取**该标准目录；`amp`、`replit`、`goose`、`kimi_code` 共享 `.config/agents/skills`。UI 需对"共享标准目录/共用同一目录"的 agent 给出角标/提示，避免重复分发或维护时误判（`cline` 为 `.cline/skills`，不读共享 `.agents`）。
-- **AG-03 自定义目录**：Agent 路径不硬编码死，支持 `custom tools` 新增任意名称 + 自定义全局/项目 skill 目录（含是否 `recursive_scan`）。
-- **AG-04 路径配置**：每个 Agent 的全局目录、项目级目录均可覆盖；覆盖后视为"已安装可用"，不受平台探测限制。
-- **AG-05 手动覆盖**：个别 Agent 若与内置约定不符，用户可在 UI 覆盖其目录。
+### 5.2 Agent 管理（AG）
 
-#### 5.2.1 Agent 内置目录参考表（以 skills-manager 为准 + pks 补齐）
+- **AG-01 覆盖生态**：内置 58 个 Agent（清单见 §5.2.1），并对**共享标准目录**（Agent Skills 开放标准 `~/.agents/skills`、`~/.config/agents/skills`）做归并标注。
+- **AG-02 同目录归并 + 主 Agent**：多个 Agent 解析到同一技能目录时，UI 合成一张卡片（标题罗列全部 Agent），并明确它们**共用同一套策略**。该目录固定选一个**主 Agent** 作为策略唯一落点：显式指定优先，否则"活跃优先、其次名称序"自动判定。同目录其它 Agent 的无效策略会被自动清理。
+- **AG-03 自定义 Agent**：可新增任意名称 + 全局目录（+ 可选项目目录、递归扫描开关），并支持删除。
+- **AG-04 路径覆盖**：每个 Agent 的全局目录、项目级目录均可覆盖；覆盖后视为"已安装可用"。
+- **AG-05 安装探测**：以解析后的全局目录是否存在判断"已安装"；未安装的卡片提示"本机未安装"。
+- **AG-06 家族标注**：对家族性产品（TRAE 系列、Qoder / 千问系列、Claw 系列）在 UI 标注家族，便于对照。
+- **AG-07 跨产品目录复用说明**：对"该目录也被 X、Y 直接读取"的 Agent 给出说明，避免重复安装。
 
-| Agent key | 名称 | 全局 skill 目录 | 项目级目录 | 备注 / 家族 |
-|-----------|------|----------------|-----------|------------|
-| cursor | Cursor | `~/.cursor/skills` | `.cursor/skills` | 另读 `.agents/skills`、`.claude/skills` |
+#### 5.2.1 内置 Agent 目录参考表
+
+> 内置清单以 skills-manager 的 `tool_adapters` 为准，并用 pks 补齐长尾。路径均为相对用户主目录；`root` 与目录覆盖始终可被用户改写（AG-04）。
+
+**编码类（coding）**
+
+| Agent key | 名称 | 全局技能目录 | 项目级目录 | 备注 |
+|-----------|------|-------------|-----------|------|
+| cursor | Cursor | `~/.cursor/skills` | `.cursor/skills` | 另读 `.agents/skills` |
 | claude_code | Claude Code | `~/.claude/skills` | `.claude/skills` | — |
-| codex | Codex | `~/.agents/skills` | `.agents/skills` | **部署于共享 `.agents`**（标准目录原生） |
-| github_copilot | GitHub Copilot | `~/.copilot/skills` | `.github/skills` | 另读 `.agents/skills`、`.claude/skills` |
+| codex | Codex | `~/.agents/skills` | `.agents/skills` | 部署于共享 `.agents` |
+| github_copilot | GitHub Copilot | `~/.copilot/skills` | `.github/skills` | 另读 `.agents/skills` |
 | grok | Grok | `~/.grok/skills` | `.grok/skills` | — |
-| opencode | OpenCode | `~/.config/opencode/skills` | `.opencode/skills` | 全局/项目路径不同;另读 `.agents/skills`、`.claude/skills` |
-| antigravity | Antigravity | `~/.gemini/antigravity/skills` | — | Gemini 系（全局待核） |
-| gemini_cli | Gemini CLI | `~/.gemini/skills` | — | Gemini 系;另读 `.agents/skills` |
-| amp / replit | Amp / Replit | `~/.config/agents/skills` | — | **共享 `.config/agents/skills`**（Replit 全局待核） |
+| opencode | OpenCode | `~/.config/opencode/skills` | `.opencode/skills` | 另读 `.agents/skills` |
+| antigravity | Antigravity | `~/.gemini/antigravity/skills` | — | Gemini 系 |
+| gemini_cli | Gemini CLI | `~/.gemini/skills` | — | 另读 `.agents/skills` |
+| amp | Amp | `~/.config/agents/skills` | — | 共享 `.config/agents/skills` |
+| replit | Replit | `~/.config/agents/skills` | — | 共享 `.config/agents/skills` |
 | kilo_code | Kilo Code | `~/.kilocode/skills` | — | — |
-| roo_code | Roo Code | `~/.roo/skills` | — | — |
-| goose | Goose | `~/.config/agents/skills` | `.agents/skills` | **共享 `.config/agents/skills`** |
+| roo_code | Roo Code | `~/.roo/skills` | — | 另读 `.agents/skills` |
+| goose | Goose | `~/.config/agents/skills` | `.agents/skills` | 共享 `.config/agents/skills` |
 | droid | Droid | `~/.factory/skills` | — | — |
 | windsurf | Windsurf | `~/.codeium/windsurf/skills` | `.windsurf/skills` | 另读 `.agents/skills` |
-| trae | TRAE | `~/.trae/skills` | `.trae/skills` | **TRAE 家族·国际** |
-| trae_cn | TRAE CN | `~/.trae-cn/skills` | `.trae-cn/skills` | **TRAE 家族·中国**，同源自国际版 |
-| cline | Cline | `~/.cline/skills` | `.cline/skills` | 技能目录独立，**不读共享 `.agents`** |
-| warp | Warp | `~/.agents/skills` | `.agents/skills` | **部署于共享 `.agents`** |
-| omp_agent | OMP Agent | `~/.omp/agent/skills` | `.omp/skills` | 全局/项目路径不同（含 `agent` 段） |
-| pi | Pi | `~/.pi/agent/skills` | `.pi/skills` | 另只读发现 `.agents/skills` |
-| deepseek_harness | DeepSeek Harness | `~/.dsh/skills` | `.dsh/skills` | 另只读发现 `.agents/skills` |
-| qoder | Qoder | `~/.qoder/skills` | `.qoder/skills` | **Qoder/千问家族** |
-| qwen_code | Qwen Code | `~/.qwen/skills` | — | **Qoder/千问家族** |
-| qoderwork / qoderworkcn | QoderWork / QoderWork CN | `~/.qoderwork/skills` / `~/.qoderworkcn/skills` | 同名项目目录 | **Qoder/千问家族**（pks 补齐） |
-| codebuddy | CodeBuddy | `~/.codebuddy/skills` | — | — |
+| trae | TRAE | `~/.trae/skills` | `.trae/skills` | TRAE 系列·国际 |
+| trae_cn | TRAE CN | `~/.trae-cn/skills` | `.trae-cn/skills` | TRAE 系列·中国 |
+| cline | Cline | `~/.cline/skills` | `.cline/skills` | 目录独立，不读共享 `.agents` |
+| warp | Warp | `~/.agents/skills` | `.agents/skills` | 部署于共享 `.agents` |
+| omp_agent | OMP Agent | `~/.omp/agent/skills` | `.omp/skills` | 全局含 `agent` 段 |
+| pi | Pi | `~/.pi/agent/skills` | `.pi/skills` | 另读 `.agents/skills` |
+| deepseek_harness | DeepSeek Harness | `~/.dsh/skills` | `.dsh/skills` | 另读 `.agents/skills` |
+| qoder | Qoder | `~/.qoder/skills` | `.qoder/skills` | Qoder / 千问系列 |
+| qwen_code | Qwen Code | `~/.qwen/skills` | — | Qoder / 千问系列 |
+| qoderwork | QoderWork | `~/.qoderwork/skills` | `.qoderwork/skills` | Qoder / 千问系列 |
+| qoderworkcn | QoderWork CN | `~/.qoderworkcn/skills` | `.qoderworkcn/skills` | Qoder / 千问系列 |
+| codebuddy | CodeBuddy | `~/.codebuddy/skills` | `.codebuddy/skills` | — |
 | zencoder | Zencoder | `~/.zencoder/skills` | — | — |
 | zcode | ZCode | `~/.zcode/skills` | `.zcode/skills` | — |
-| openclaw | OpenClaw | `~/.openclaw/skills` | — | **Claw 家族**（Lobster） |
-| qclaw | QClaw | `~/.qclaw/skills` | — | **Claw 家族**（Lobster） |
-| easyclaw | EasyClaw | `~/.easyclaw/skills` | — | **Claw 家族**（Lobster） |
-| autoclaw | AutoClaw | `~/.openclaw-autoclaw/skills` | — | **Claw 家族**（Lobster） |
-| workbuddy | WorkBuddy | `~/.workbuddy/skills` | — | **Claw 家族**（Lobster） |
-| hermes | Hermes Agent | `~/.hermes/skills` | `.agents/skills` | Lobster;`recursive_scan=true`（嵌套目录）；另读共享 `.agents/skills` |
-| clawdbot | Clawdbot | 见 pks | — | pks 补齐 |
-| reasonix | DeepSeek Reasonix | `~/.reasonix/skills` | `.reasonix/skills` | pks 补齐 |
-| teamwork | Teamwork | `~/teamwork/skills` | `teamwork/skills` | pks 补齐 |
+| reasonix | DeepSeek Reasonix | `~/.reasonix/skills` | `.reasonix/skills` | — |
+| kimi_code | Kimi Code | `~/.config/agents/skills` | `.agents/skills` | 共享 `.config/agents/skills` |
+| openhands | OpenHands | `~/.agents/skills` | `.agents/skills` | 部署于共享 `.agents` |
+| deepagents | DeepAgents | `~/.deepagents/agent/skills` | `.agents/skills` | 另读 `.agents/skills` |
+| firebender | Firebender | `~/.firebender/skills` | `.agents/skills` | 另读 `.agents/skills` |
+| cortex | Cortex | `~/.snowflake/cortex/skills` | `.cortex/skills` | — |
+| crush | Crush | `~/.config/crush/skills` | `.crush/skills` | — |
+| mistral_vibe | Mistral Vibe | `~/.vibe/skills` | `.vibe/skills` | — |
+| augment / bob / command_code / continue / iflow / junie / kiro / kode / mcpjam / mux / neovate / pochi / adal | 对应工具 | `~/.<tool>/skills` | `.<tool>/skills` | 长尾，遵循各自约定 |
 
-> 其余 skills-manager 支持的 agent（augment、bob、command_code、continue、crush、iflow、junie、kiro、kode、mcpjam、mux、neovate、pochi、adal 等）遵循各自 `.xxx/skills` 约定，并入统一配置，不逐一列出。**其中部分已归于共享标准目录**：`openhands` → 共享 `.agents/skills`；`kimi_code` → 共享 `.config/agents/skills`（项目 `.agents/skills`）；`deepagents` → 全局 `.deepagents/agent/skills` + 项目共享 `.agents/skills`；`firebender` → 全局 `.firebender/skills` + 项目共享 `.agents/skills`；`cortex` 全局 `~/.snowflake/cortex/skills`；`crush` 全局 `~/.config/crush/skills`；`mistral_vibe` 为 `.vibe/skills`。
->
-> **实现约定**：内置清单以 skills-manager 为准并常驻更新，pks 补齐项做增量合并；所有路径仍可被用户覆盖（AG-04），实际生效以配置为准。
+**个人助理类（lobster）**
 
-### 5.3 活跃 Agent 与实时同步（核心优化）
+| Agent key | 名称 | 全局技能目录 | 项目级目录 | 备注 |
+|-----------|------|-------------|-----------|------|
+| openclaw | OpenClaw | `~/.openclaw/skills` | — | Claw 系列 |
+| qclaw | QClaw | `~/.qclaw/skills` | — | Claw 系列 |
+| easyclaw | EasyClaw | `~/.easyclaw/skills` | — | Claw 系列 |
+| autoclaw | AutoClaw | `~/.openclaw-autoclaw/skills` | — | Claw 系列 |
+| workbuddy | WorkBuddy | `~/.workbuddy/skills` | — | Claw 系列 |
+| hermes | Hermes Agent | `~/.hermes/skills` | `.agents/skills` | Claw 系列；`recursive_scan` |
+| clawdbot | Clawdbot | `~/.clawdbot/skills` | `.clawdbot/skills` | — |
+| teamwork | Teamwork | `~/teamwork/skills` | `teamwork/skills` | — |
 
-- **AA-01 活跃 Agent 配置（支持多个）**：UI 提供"活跃 Agent"多选器（≥1），用户手动维护一个**活跃 Agent 集合**（可记忆上次选择）；后续实时同步作用于集合内全部成员。
-- **AA-02 触发式实时同步**：**不需要常驻 watcher**。当用户**操作引发 preset 增删改、Agent 切换、标签变更**时，同步动作在该触发点立即执行，把结果实时反映到**活跃 Agent** 的 skill 目录。
-- **AA-03 非活跃 Agent 懒同步**：非活跃 Agent 不自动同步，用户手动点到某 Agent 时才刷新/再同步。
-- **AA-04 切换即就位**：用户把某 Agent 加入/移出活跃集合时，即刻将该 Agent 当前应生效的 preset/标签组合同步到其目录（加入即就位、移出可回退），达到"切到即用"。
+> **共享标准目录说明**：`codex`、`warp`、`openhands` 直接以 `~/.agents/skills` 为全局目录（放一份即全生效）；`amp`、`replit`、`goose`、`kimi_code` 共享 `~/.config/agents/skills`。其余带"另读"标注的 Agent 在自身目录之外还会读取共享目录，UI 用「另读 ~/.agents/skills」徽标说明，这类技能对本 Agent 直接可用但**只读**（由共享目录自己的策略管理）。
 
-### 5.4 Preset（预设）
+### 5.3 活跃 Agent 与触发式同步（AA）
 
-- **PR-01 创建/编辑/删除**：命名 preset，增删其包含的 skill。
-- **PR-02 成员即分发**：预设成员/关联标签变更即进入期望集并分发到目标；**无独立启用开关**。预设只对**显式关联**它的 Agent 生效——未关联的 Agent 不跟随任何预设，但可单独开关 skill。
-- **PR-03 实时同步**：preset 的增删改实时同步到**已关联该预设的活跃 Agent**；非活跃 Agent 不自动跟随，其任一手动操作即时全量对账。
-- **PR-04 预设集导入**：兼容 skills-manager 的 preset 集概念，可导入既有 preset 数据。
-- **PR-05 组合适用**：支持 preset 关联一组标签或一组显式 skill，二者皆可。
+- **AA-01 活跃集合（多选）**：在 Agent 详情页可把 Agent 加入 / 移出活跃集合（`PUT /activeAgents`），集合可含多个成员。
+- **AA-02 触发式同步**：**不需要常驻 watcher**。结构性变更（仓库增删、导入、归集、预设变更、标签变更、Agent 策略变更、活跃集合变更）在触发点立即执行，把结果实时反映到活跃 Agent 的目录。
+- **AA-03 非活跃懒同步**：非活跃 Agent 不自动跟随；用户在其详情页的任何手动操作会**就地全量对账**（`prune: true`），也可点「同步」按钮。
+- **AA-04 加入即就位**：把 Agent 加入活跃集合时即刻按当前策略对账落盘。
+- **AA-05 别名共享**：同目录的多个 Agent 只部署一次（目标折算到主 Agent 去重）；同目录任一成员活跃，该目录就会跟随变更。UI 卡片以目录为单位展示「活跃 / 非活跃」。
 
-### 5.5 标签
+### 5.4 预设（PR）
 
-- **TG-01 打标签**：给 skill 打任意标签；提供"未打标签"过滤，便于补齐。
-- **TG-02 过滤浏览**：按标签/来源/skill 名过滤浏览整个资产库。
-- **TG-03 项目关联**：给项目打标签，项目自动关联"相同标签"的 skill 集合（逻辑层，见 §5.6）。
+- **PR-01 创建 / 编辑 / 删除**：新建预设只填名称；详情页增删显式技能、管理关联标签。
+- **PR-02 成员即分发**：预设 = 显式 `skills[]` ∪ `tags[]` 命中。**无独立启用开关**；成员 / 标签变更即刻进入期望集并分发到活跃 Agent。预设只对**显式关联**它的 Agent 生效。
+- **PR-03 实时性**：预设变更会以 `prune: true` 重跑活跃 Agent 同步（可回收多余的、由本工具部署的软链）。
+- **PR-04 展示口径统一**：主页只展示"最终生效技能数"；详情页分「当前状态（只读）」与「调整方式（可写）」两组，汇总已开启技能与已应用的 Agent。
+- **PR-05 关联标签**：`tags[]` 命中的技能自动纳入，与显式技能取并集。因标签自动纳入的技能开关锁定，去掉标签即可停用。
 
-### 5.6 项目级 Skill 管理
+### 5.5 标签（TG）
 
-- **PJ-01 标签关联**：为项目打标签后，自动得到"该项目应配备的 skill 集合 = 打有相同标签的 skill"。**这是逻辑集合的自动派生**，与文件落地解耦。
-- **PJ-02 本体目录 `.agents`**（符合开源规范）：项目内 skill **本体复制**到 `<project>/.agents/skills/`，因为项目 skill 涉及团队协作，必须有文件本体可提交 git。
-- **PJ-03 其他 Agent 项目目录软链**：其余 Agent 的项目级 skill 目录，一律软链到 `.agents`，实现"一套本体、多 Agent 共享"。
-- **PJ-04 分组解耦**：文件落地采用**同步动作**完成——手动触发或**定期/可选 watched 自动同步**；不随每次标签修改强制启动（分组决策与物理落地分离）。
-- **PJ-05 回写仓库**：项目内修改的 skill 可回写（push）到仓库主目录；仓库主目录与 `.agents` 之间采用手动或定期同步，方向可选双向。
+- **TG-01 打标签**：在技能详情弹窗编辑标签；提供「只看未打标签」过滤便于补全。
+- **TG-02 过滤浏览**：按标签 / 来源 / 名称搜索过滤；多选项之间为"或"。
+- **TG-03 项目关联**：给项目打标签后，打有相同标签的 skill 自动进入项目期望集（§5.6）。
+- **TG-04 标签读取口径**：`config.skillMeta[id].tags` 优先，其次回落 `SKILL.md` frontmatter（顶层 `tags` 或 `metadata.tags`，兼容数组与逗号分隔字符串）。
+- **TG-05 标签迁移**：`POST /repos/:id/tags-migrate` 把 `skillMeta` 中暂存的标签写回 `SKILL.md` frontmatter（保留其它字段与正文），成功后删除该 config 记录。诊断页可一键触发。
 
-### 5.7 Skill 导入与初始整合
+### 5.6 项目级 Skill 管理（PJ）
 
-- **IM-01 扫描整合**：提供首次（及任意次）整合能力，扫描各 Agent 的全局/项目 skill 目录与各仓库，把 Agent 目录中的 skill 集中到仓库中。
-- **IM-02 去重确认**：扫描发现**同名 skill**（含不同来源）时，列出候选让用户**确认保留哪个**，未被保留的归入对其他来源命名空间或丢弃。
-- **IM-03 收编后软链**：整合完成后，Agent 目录不再保存 skill 本体，改为按每个 Agent 的同步策略链接到仓库（默认软链）。
-- **IM-04 来源追溯**：整合时记录每个 skill 的来源（来自哪个 Agent/目录），便于回滚与追踪。
+- **PJ-01 标签关联**：项目期望集 = 标签命中 ∪ `explicitOn` − `explicitOff`，纯由 config 推导，与文件落地解耦。
+- **PJ-02 本体目录 `.agents`**：项目内 skill **本体复制**到 `<project>/.agents/skills/`，可提交 git（团队协作必须有文件本体）。
+- **PJ-03 其他 Agent 项目目录软链**：`syncProject` 让各 Agent 的项目级技能目录软链到 `.agents/skills`，实现"一套本体、多 Agent 共享"。实际投放哪些 Agent **以目录结构为事实**（不写 config），通过 `deployedAgents` 反读。
+- **PJ-04 同步与清理**：`syncProject` 复制期望集本体、重建 `INDEX.md`（纯产物，供人 / git 查阅，不参与期望集推导），并仅回收"曾由本工具投放"（记录于 `INDEX.md`）的副本，用户自带技能永不误删。
+- **PJ-05 回写仓库**：`POST /projects/:id/push` 把 `.agents/skills` 中改动的 skill 反向写回指定仓库（仅覆盖仓库中已存在的同名 skill）；UI 在项目详情「回写仓库」。
+- **PJ-06 项目技能归集 / 接管**：复用 Agent 侧链路（同一归集弹窗）。**接管落真实副本**而非软链（`.agents` 要提交、跨机器自包含），并登记为项目受管技能。
+- **PJ-07 项目技能删除**：仅允许删除项目里的真实目录；受管（期望内）技能需先停用。
 
-### 5.8 外部 skill 集 / 仓库导入
+### 5.7 技能导入与归集（IM）
 
-- **EK-01 读取异构目录**：可读取**不同层级形式**的既有 skill 集目录作为"来源"纳入管理，不要求移动本体。支持三类结构：
-  - **扁平**（`skills/<skill>/SKILL.md`，主流标准，如 `skills.sh` 市场库）；
-  - **嵌套分类**（`skills/<category>/<skill>/SKILL.md`，如 ume-skills / 部分 Hermes 插件目录）——用 `nested`/`recursive_scan` 递归发现；
-  - **带索引清单的库**（如 ume-skills 的 `skill-store/candidate-catalog.json`）：优先读取清单做元数据，再按需定位 `SKILL.md` 本体。
-- **EK-02 多仓库导入**：支持单个或**批量**添加仓库空间；可把某外部目录**一次性导入**到既有仓库目录下（落为某来源命名空间）。
-- **EK-03 只读 vs 收编**：导入分两种：`只读关联`（不拷贝本体，仅引用）与 `收编`（拷贝进仓库并接管的后续版本）。
+- **IM-01 从 Agent 归集**：`GET /repos/:id/collect/preview` 列出各已安装 Agent 目录内的 skill；两段式确认页按名字分组、仓库版本与各 Agent 版本并列作为候选，由用户决定**保持仓库现状**还是**用某个 Agent 版本覆盖仓库副本**，随后逐项展示写入路径后执行。
+- **IM-02 同名去重与合并确认**：同名 skill 交汇时并列展示来源 / 描述等由用户仲裁。归集默认去重跳过（除非用户显式选择覆盖）；`POST /skills/merge` 记录保留来源 `mergeSource`，未在仓库的候选会被收编进主仓库。
+- **IM-03 接管**：`POST /repos/:id/takeover` 把 Agent 目录里的条目替换为指向仓库副本的软链（仓库副本必须先存在，需显式 `confirm`）。幂等；来源条目就是仓库本体时不做任何事。
+- **IM-04 来源追溯**：导入 / 收编时写入 `skillMeta.origin`，技能详情页展示「来自 xxx」。
+- **IM-05 安全边界**：归集只复制、不动来源；接管只换链接、不动仓库副本；所有写操作只针对"本工具接管的内容"。
 
-### 5.9 同步机制
+### 5.8 外部 skill 集导入（EK）
 
-- **SY-01 每关系策略**：每条（skill, Agent）同步关系可选择 软链 或 复制。
-- **SY-02 默认软链**：默认软链，零冗余、即时可见；软链目标用绝对路径或在允许时相对路径。
-- **SY-03 复制回退**：对不支持/不跟随软链的 Agent（或被平台周期性重建目录导致软链失效）可切换为复制。
-- **SY-04 复制同步**：复制模式下，提供手动同步按钮，并可选择开启**目录级常驻 watcher** 做增量同步（此为可选、按需启用）。
-- **SY-05 失败诊断**：任一同步动作失败（权限/只读/路径缺失）在 UI 给出可操作诊断与一键重试。
+- **EK-01 读取异构目录**：支持扁平、嵌套分类、带索引清单三类结构。
+- **EK-02 批量导入**：`POST /import` 把若干外部目录（每行一个）一次性复制进指定自有仓库；目录仅作数据源、不登记；同名去重跳过。
+- **EK-03 导入预览**：`GET/POST /import/preview` 逐目录识别布局、统计可导入数量、汇总解析出的标签。
+- **EK-04 第三方仓库**：登记为独立仓库（`foreignSources`），只读关联（`linked=true`）纳入发现、不拷贝、不写其本体。
 
-### 5.10 WebUI
+### 5.9 同步机制（SY）
 
-- **UI-01 技术栈**：整体 WebUI，前端 + 后端全部 TypeScript 实现。
-- **UI-02 架构**：本地 Web 服务（Node/Bun），浏览器访问；后端提供 REST/WS API，承担文件扫描、软链/复制、watcher、配置持久化。
+- **SY-01 每关系策略**：每条（skill, Agent）关系可选软链或复制；优先级：关系覆盖 `skillSync[name]` > Agent `sync` > 全局 `defaultSync`。
+- **SY-02 默认软链**：零冗余、即时可见。
+- **SY-03 复制回退**：软链创建失败（如 Windows 无权限）时自动降级为复制并写入 `warnings`。
+- **SY-04 复制增量 watcher（可选）**：设置页开关 `watchers`，**默认关闭**；仅当存在复制模式 Agent 时启动，监听仓库目录、去抖 800ms 后重跑同步。
+- **SY-05 幂等与安全**：`deployAgent` 以 diff 驱动（缺则建、失效则重建）；`prune` 仅在显式操作（预设变更 / 该 Agent 策略变更 / 手动同步 / 修复）时回收**本工具自己部署的软链**，真实目录与外部软链一律不动。
+- **SY-06 失败可见**：同步结果 `failed` / `warnings` 直接展示并 toast。
+
+### 5.10 WebUI（UI）
+
+- **UI-01 技术栈**：前端 React + TS + Vite；后端 Node + TS（Express）。
+- **UI-02 本地服务**：后端提供 REST API，承担文件扫描、软链 / 复制、配置持久化、可选 watcher。
 - **UI-03 页面**：
-  - **资产库（Library）**：浏览/搜索/过滤全部 skill（标签/来源/名字），打标签、查看详情（SKILL.md 预览）。
-  - **Agent 工作台**：每个 Agent 一栏，展示其当前可见 skill、同步状态、同步策略开关；活跃 Agent 明确高亮。
-  - **活跃 Agent 切换器**：一键切换活跃 Agent（触发 AA-04 就位同步）。
-  - **Preset 管理**：预设列表、创建/编辑（增删成员、关联标签）、空间内即时生效。
-  - **项目级管理**：项目列表、打标签、查看/执行同步与回写。
-  - **仓库/来源管理**：多仓库、外部目录关联、批量导入、整合向导。
-  - **设置**：活跃 Agent、Agent 自定义目录、仓库路径、同步策略默认值、watcher 开关。
+  - **技能库（Library）**：浏览 / 搜索 / 过滤全部 skill；技能详情（SKILL.md 预览 + 标签编辑 + 来源追溯）；底部仓库区（登记 / 编辑 / 删除仓库，归集 / 导入入口）。
+  - **智能体（Agents）**：一个实际技能目录一张卡片，展示当前可见技能、活跃态、关联预设、同目录成员；详情页可设活跃、覆盖目录、同步、关联预设、直接开关技能、按技能覆盖安装方式。
+  - **预设（Presets）**：预设列表与详情（按标签纳入 / 按技能纳入、已开启技能、已应用 Agent）。
+  - **项目（Projects）**：登记项目、打标签、项目技能列表、部署到 Agent、同步、归集 / 接管、回写仓库。
+  - **诊断（Health）**：6 维度体检 + 就地修复（先确认再执行）。
+  - **设置（Settings）**：默认安装方式、复制 watcher 开关、自定义 Agent、日志查看 / 下载 / 复制诊断信息。
+- **UI-04 页面状态可刷新**：一级页面、二级详情、筛选条件全部写入 hash 地址（`#/<tab>[/<sub>][?<query>]`）。
+- **UI-05 统一展示与视觉**：列表型实体统一走 `EntityList`（卡片 / 列表可切换，偏好全局记忆）；筛选统一走 `FilterBar`；视觉一律使用设计 token。
+
+### 5.11 诊断与修复（DG）
+
+- **DG-01 六维体检**：`GET /diagnose` 输出 `sync / dup / durability / config / repo / project` 六维分组与汇总（ok / warn / error）。
+  - `sync`：每个活跃目录的期望 vs 物理（缺 / 多 / 失效）。
+  - `dup`：同名多来源。
+  - `durability`：活跃 Agent 目录里的失效软链。
+  - `config`：配置文件是否加载。
+  - `repo`：仓库 / 外部源目录是否存在。
+  - `project`：项目路径与 `.agents/skills` 是否存在。
+- **DG-02 就地修复**：`POST /fix` 按诊断项 key 分发（`sync:<agent>`、`broken:*`、`project:<path>`、`repo:<id>`、`tags:<repoId>`），全部幂等。
+- **DG-03 操作前置确认**：修复按钮先弹出「将要执行什么」清单，用户确认后才执行。
 
 ---
 
-## 6. 核心场景：切换 Agent 用免费 token
+## 6. 核心场景
 
-1. 用户已将 skill 统一沉淀到仓库，并维护好若干 preset（如 `code-review`、`weekly-report`、`react-best-practices`）。
-2. UI 中把"活跃 Agent 集合"设为 `{ trae-cn, qoder }`，并维护好 `code-review` preset（成员变更即分发）。
-3. 触发式同步立即把 preset 内 skill 以软链落到 `trae-cn`、`qoder` 各自的 skill 目录 → 两个当前在用的 Agent 立即可用。
-4. 用户又切到 `qwen_code`（另一家免费 token）：
-   - 把 `qwen_code` 加入活跃集合；
-   - AA-04 即刻把 `code-review` preset（以及该 Agent 应生效的标签组合）同步到其目录；
-   - 其余不在活跃集合的 Agent 保持现状，不被扰动。
-5. 用户在任意活跃 Agent 中改了某个 skill → 回写仓库 → 切回时其他活跃 Agent 也能看到最新版本。
+### 6.1 切换 Agent 使用不同 token
 
-> 全程不常驻后台，同步均在"切换/修改/操作"这一触发点上立即完成，既满足实时就位，又避免后台进程与无谓扫描。
+1. 把 skill 统一沉淀到仓库，维护若干预设（如 `code-review`、`weekly-report`）。
+2. 把 `{ trae_cn, qoder }` 设为活跃集合，并让它们的「关联预设」指向 `code-review`。
+3. 预设成员一改，触发式同步立刻把 skill 以软链落到两个 Agent 的目录 → 立即可用。
+4. 切到 `qwen_code`：把它加入活跃集合并关联预设，即刻就位；其余不在活跃集合的 Agent 保持现状，不被扰动。
+5. 在任意活跃 Agent 中改了某 skill → 回写仓库 → 切回时其它 Agent 也能看到最新版本。
 
----
-
-## 7. 项目级协作场景
+### 6.2 项目级协作
 
 1. 项目 `foo` 打标签 `react`。
-2. 资产库中出现两个带 `react` 标签的 skill → 项目自动关联这两个 skill（逻辑层）。
-3. 用户点击"同步到本项目"：本体复制到 `<foo>/.agents/skills/`，其余 Agent 项目目录软链至 `.agents`，可提交 git 供团队共享。
-4. 团队成员修改 `.agents` 中 skill → 用户手动/定时 push 回仓库 → 个人资产保持更新。
+2. 资产库中带 `react` 标签的 skill 自动进入项目期望集（逻辑层）。
+3. 点「同步」：本体复制到 `<foo>/.agents/skills/`，其余 Agent 项目目录软链至 `.agents`，可提交 git 供团队共享。
+4. 团队在 `.agents` 中改动 skill → 点「回写仓库」把改动推回仓库本体。
 
 ---
 
-## 8. 架构与技术选型
+## 7. 产品模型
 
 ```
-浏览器 (TS/React + Vite)
-        │ HTTP/WS
-        ▼
-本地 Web 服务 (Bun/Node + TS)
-  ├─ API 层 (REST/WS)         │  skill 管理 / preset / 标签 / agent / 项目
-  ├─ 服务层                     │  扫描·整合·去重·分发
-  ├─ 同步引擎 (软链/复制/watcher) │  §8.4
-  └─ 配置存储 (JSON/文件)        │  仓库路径 / agent 目录 / 活跃 agent / 策略
-            │
-     文件系统读写 (仓库目录 · Agent 各 skill 目录 · 项目目录)
+config.json ──推导──▶ 期望集 desired ──投影──▶ 物理目录（软链 / 复制）
+     ▲                                              │
+     └─────────── 诊断 diffSync 对账 ◀───────────────┘
 ```
 
-- **前端**：React/TS + Vite（参考两个既有项目的前端栈）。
-- **后端**：Node 或 Bun + TS；负责全部文件系统副作用（扫描、软链、复制、watcher）与配置持久化。
-- **配置存储**：JSON 文件（路径可配），记录仓库列表、Agent 目录、活跃 Agent、每关系同步策略、preset、标签。
-- **元数据 vs 本体**：不做重 DB，skill 本体即文件；元数据（标签/preset/来源/策略）可放配置或轻量 JSON 索引。
-
-### 8.4 同步触发模型
-
-- **全局 skill 同步 = 触发式**（默认无 watcher）：
-  - 触发点：preset 创建/修改、活跃 Agent 切换、标签变更、手动"同步"按钮。
-  - 在触发点立即对该 Agent/目标执行软链或复制，实时就位。
-- **复制目录级同步 = 可选 watched**：当某 Agent 选择"复制"策略时，可开启该目录的 watcher 做增量同步（仅此开启），否则用手动/按键。
-- **项目 `.agents` 同步 = 手动 / 定期 / 可选 watched**。
+- **决策（config）**：`repos / foreignSources / customAgents / agents / activeAgents / presets / skillMeta / projects`。
+- **期望集（desired）**：运行时由决策推导，不落盘。
+- **投影（projection）**：期望 → 物理目录的 diff 对账，幂等。
+- **同步作用域**：自动同步只作用于**活跃集合**；非活跃 Agent 懒同步。
 
 ---
 
-## 9. 非功能需求
+## 8. 非功能需求（NFR）
 
-- **NFR-01 本机运行**：全本地，数据不出本机；网络仅用于后续可选的打开源库拉取。
-- **NFR-02 兼容性**：软链在 macOS/Linux 原生支持；Windows 需软链权限提示或自动降级为复制。
-- **NFR-03 无侵入**：不写任何 Agent 专有专有格式；仓库与 `.agents` 均符合开源/通用规范（SKILL.md 约定）。
-- **NFR-04 可独立维护**：仓库目录本身可被 git/任意工具管理，本工具离开后资产仍可用。
-- **NFR-05 幂等**：扫描、整合、去重、同步操作均可重复执行，不产生重复本体或悬空链接。
-- **NFR-06 可诊断**：软链失效、复制冲突、权限问题均有可见状态与修复指引。
-
----
-
-## 10. 存量分阶段落地（建议）
-
-- **P0 · 骨架**：仓库/多来源/多 Agent 配置、资产库浏览与打标签、name@来源 标识、扫描整合（IM-01~03）。
-- **P1 · 分发**：preset、活跃 Agent、触发式同步（AA-01~04、PR、SY 软链）。
-- **P2 · 项目级**：项目标签关联、`.agents` 复制 + 其他 Agent 软链、回写/定期同步（PJ、SY 复制/watcher）。
-- **P3 · 进阶**：外部异构目录读取、批量导入、复制同步 watcher、诊断面板（EK、SY-04/05）。
+- **NFR-01 全本地**：所有读写发生在本机文件系统，数据不出本机。
+- **NFR-02 兼容性**：软链在 macOS / Linux 原生支持；Windows 软链无权限时自动降级为复制。
+- **NFR-03 无侵入**：不写任何 Agent 专有格式；仓库与 `.agents` 遵循 `SKILL.md` 通用约定。
+- **NFR-04 可独立维护**：仓库目录可被 git / 任意工具管理，本工具离开后资产仍可用。
+- **NFR-05 幂等**：扫描、导入、归集、同步可重复执行，不产生重复本体或悬空链接。
+- **NFR-06 可诊断**：失效软链、复制冲突、权限问题、目录缺失均有可见状态与修复指引。
+- **NFR-07 可观测**：结构化日志落盘（`~/.skills-hub/logs/app.log`），写入前把 homedir 前缀脱敏为 `~`，按大小轮转保留 3 份；设置页可查看 / 下载 / 复制诊断信息。
 
 ---
 
-## 11. 主要取舍与开放项
+## 9. 整体验收标准
 
-| 取舍 | 决策 | 说明 |
-|------|------|------|
-| 命名 | `name@来源` 重名共存 | 允许同名多来源并存，UI 展示短名，保留开源库原样。 |
-| 同步 | 软链为主 / 每关系可选复制 | 复制模式需额外同步机制（watcher/手动）。 |
-| 实时性 | 触发式同步，免 watcher | 只在操作触发点执行，满足"切到即用"；复制级可另开 watcher。 |
-| 存储 | 文件即本体 + 轻量元数据 | 不做重数据库，资产可脱离工具独立存在。 |
-| 形态 | 本地 Web 服务 + 浏览器 | 满足 TS 全栈，天然支持文件操作与可选 watcher。 |
-
-**开放项（进入设计阶段确认）**：Agent 并集清单的最终确切集合；`.agents/skills/` 在 `AGENTS.md`/通用规范中的落地细节；Windows 软链降级策略。
+- 首次进入可经「登记仓库 → 归集 / 导入 → 配预设 → 投给 Agent」的最小通路把 skill 用起来。
+- 任意决策变更（标签 / 预设 / explicit / 活跃集合）后，活跃 Agent 物理目录与期望集一致（`diagnose` 可验证）。
+- 变更只在活跃 Agent 上即时生效，非活跃不被静默改动。
+- 第三方仓库与 Agent 自带技能的本体不被写入 / 误删。
+- 重复执行同一对账，结果幂等、无副作用。
