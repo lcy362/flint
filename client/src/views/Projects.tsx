@@ -46,7 +46,7 @@ export default function Projects() {
   return (
     <>
       <PageHeader
-        title="Projects"
+        title="项目"
         sub={data ? `共 ${data.length} 个项目` : undefined}
         actions={<Button onClick={() => setCreateOpen(true)}>新建项目</Button>}
       />

@@ -2,29 +2,30 @@ import type { SkillCardView, SkillReason, SkillStore } from '../../api/types';
 import Badge from '../ui/Badge';
 
 const REASON_LABEL: Record<SkillReason, string> = {
-  own: '未收编',
+  own: '自带',
   preset: '预设引入',
-  external: '外部软链',
+  external: '外部链接',
   manual: '',
 };
 
 const REASON_TITLE: Record<SkillReason, string> = {
-  own: '存在于当前 Agent/项目目录、但尚未纳入统一仓库管理，可执行「收编到仓库」',
-  preset: '由预设组引入',
-  external: '该软链由本工具之外的来源创建（目标不在任何已登记仓库内）：本工具既不会分发它，也不会自动清理它',
+  own: '它是这个目录里本来就有的技能，还没纳入技能库；可执行「收编到仓库」统一管理',
+  preset: '由关联的预设组引入',
+  external: '这个软链由本工具之外的来源创建（目标不在任何已登记仓库内）：本工具既不会分发它，也不会自动清理它',
   manual: '由用户手动加入',
 };
 
+// 与 Agent 卡片的「软链安装 / 复制安装」保持同一套说法：同一件事只叫一个名字
 const STORE_LABEL: Partial<Record<SkillStore, string>> = {
-  symlink: '软链引用',
-  copy: '副本',
+  symlink: '软链安装',
+  copy: '复制安装',
   pending: '待部署',
 };
 
 const STORE_TITLE: Partial<Record<SkillStore, string>> = {
-  symlink: '通过软链接引用仓库中的共享副本，不复制文件',
-  copy: '仓库中保存了一份独立副本',
-  pending: '已列入该 Agent 的分发名单，但尚未写入其技能目录',
+  symlink: '以软链接指向技能库里的本体：不复制文件、不占额外空间，技能库一改就即时生效',
+  copy: '复制了一份独立副本到这个目录：技能库的改动不会自动跟进，需要重新「同步」',
+  pending: '已列入分发名单，但还没有写入技能目录',
 };
 
 export { REASON_LABEL, STORE_LABEL };
@@ -74,7 +75,7 @@ export function stateBadge(item: SkillCardView) {
       );
     case 'unmanaged':
       return (
-        <Badge tone="info" title="存在于该目录，但不属于本工具的管理范围，故无启用/停用之说">
+        <Badge tone="info" title="它存在于这个目录，但不属于本工具的分发范围（自带或外部链接），所以没有启用 / 停用开关">
           未纳管
         </Badge>
       );

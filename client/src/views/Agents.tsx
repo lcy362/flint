@@ -84,7 +84,7 @@ export default function Agents() {
   return (
     <>
       <PageHeader
-        title="Agents"
+        title="智能体"
         sub={data ? `共 ${groups.length} 个技能目录 · ${data.length} 个 Agent` : undefined}
         actions={<Button variant="ghost" onClick={reload}>刷新</Button>}
       />
@@ -358,7 +358,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         {(resp) => (
           <div className="panel">
             <SkillList
-              title={`本 Agent 技能（${resp.skills.length}）`}
+              title={`该目录技能（${resp.skills.length}）`}
               items={resp.skills}
               onToggle={handleToggle}
               onAction={handleAction}
@@ -369,7 +369,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
       <div className="panel">
         <EntityList
-          title="按技能选择安装方式"
+          title="按技能覆盖安装方式"
           items={syncModeItems}
           empty={<EmptyState title="当前没有已启用的技能" />}
         />
@@ -419,9 +419,9 @@ function DirModal({ open, agent, onClose, onDone }: { open: boolean; agent: Agen
       footer={<><Button variant="ghost" onClick={onClose}>取消</Button><Button variant="primary" loading={busy} onClick={save}>保存</Button></>}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
-        <PathField label="全局 skill 目录" value={globalDir} onChange={setGlobalDir} />
+        <PathField label="全局技能目录" value={globalDir} onChange={setGlobalDir} />
         <FieldInput
-          label="项目级目录（相对项目根）"
+          label="项目级技能目录（相对项目根）"
           hint="相对路径，不支持系统选择器，请手动输入"
           value={projectDir}
           onChange={(e) => setProjectDir(e.target.value)}
