@@ -159,11 +159,34 @@ export function familyBadge(agent: Pick<AgentView, 'family'>) {
   );
 }
 
+/** 共享标准目录（Agent Skills 开放标准）：该 Agent 读取的 ~/.agents 或 ~/.config/agents */
+export const SHARED_READ_DIR: Record<'agents' | 'config-agents', { label: string; dir: string }> = {
+  agents: { label: '读取共享 .agents', dir: '~/.agents/skills' },
+  'config-agents': { label: '读取共享 .config/agents', dir: '~/.config/agents/skills' },
+};
+
+/**
+ * 展示某 Agent「读取共享标准目录」的信息。
+ * sharedOwn = true 表示共享目录正是它的原生全局目录（本身就是共享根的用户）；
+ * 否则它只是在自身目录之外「兼容读取」该共享目录（放到那里的技能它对也可用）。
+ */
+export function sharedReadBadge(agent: Pick<AgentView, 'shared' | 'sharedOwn'>) {
+  const shared = agent.shared;
+  if (shared !== 'agents' && shared !== 'config-agents') return null;
+  const meta = SHARED_READ_DIR[shared];
+  const title = agent.sharedOwn
+    ? `该 Agent 的全局目录本身就是共享标准目录 ${meta.dir}：放到这里的技能它直接可用，与同读该目录的其它工具共用。`
+    : `该 Agent 除自身目录外，还会读取共享标准目录 ${meta.dir}：放到那里的技能它对也可用，无需重复安装。`;
+  return <Badge tone="info" title={title}>{meta.label}</Badge>;
+}
+
 /** 「标签说明」弹窗的数据源：顺序即卡片上的常见排列顺序 */
 export const AGENT_BADGE_LEGEND: BadgeLegendItem[] = [
   { ...ACTIVE_META, dot: 'good' },
   { ...INACTIVE_META, dot: 'neutral' },
   SHARED_STRATEGY_META,
+  { label: SHARED_READ_DIR.agents.label, tone: 'info' as const, desc: '该 Agent 除自身目录外，还读取共享标准目录 ~/.agents/skills：放到那里的技能它对也可用。' },
+  { label: SHARED_READ_DIR['config-agents'].label, tone: 'info' as const, desc: '该 Agent 除自身目录外，还读取共享标准目录 ~/.config/agents/skills：放到那里的技能它对也可用。' },
   SYNC_META.symlink,
   SYNC_META.copy,
   { ...PRESET_META, label: '预设 名称' },

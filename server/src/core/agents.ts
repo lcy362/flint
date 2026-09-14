@@ -21,6 +21,10 @@ export interface AgentDef {
   alsoUsedBy?: string[];
   /** 是否读取共享 ~/.agents 或 ~/.config/agents（仅发现/部署共享） */
   shared?: 'agents' | 'config-agents';
+  /** 该共享标准目录的绝对路径（shared 存在时） */
+  sharedDir?: string;
+  /** 共享目录是否正是自己的全局目录（原生成员，否则为兼容读取） */
+  sharedOwn?: boolean;
   recursive?: boolean;
   /** 自定义 Agent（AG-03）：非内置，来自配置 */
   custom?: boolean;
@@ -28,24 +32,24 @@ export interface AgentDef {
 
 // 对照 PRD §5.2.1（以 skills-manager 为准 + pks 补齐）
 export const builtinAgents: AgentDef[] = [
-  { key: 'cursor', name: 'Cursor', global: '.cursor/skills', project: '.cursor/skills', category: 'coding' },
+  { key: 'cursor', name: 'Cursor', global: '.cursor/skills', project: '.cursor/skills', category: 'coding', shared: 'agents' },
   { key: 'claude_code', name: 'Claude Code', global: '.claude/skills', project: '.claude/skills', category: 'coding' },
-  { key: 'codex', name: 'Codex CLI', global: '.codex/skills', project: '.codex/skills', category: 'coding', shared: 'agents' },
-  { key: 'github_copilot', name: 'GitHub Copilot', global: '.copilot/skills', project: '.copilot/skills', category: 'coding', shared: 'agents' },
+  { key: 'codex', name: 'Codex CLI', global: '.agents/skills', project: '.agents/skills', category: 'coding', shared: 'agents' },
+  { key: 'github_copilot', name: 'GitHub Copilot', global: '.copilot/skills', project: '.github/skills', category: 'coding', shared: 'agents' },
   { key: 'grok', name: 'Grok', global: '.grok/skills', project: '.grok/skills', category: 'coding' },
   { key: 'opencode', name: 'OpenCode', global: '.config/opencode/skills', project: '.opencode/skills', category: 'coding', shared: 'agents' },
   { key: 'antigravity', name: 'Antigravity', global: '.gemini/antigravity/skills', category: 'coding' },
-  { key: 'gemini_cli', name: 'Gemini CLI', global: '.gemini/skills', category: 'coding' },
+  { key: 'gemini_cli', name: 'Gemini CLI', global: '.gemini/skills', category: 'coding', shared: 'agents' },
   { key: 'amp', name: 'Amp', global: '.config/agents/skills', category: 'coding', shared: 'config-agents' },
   { key: 'replit', name: 'Replit', global: '.config/agents/skills', category: 'coding', shared: 'config-agents' },
   { key: 'kilo_code', name: 'Kilo Code', global: '.kilocode/skills', category: 'coding' },
-  { key: 'roo_code', name: 'Roo Code', global: '.roo/skills', category: 'coding' },
-  { key: 'goose', name: 'Goose', global: '.config/goose/skills', category: 'coding' },
+  { key: 'roo_code', name: 'Roo Code', global: '.roo/skills', category: 'coding', shared: 'agents' },
+  { key: 'goose', name: 'Goose', global: '.config/agents/skills', project: '.agents/skills', category: 'coding', shared: 'config-agents' },
   { key: 'droid', name: 'Droid', global: '.factory/skills', category: 'coding' },
-  { key: 'windsurf', name: 'Windsurf', global: '.codeium/windsurf/skills', project: '.windsurf/skills', category: 'coding' },
+  { key: 'windsurf', name: 'Windsurf', global: '.codeium/windsurf/skills', project: '.windsurf/skills', category: 'coding', shared: 'agents' },
   { key: 'trae', name: 'TRAE IDE', global: '.trae/skills', project: '.trae/skills', category: 'coding', family: 'TRAE', alsoUsedBy: ['TraeWork', 'TraeCode CLI'] },
   { key: 'trae_cn', name: 'TRAE CN', global: '.trae-cn/skills', project: '.trae-cn/skills', category: 'coding', family: 'TRAE', alsoUsedBy: ['TraeWork(国内)', 'TraeCode CLI'] },
-  { key: 'cline', name: 'Cline', global: '.agents/skills', project: '.agents/skills', category: 'coding', shared: 'agents' },
+  { key: 'cline', name: 'Cline', global: '.cline/skills', project: '.cline/skills', category: 'coding' },
   { key: 'warp', name: 'Warp', global: '.agents/skills', project: '.agents/skills', category: 'coding', shared: 'agents' },
   { key: 'omp_agent', name: 'OMP Agent', global: '.omp/agent/skills', project: '.omp/skills', category: 'coding' },
   { key: 'pi', name: 'Pi', global: '.pi/agent/skills', project: '.pi/skills', category: 'coding', shared: 'agents' },
@@ -62,31 +66,31 @@ export const builtinAgents: AgentDef[] = [
   { key: 'easyclaw', name: 'EasyClaw', global: '.easyclaw/skills', category: 'lobster', family: 'Claw' },
   { key: 'autoclaw', name: 'AutoClaw', global: '.openclaw-autoclaw/skills', category: 'lobster', family: 'Claw' },
   { key: 'workbuddy', name: 'WorkBuddy', global: '.workbuddy/skills', category: 'lobster', family: 'Claw' },
-  { key: 'hermes', name: 'Hermes Agent', global: '.hermes/skills', category: 'lobster', family: 'Claw', recursive: true },
+  { key: 'hermes', name: 'Hermes Agent', global: '.hermes/skills', project: '.agents/skills', category: 'lobster', family: 'Claw', recursive: true, shared: 'agents' },
   { key: 'clawdbot', name: 'Clawdbot', global: '.clawdbot/skills', project: '.clawdbot/skills', category: 'lobster', family: 'Claw' },
   { key: 'reasonix', name: 'DeepSeek Reasonix', global: '.reasonix/skills', project: '.reasonix/skills', category: 'coding' },
   { key: 'teamwork', name: 'Teamwork', global: 'teamwork/skills', project: 'teamwork/skills', category: 'lobster' },
   // 长尾：PRD §5.2.1 注释要求并入统一配置，各遵循 .xxx/skills 约定
-  { key: 'kimi_code', name: 'Kimi Code', global: '.kimi/skills', project: '.kimi/skills', category: 'coding' },
+  { key: 'kimi_code', name: 'Kimi Code', global: '.config/agents/skills', project: '.agents/skills', category: 'coding', shared: 'config-agents' },
   { key: 'augment', name: 'Augment', global: '.augment/skills', project: '.augment/skills', category: 'coding' },
   { key: 'bob', name: 'Bob', global: '.bob/skills', project: '.bob/skills', category: 'coding' },
   { key: 'command_code', name: 'Command Code', global: '.commandcode/skills', project: '.commandcode/skills', category: 'coding' },
   { key: 'continue', name: 'Continue', global: '.continue/skills', project: '.continue/skills', category: 'coding' },
-  { key: 'cortex', name: 'Cortex', global: '.cortex/skills', project: '.cortex/skills', category: 'coding' },
-  { key: 'crush', name: 'Crush', global: '.crush/skills', project: '.crush/skills', category: 'coding' },
+  { key: 'cortex', name: 'Cortex', global: '.snowflake/cortex/skills', project: '.cortex/skills', category: 'coding' },
+  { key: 'crush', name: 'Crush', global: '.config/crush/skills', project: '.crush/skills', category: 'coding' },
   { key: 'iflow', name: 'iFlow', global: '.iflow/skills', project: '.iflow/skills', category: 'coding' },
   { key: 'junie', name: 'Junie', global: '.junie/skills', project: '.junie/skills', category: 'coding' },
   { key: 'kiro', name: 'Kiro', global: '.kiro/skills', project: '.kiro/skills', category: 'coding' },
   { key: 'kode', name: 'Kode', global: '.kode/skills', project: '.kode/skills', category: 'coding' },
   { key: 'mcpjam', name: 'MCPJam', global: '.mcpjam/skills', project: '.mcpjam/skills', category: 'coding' },
-  { key: 'mistral_vibe', name: 'Mistral Vibe', global: '.mistral/skills', project: '.mistral/skills', category: 'coding' },
+  { key: 'mistral_vibe', name: 'Mistral Vibe', global: '.vibe/skills', project: '.vibe/skills', category: 'coding' },
   { key: 'mux', name: 'Mux', global: '.mux/skills', project: '.mux/skills', category: 'coding' },
   { key: 'neovate', name: 'Neovate', global: '.neovate/skills', project: '.neovate/skills', category: 'coding' },
-  { key: 'openhands', name: 'OpenHands', global: '.openhands/skills', project: '.openhands/skills', category: 'coding' },
+  { key: 'openhands', name: 'OpenHands', global: '.agents/skills', project: '.agents/skills', category: 'coding', shared: 'agents' },
   { key: 'pochi', name: 'Pochi', global: '.pochi/skills', project: '.pochi/skills', category: 'coding' },
   { key: 'adal', name: 'Adal', global: '.adal/skills', project: '.adal/skills', category: 'coding' },
-  { key: 'deepagents', name: 'DeepAgents', global: '.deepagents/skills', project: '.deepagents/skills', category: 'coding' },
-  { key: 'firebender', name: 'Firebender', global: '.firebender/skills', project: '.firebender/skills', category: 'coding' },
+  { key: 'deepagents', name: 'DeepAgents', global: '.deepagents/agent/skills', project: '.agents/skills', category: 'coding', shared: 'agents' },
+  { key: 'firebender', name: 'Firebender', global: '.firebender/skills', project: '.agents/skills', category: 'coding', shared: 'agents' },
 ];
 
 /** 自定义 Agent → AgentDef（global 存绝对路径，绕过 home 拼接） */
@@ -291,6 +295,10 @@ export function listAgents(cfg: HubConfig): AgentView[] {
     const installed = fs.existsSync(globalDir);
     const sync = ov?.sync ?? cfg.defaultSync;
     const active = cfg.activeAgents.includes(def.key);
+    // shared 指向的共享标准目录绝对路径，以及它是否就是自己的全局目录（原生成员 vs 兼容读取）
+    const sharedAbs = def.shared
+      ? path.join(os.homedir(), def.shared === 'config-agents' ? '.config/agents/skills' : '.agents/skills')
+      : undefined;
     return {
       ...def,
       globalDir,
@@ -298,6 +306,7 @@ export function listAgents(cfg: HubConfig): AgentView[] {
       sync,
       active,
       layers: def.shared ? [def.shared] : undefined,
+      ...(def.shared ? { sharedDir: sharedAbs, sharedOwn: sharedAbs === globalDir } : {}),
       sharedWith: [],
       primaryKey: def.key,
       ...(ov?.preset ? { preset: ov.preset } : {}),

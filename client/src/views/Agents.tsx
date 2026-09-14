@@ -23,6 +23,7 @@ import {
   familyBadge,
   notInstalledBadge,
   presetBadge,
+  sharedReadBadge,
   sharedStrategyBadge,
   syncBadge,
 } from '../components/agent/agentBadges';
@@ -76,6 +77,7 @@ export default function Agents() {
       badges: (
         <>
           {multi && sharedStrategyBadge(primary.name, g.others.map((a) => a.name))}
+          {!primary.sharedOwn && sharedReadBadge(primary)}
           {syncBadge(primary.sync)}
           {presetBadge(primary.preset ?? null)}
           {!g.installed && notInstalledBadge()}
@@ -279,6 +281,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
           ? <Badge tone="info" title={`它与同目录的其它 Agent 共用同一个技能目录，也共用同一套预设 / 安装方式；系统内这套设置存在「${primaryAgent?.name ?? agent.primaryKey}」名下`}>同目录</Badge>
           : <Badge tone="accent" title="同目录的这些 Agent 共用同一套预设 / 安装方式，系统内这套设置存在本 Agent 名下（只是存放位置，不代表策略归它所有）">策略存于此</Badge>)}
         {familyBadge(agent)}
+        {sharedReadBadge(agent)}
         <div className="detail-actions">
           <Button size="sm" variant={agent.active ? 'ghost' : 'primary'} onClick={toggleActive} title="加入/移出活跃集合（加入即刻就位）">
             {agent.active ? '移出活跃' : '设为活跃'}

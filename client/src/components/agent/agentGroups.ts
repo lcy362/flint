@@ -3,8 +3,8 @@ import type { AgentView } from '../../api/types';
 /**
  * 把 Agent 按「实际技能目录」归并成卡片模型。
  *
- * 多个 Agent 可能解析到同一个全局目录（如 Cline / Warp 都用 ~/.agents/skills，
- * Amp / Replit 都用 ~/.config/agents/skills）。按 Agent 出卡片会出现两张路径
+ * 多个 Agent 可能解析到同一个全局目录（如 Warp / Codex / OpenHands 共用 `~/.agents/skills`，
+ * Amp / Replit / Goose / Kimi Code 共用 `~/.config/agents/skills`）。按 Agent 出卡片会出现两张路径
  * 完全相同、内容重复的卡；这里改成「一个实际目录一张卡」：标题罗列使用该目录的
  * 全部 Agent（都是真实的 Agent，不分主次称呼），策略则由其中的主 Agent 决定。
  *

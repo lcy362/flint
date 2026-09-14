@@ -73,7 +73,7 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
   - **TRAE 家族**：国际版 `trae` → `~/.trae/skills`，中国版 `trae_cn` → `~/.trae-cn/skills`（同源，目录不同，勿混）。
   - **Qoder/千问家族**：`qoder`（`.qoder/skills`）、`qwen_code`（`.qwen/skills`）、以及 pks 侧的 `qoderwork`/`qoderworkcn`（国内/国际版），相关但目录各自独立。
   - **Claw/Clawbot 家族**（Lobster 类个人助理）：`openclaw`、`qclaw`、`easyclaw`、`autoclaw`、`workbuddy`、`hermes`——同属 concierge 架构生态，目录各自独立，标注家族名便于关联。
-  - **共享目录（共享 `~/.agents/skills`）**：`cline`、`warp` 直接部署于该统一根目录；`codex`、`github_copilot`、`pi`、`deepseek_harness` 将其作为**只读发现源**（部署仍落各自目录）；`amp`、`replit` 共享 `.config/agents/skills`。UI 需对"共享同一目录"的 agent 给出角标/提示，避免重复分发或维护时误判。
+  - **共享标准目录（Agent Skills 开放标准，共享 `~/.agents/skills` / `.config/agents/skills`）**：`warp`、`codex`、`openhands` 直接以其为技能目录（放一份即全生效）；`github_copilot`、`opencode`、`cursor`、`roo_code`、`gemini_cli`、`windsurf`、`pi`、`deepseek_harness`、`firebender`、`deepagents` 及 `hermes`（项目级）在自身目录之外**另读取**该标准目录；`amp`、`replit`、`goose`、`kimi_code` 共享 `.config/agents/skills`。UI 需对"共享标准目录/共用同一目录"的 agent 给出角标/提示，避免重复分发或维护时误判（`cline` 为 `.cline/skills`，不读共享 `.agents`）。
 - **AG-03 自定义目录**：Agent 路径不硬编码死，支持 `custom tools` 新增任意名称 + 自定义全局/项目 skill 目录（含是否 `recursive_scan`）。
 - **AG-04 路径配置**：每个 Agent 的全局目录、项目级目录均可覆盖；覆盖后视为"已安装可用"，不受平台探测限制。
 - **AG-05 手动覆盖**：个别 Agent 若与内置约定不符，用户可在 UI 覆盖其目录。
@@ -82,23 +82,23 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
 
 | Agent key | 名称 | 全局 skill 目录 | 项目级目录 | 备注 / 家族 |
 |-----------|------|----------------|-----------|------------|
-| cursor | Cursor | `~/.cursor/skills` | `.cursor/skills` | — |
+| cursor | Cursor | `~/.cursor/skills` | `.cursor/skills` | 另读 `.agents/skills`、`.claude/skills` |
 | claude_code | Claude Code | `~/.claude/skills` | `.claude/skills` | — |
-| codex | Codex CLI | `~/.codex/skills` | `.codex/skills` | 另只读发现 `.agents/skills` |
-| github_copilot | GitHub Copilot | `~/.copilot/skills` | `.copilot/skills` | 另只读发现 `.agents/skills` |
+| codex | Codex CLI | `~/.agents/skills` | `.agents/skills` | **部署于共享 `.agents`**（标准目录原生） |
+| github_copilot | GitHub Copilot | `~/.copilot/skills` | `.github/skills` | 另读 `.agents/skills`、`.claude/skills` |
 | grok | Grok | `~/.grok/skills` | `.grok/skills` | — |
-| opencode | OpenCode | `~/.config/opencode/skills` | `.opencode/skills` | 全局/项目路径不同 |
-| antigravity | Antigravity | `~/.gemini/antigravity/skills` | — | Gemini 系 |
-| gemini_cli | Gemini CLI | `~/.gemini/skills` | — | Gemini 系 |
-| amp / replit | Amp / Replit | `~/.config/agents/skills` | — | **共享 `.config/agents/skills`** |
+| opencode | OpenCode | `~/.config/opencode/skills` | `.opencode/skills` | 全局/项目路径不同;另读 `.agents/skills`、`.claude/skills` |
+| antigravity | Antigravity | `~/.gemini/antigravity/skills` | — | Gemini 系（全局待核） |
+| gemini_cli | Gemini CLI | `~/.gemini/skills` | — | Gemini 系;另读 `.agents/skills` |
+| amp / replit | Amp / Replit | `~/.config/agents/skills` | — | **共享 `.config/agents/skills`**（Replit 全局待核） |
 | kilo_code | Kilo Code | `~/.kilocode/skills` | — | — |
 | roo_code | Roo Code | `~/.roo/skills` | — | — |
-| goose | Goose | `~/.config/goose/skills` | — | — |
+| goose | Goose | `~/.config/agents/skills` | `.agents/skills` | **共享 `.config/agents/skills`** |
 | droid | Droid | `~/.factory/skills` | — | — |
-| windsurf | Windsurf | `~/.codeium/windsurf/skills` | `.windsurf/skills` | pks 用 `.windsurf/skills`，以其实际存在为准 |
+| windsurf | Windsurf | `~/.codeium/windsurf/skills` | `.windsurf/skills` | 另读 `.agents/skills` |
 | trae | TRAE IDE | `~/.trae/skills` | `.trae/skills` | **TRAE 家族·国际** |
 | trae_cn | TRAE CN | `~/.trae-cn/skills` | `.trae-cn/skills` | **TRAE 家族·中国**，同源自国际版 |
-| cline | Cline | `~/.agents/skills` | `.agents/skills` | **部署于共享 `.agents`**，探测用 `.cline` |
+| cline | Cline | `~/.cline/skills` | `.cline/skills` | 技能目录独立，**不读共享 `.agents`** |
 | warp | Warp | `~/.agents/skills` | `.agents/skills` | **部署于共享 `.agents`** |
 | omp_agent | OMP Agent | `~/.omp/agent/skills` | `.omp/skills` | 全局/项目路径不同（含 `agent` 段） |
 | pi | Pi | `~/.pi/agent/skills` | `.pi/skills` | 另只读发现 `.agents/skills` |
@@ -114,12 +114,12 @@ AI 编码 Agent 生态碎片化：Claude、Cursor、Trae、OpenCode、Qoder、Wi
 | easyclaw | EasyClaw | `~/.easyclaw/skills` | — | **Claw 家族**（Lobster） |
 | autoclaw | AutoClaw | `~/.openclaw-autoclaw/skills` | — | **Claw 家族**（Lobster） |
 | workbuddy | WorkBuddy | `~/.workbuddy/skills` | — | **Claw 家族**（Lobster） |
-| hermes | Hermes Agent | `~/.hermes/skills` | — | Lobster；**`recursive_scan=true`（嵌套目录）** |
+| hermes | Hermes Agent | `~/.hermes/skills` | `.agents/skills` | Lobster;`recursive_scan=true`（嵌套目录）；另读共享 `.agents/skills` |
 | clawdbot | Clawdbot | 见 pks | — | pks 补齐 |
 | reasonix | DeepSeek Reasonix | `~/.reasonix/skills` | `.reasonix/skills` | pks 补齐 |
 | teamwork | Teamwork | `~/teamwork/skills` | `teamwork/skills` | pks 补齐 |
 
-> 其余 skills-manager 支持的 agent（kimi-code、augment、bob、command_code、continue、cortex、crush、iflow、junie、kiro、kode、mcpjam、mistral_vibe、mux、neovate、openhands、pochi、adal、deepagents、firebender 等）均遵循各自 `.xxx/skills` 约定，并入统一配置，不逐一列出。
+> 其余 skills-manager 支持的 agent（augment、bob、command_code、continue、crush、iflow、junie、kiro、kode、mcpjam、mux、neovate、pochi、adal 等）遵循各自 `.xxx/skills` 约定，并入统一配置，不逐一列出。**其中部分已归于共享标准目录**：`openhands` → 共享 `.agents/skills`；`kimi_code` → 共享 `.config/agents/skills`（项目 `.agents/skills`）；`deepagents` → 全局 `.deepagents/agent/skills` + 项目共享 `.agents/skills`；`firebender` → 全局 `.firebender/skills` + 项目共享 `.agents/skills`；`cortex` 全局 `~/.snowflake/cortex/skills`；`crush` 全局 `~/.config/crush/skills`；`mistral_vibe` 为 `.vibe/skills`。
 >
 > **实现约定**：内置清单以 skills-manager 为准并常驻更新，pks 补齐项做增量合并；所有路径仍可被用户覆盖（AG-04），实际生效以配置为准。
 

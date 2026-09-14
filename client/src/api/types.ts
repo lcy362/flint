@@ -46,7 +46,7 @@ export interface AgentView {
   primaryExplicit?: boolean;
   sync: 'symlink' | 'copy'; active: boolean; preset?: string;
   skillSync?: Record<string, 'symlink' | 'copy'>;
-  family?: string; sharedWith: string[]; alsoUsedBy?: string[]; shared?: string; custom?: boolean;
+  family?: string; sharedWith: string[]; alsoUsedBy?: string[]; shared?: string; sharedDir?: string; sharedOwn?: boolean; custom?: boolean;
   project?: string;
 }
 export interface CustomAgentView { key: string; name: string; globalDir: string; projectDir?: string; recursive?: boolean }

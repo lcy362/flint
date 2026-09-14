@@ -113,7 +113,7 @@ let projBase = '';
   const { listAgents } = await import('./src/core/agents.js');
   const { desiredContext } = await import('./src/core/sync.js');
   const sharedDir = path.join(base, 'shared-skills');
-  // cline / warp 内置就共用 ~/.agents/skills，这里用目录覆盖指到同一临时目录来模拟
+  // cline 与 warp 现分属 .cline/skills 与共享 ~/.agents/skills，这里用目录覆盖指到同一临时目录来模拟"同目录共用"
   store.data.agents['cline'] = { globalDir: sharedDir, sync: 'symlink', preset: 'demo' };
   store.data.agents['warp'] = { globalDir: sharedDir, preset: 'solo' }; // 同目录其它 Agent 自己那套不应生效
   const lib6 = scanAll(store.data.repos, store.data.foreignSources);
