@@ -35,7 +35,7 @@ export interface SkillView {
 export interface PresetView { name: string; skills: string[]; tags: string[] }
 export interface AgentView {
   key: string; name: string; globalDir: string; installed: boolean;
-  sync: 'symlink' | 'copy'; active: boolean; mode: 'preset' | 'manual'; preset?: string;
+  sync: 'symlink' | 'copy'; active: boolean; preset?: string;
   skillSync?: Record<string, 'symlink' | 'copy'>;
   family?: string; sharedWith: string[]; alsoUsedBy?: string[]; shared?: string; custom?: boolean;
   project?: string;

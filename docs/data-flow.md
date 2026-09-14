@@ -44,7 +44,7 @@
 |------|------|------|
 | `repos[]` | 仓库注册表：id / path / layout / root / **tags 载体配置** | 文件目录 |
 | `foreignSources[]` | 外部来源：id / path / layout / linked(只读 or 收编) | 文件目录 |
-| `agents{}` | 每 Agent 覆盖：globalDir / sync(软链\|复制) / mode(preset\|manual) / preset / **explicitOn[] / explicitOff[]** | — |
+| `agents{}` | 每 Agent 覆盖：globalDir / sync(软链\|复制) / **preset(关联的预设，可空)** / explicitOn[] / explicitOff[] | — |
 | `activeAgents[]` | 活跃 Agent 集合（实时同步作用域） | agents key |
 | `presets[]` | 套餐：skills[](name@来源) + tags[]（无启用开关，预设即决策） | skill id |
 | `skillMeta{}` | 兼容模式的本地标签（仓库未配 tags 载体时） | skill id |
@@ -169,7 +169,7 @@ flowchart LR
 
     subgraph Calc["期望集计算 desiredContext(agent)"]
         direction TB
-        BASE["基准 = 指定套餐成员<br/>或全部套餐并集<br/>(mode=manual 时为空)"]
+        BASE["基准 = 关联套餐成员<br/>(未关联任何套餐则为空)"]
         ON["∪ explicitOn"]
         OFF["− explicitOff"]
         D["desired: Map&lt;id, Skill&gt;"]

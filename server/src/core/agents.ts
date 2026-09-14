@@ -173,9 +173,10 @@ export interface AgentView extends AgentDef {
   sharedWith: string[];
   /** 文档化跨产品复用 */
   alsoUsedBy?: string[];
-  /** 技能管理模式；PRD 默认 preset（激活的 preset 即分发到该 agent） */
-  mode: 'preset' | 'manual';
-  /** mode=preset 时关联的 preset 名 */
+  /**
+   * 关联的预设名。关联了才有预设基准；未关联则基准为空，
+   * 该 Agent 只分发单独开启的技能（不存在「未绑定即跟随全部预设」的兜底）。
+   */
   preset?: string;
   /** 每 (skill, Agent) 关系的同步策略覆盖（SY-01） */
   skillSync?: Record<string, 'symlink' | 'copy'>;
@@ -199,8 +200,6 @@ export function listAgents(cfg: HubConfig): AgentView[] {
       active,
       layers: def.shared ? [def.shared] : undefined,
       sharedWith: [],
-      // PRD PR-02：默认 preset 模式，激活的 preset 即分发到该 agent
-      mode: ov?.mode ?? 'preset',
       ...(ov?.preset ? { preset: ov.preset } : {}),
       ...(ov?.skillSync ? { skillSync: ov.skillSync } : {}),
       ...(ov?.explicitOn ? { explicitOn: ov.explicitOn } : {}),

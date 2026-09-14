@@ -166,7 +166,7 @@ config.json ──推导──▶ desired 期望集 ──投影──▶ 物理
 | 入口 | 用户操作 | 自动作用域 |
 |---|---|---|
 | **浏览/打标签** | 资产库搜索过滤 → 打标签 / 编辑 skill | 标签变更触发 |
-| **维护 preset** | 创建/编辑集合内 skill、关联标签（无启用开关） | 触发分发到活跃 Agents |
+| **维护 preset** | 创建/编辑集合内 skill、关联标签（无启用开关） | 触发分发到已关联它的活跃 Agent |
 | **Agent 手动精确控** | 对某 Agent 开/关某 skill（explicitOn/Off） | 该 Agent |
 | **切换 Agent** | 加入 / 移出活跃集合 | 加入即就位、移出即回退（AA-04） |
 | **手动兜底** | 点「立即生效」 | 单 Agent 全量对账 |
@@ -226,12 +226,12 @@ config.json ──推导──▶ desired 期望集 ──投影──▶ 物理
 
 ### 流程三-C · Agent 管理（细化）
 
-> 每个 Agent 有独立覆盖（globalDir / 同步方式 / 管理模式 / 显式开关），并隶属活跃集合。管理者只做决策，投影即触发。
+> 每个 Agent 有独立覆盖（globalDir / 同步方式 / 关联预设 / 显式开关），并隶属活跃集合。管理者只做决策，投影即触发。
 
 | 步骤 | 用户操作 | 工具响应（依据约束） |
 |---|---|---|
 | N1 探测 / 配置 | 扫描 Agent；对单 Agent 覆盖 `globalDir`、同步方式（软链 / 复制）、归属目录 | 内置清单 + 用户覆盖（AG-04/05）；记 `agents`（C5） |
-| N2 管理模式 | 选 `preset` 模式（绑定某 preset）或 `manual` 模式（全靠显式开关） | 决定该 Agent 期望集基准（基准：preset / 标签命中 ∪ explicitOn − explicitOff，C6） |
+| N2 关联预设 | 选一个 preset 作为基准，或保持不关联（不用任何 preset，全靠显式开关） | 决定该 Agent 期望集基准（基准：关联 preset 的成员 ∪ 标签命中；未关联则为空，C6）。没有 preset / manual 模式开关 |
 | N3 手动精确控 | 对某 Agent 显式开 / 关某 skill | 记 `explicitOn / explicitOff`（C5）；重算该 Agent 期望集并增量分发（C7） |
 | N4 设活跃 | 将 Agent 加入 `activeAgents` | **加入即就位**：立即对账并投产（AA-04 / G6）；之后纳入自动同步作用域 |
 | N5 取消活跃 | 将 Agent 移出 `activeAgents` | **移出即回退**：按策略回退到未投产状态（AA-04）；恢复懒同步（C12 / AA-03） |
@@ -241,7 +241,7 @@ config.json ──推导──▶ desired 期望集 ──投影──▶ 物理
 **Agent 视图（详情体检）**
 - 期望集（基准 ∪ explicitOn − explicitOff）与当前物理投放 diff
 - 显式覆盖清单（explicitOn / explicitOff）
-- 同步方式、管理模式、所属 preset、是否活跃
+- 同步方式、关联的 preset（可为空）、是否活跃
 - 软链 / 副本健康、失效项（并入流程五体检）
 
 关键保障（Agent 视角）：

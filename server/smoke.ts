@@ -28,8 +28,9 @@ mkSkill(path.join(extDir, 'skills', 'frontend'), 'gamma');
 cfg.foreignSources.push({ id: 'ume', name: 'ume-skills', path: extDir, layout: 'nested', linked: true });
 
 // 活跃 agent 目标目录（用覆盖指到临时目录，避免污染真实 ~/.trae-cn）
+// 注意：必须显式关联预设才有预设基准——不关联就不会跟随任何预设
 const targetDir = path.join(base, 'agent-tmp');
-cfg.agents['trae_cn'] = { globalDir: targetDir, sync: 'symlink' };
+cfg.agents['trae_cn'] = { globalDir: targetDir, sync: 'symlink', preset: 'demo' };
 store.save();
 
 const lib = scanAll(cfg.repos, cfg.foreignSources);

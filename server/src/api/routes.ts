@@ -353,7 +353,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (sync === 'symlink' || sync === 'copy') over.sync = sync;
     if (globalDir !== undefined) { if (globalDir) over.globalDir = globalDir; else delete over.globalDir; }
     if (projectDir !== undefined) { if (projectDir) over.projectDir = projectDir; else delete over.projectDir; }
-    if ('mode' in body && (body.mode === 'preset' || body.mode === 'manual')) over.mode = body.mode;
+    // 关联预设即取预设为基准；置空则不再使用任何预设（只保留单独开启的技能）
     if ('preset' in body) { if (body.preset) over.preset = body.preset; else delete over.preset; }
     // 每关系同步策略（SY-01）：{ skill, sync } 写入 skillSync
     if ('skillSync' in body && body.skillSync && typeof body.skillSync === 'object') {

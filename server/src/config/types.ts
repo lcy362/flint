@@ -2,8 +2,6 @@
 export type Layout = 'flat' | 'nested' | 'auto';
 /** 安装方式 */
 export type SyncMode = 'symlink' | 'copy';
-/** Agent 管理模式 */
-export type AgentManageMode = 'preset' | 'manual';
 
 /** 自有仓库：个人 skill 资产库本体 */
 export interface Repo {
@@ -44,7 +42,11 @@ export interface AgentOverride {
   sync?: SyncMode;
   /** 每条 (skill, Agent) 关系的同步策略覆盖，键为 skill 名（SY-01） */
   skillSync?: Record<string, SyncMode>;
-  mode?: AgentManageMode;
+  /**
+   * 关联的预设：作为该 Agent 的期望基准（基准 = 预设成员 ∪ 标签命中）。
+   * 不关联就是不用预设——基准为空，该 Agent 只分发 explicitOn 里单独开启的技能，
+   * 不存在「不绑定 = 跟随全部预设」的兜底。预设与单独配置是两件独立的事。
+   */
   preset?: string;
   explicitOn?: string[];
   explicitOff?: string[];

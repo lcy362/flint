@@ -52,7 +52,9 @@ export default function Agents() {
         <Badge tone="info" title={a.sync === 'symlink' ? '以软链方式分发' : '以副本方式分发'}>
           {a.sync === 'symlink' ? '软链' : '副本'}
         </Badge>
-        <Badge tone="accent">{a.mode === 'preset' ? '预设模式' : '手动模式'}</Badge>
+        {a.preset
+          ? <Badge tone="accent" title={`以预设「${a.preset}」为分发基准`}>预设 {a.preset}</Badge>
+          : <Badge tone="neutral" title="未关联预设，只分发单独开启的技能">未关联预设</Badge>}
         {a.family && <Badge tone="accent">{a.family}</Badge>}
         {a.sharedWith.length > 0 && (
           <Badge tone="warn" title={`与 ${a.sharedWith.join('、')} 共用同一目录`}>共享目录</Badge>
@@ -245,22 +247,12 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
         <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>分发策略</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--sp-3)' }}>
           <FieldSelect
-            label="管理模式"
-            value={agent.mode}
-            hint={agent.mode === 'preset' ? '所有预设的技能即分发到此 Agent' : '仅分发手动开启的技能'}
-            onChange={(e) => void busy(() => api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ mode: e.target.value }) }))}
-          >
-            <option value="preset">预设模式（默认）</option>
-            <option value="manual">手动模式</option>
-          </FieldSelect>
-          <FieldSelect
             label="关联预设"
             value={agent.preset ?? ''}
-            hint="不选则跟随所有预设"
-            disabled={agent.mode !== 'preset'}
+            hint="取一个预设作为分发基准；不选则只分发下方单独开启的技能"
             onChange={(e) => void busy(() => api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ preset: e.target.value || null }) }))}
           >
-            <option value="">跟随所有预设</option>
+            <option value="">不使用预设</option>
             {(presets ?? []).map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
           </FieldSelect>
           <FieldSelect

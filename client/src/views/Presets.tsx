@@ -394,31 +394,17 @@ function PresetDetail({
   const enabledExplicit = enabled.filter((e) => e.via === 'explicit').length;
   const enabledAuto = enabled.length - enabledExplicit;
 
-  /** 预设模式下显式关联本预设的 Agent（配置层面的关联，与是否活跃无关） */
-  const boundAgents = useMemo(
-    () => (agents ?? []).filter((a) => a.mode === 'preset' && a.preset === preset.name),
-    [agents, preset.name]
-  );
-  /** 未指定预设、跟随所有预设的 Agent */
-  const followerAgents = useMemo(() => (agents ?? []).filter((a) => a.mode === 'preset' && !a.preset), [agents]);
-
   /**
-   * 已应用本预设的 Agent：
-   * - 显式关联本预设的：都会收到本预设的技能（配置层绑定，与是否活跃无关）；
-   * - 跟随所有预设、且已加入活跃集合的：会真正分发。
+   * 应用本预设的 Agent = 显式关联了本预设的 Agent。
+   * 不关联就不参与——不存在「未绑定即跟随全部预设」的兜底，故这里没有其它来源。
    * 只有加入活跃集合的 Agent 才会把技能写入本地目录，故单独标注分发状态。
    */
-  const appliedAgents = useMemo(() => {
-    const list = [...boundAgents, ...followerAgents.filter((a) => a.active)];
-    const seen = new Set<string>();
-    const merged: AgentView[] = [];
-    for (const a of list) {
-      if (seen.has(a.key)) continue;
-      seen.add(a.key);
-      merged.push(a);
-    }
-    return merged.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
-  }, [boundAgents, followerAgents]);
+  const appliedAgents = useMemo(
+    () => (agents ?? [])
+      .filter((a) => a.preset === preset.name)
+      .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)),
+    [agents, preset.name]
+  );
 
   const agentItems: EntityItem[] = appliedAgents.map((a) => ({
     id: a.key,
@@ -426,11 +412,6 @@ function PresetDetail({
     sub: <span className="mono">{a.globalDir}</span>,
     badges: (
       <>
-        {a.preset ? (
-          <Badge tone="accent" title="该 Agent 显式关联到本预设">显式关联</Badge>
-        ) : (
-          <Badge tone="info" title="未指定预设，跟随所有预设">跟随所有预设</Badge>
-        )}
         {a.active ? (
           <Badge tone="good" dot="good" title="已加入活跃集合，技能已实际分发到本地目录">已分发</Badge>
         ) : (
@@ -496,9 +477,9 @@ function PresetDetail({
               <Badge tone={agentItems.length ? 'good' : 'neutral'}>{agentItems.length}</Badge>
             </div>
             <p className="panel__hint">
-              显式关联本预设、或跟随所有预设且已加入活跃集合的 Agent，会接收本预设的技能；
+              以本预设为分发基准的 Agent：在其详情页把「关联预设」选为本预设即会接收；
               标注「已分发」表示技能已实际写入该 Agent 的本地目录。
-              其余 Agent 未加入活跃集合，不会自动跟随本预设的变更，可在「设置」页把它加入活跃集合，或在其详情页手动同步。
+              未加入活跃集合的 Agent 不会自动跟随本预设的变更，可在「设置」页把它加入活跃集合，或在其详情页手动同步。
             </p>
             <EntityList
               mode="list"
@@ -507,7 +488,7 @@ function PresetDetail({
               empty={
                 <EmptyState
                   title="暂无 Agent 应用此预设"
-                  hint="把 Agent 的管理模式设为「预设模式」并关联本预设（或留空跟随所有预设），技能才会分发到该 Agent。"
+                  hint="在 Agent 详情页把「关联预设」选为本预设，技能才会分发到该 Agent。"
                 />
               }
             />

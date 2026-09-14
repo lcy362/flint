@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { HubConfig, Preset, emptyConfig } from './types.js';
+import { HubConfig, AgentOverride, Preset, emptyConfig } from './types.js';
 import { CONFIG_PATH } from './defaults.js';
 import { log } from '../infra/logger.js';
 
@@ -27,6 +27,20 @@ function stripLegacyPresetFields(presets: Preset[]): Preset[] {
     delete next.active;
     return next;
   });
+}
+
+/**
+ * Agent 覆盖里的 `mode`（preset / manual）已取消：是否使用预设改由 `preset` 绑定本身表达，
+ * 未绑定的 Agent 不再「跟随全部预设」。这里剔除历史配置残留的 mode 字段，避免留下死状态。
+ */
+function stripLegacyAgentFields(agents: Record<string, AgentOverride>): Record<string, AgentOverride> {
+  return Object.fromEntries(
+    Object.entries(agents).map(([key, ov]) => {
+      const next = { ...ov } as AgentOverride & { mode?: string };
+      delete next.mode;
+      return [key, next];
+    }),
+  );
 }
 
 export class ConfigStore {
@@ -64,7 +78,7 @@ export class ConfigStore {
       repos: parsed.repos ?? [],
       foreignSources: parsed.foreignSources ?? [],
       customAgents: parsed.customAgents ?? [],
-      agents: parsed.agents ?? {},
+      agents: stripLegacyAgentFields(parsed.agents ?? {}),
       activeAgents: parsed.activeAgents ?? [],
       presets: stripLegacyPresetFields(parsed.presets ?? []),
       skillMeta: parsed.skillMeta ?? {},

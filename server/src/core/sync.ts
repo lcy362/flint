@@ -16,18 +16,17 @@ export interface SyncResult {
 }
 
 export interface DesiredContext {
-  mode: 'preset' | 'manual';
-  /** 显式关联的基准套餐名（preset 模式）；未指定为空串 */
+  /** 关联的预设名；未关联时为空串 */
   preset: string;
   /** 最终期望：id→Skill（= 基准 ∪ explicitOn − explicitOff） */
   desired: Map<string, Skill>;
-  /** 基准（套餐）成员的名字集合 */
+  /** 基准（预设）成员的名字集合 */
   baselineNames: Set<string>;
-  /** 名字 → 来源套餐名（基准成员用；用于标注"来自套餐X"） */
+  /** 名字 → 来源预设名（基准成员用；用于标注"来自预设X"） */
   presetOf: Map<string, string>;
-  /** 显式开启成员的名字集合（手动挑选基础 / 套餐之上额外） */
+  /** 显式开启成员的名字集合（预设之上额外 / 无预设时的全部来源） */
   onNames: Set<string>;
-  /** 显式关闭成员的 id/名字（套餐之上裁剪）；offNames 为名字归一化 */
+  /** 显式关闭成员的 id/名字（预设之上裁剪）；offNames 为名字归一化 */
   offIds: Set<string>;
   offNames: Set<string>;
 }
@@ -41,49 +40,39 @@ function nameOf(id: string): string {
 /**
  * 解析某 agent 的期望技能上下文。
  * 期望 = 基准 ∪ explicitOn − explicitOff，其中：
- * - 默认 mode=preset（PR-02：preset 即分发到该 agent）
- * - mode=preset + preset：基准 = 该套餐成员 ∪ 该套餐关联标签命中的 skill（PR-05）
- * - mode=preset，未指定 preset：基准 = 所有 presets 成员 ∪ 其标签命中（跟随全部预设）
- * - mode=manual：基准为空（期望全靠 explicitOn）
- * agentKey 为空时，desired 含全部 presets 成员（兼容全局同步）。
+ * - 关联了 preset：基准 = 该预设成员 ∪ 该预设关联标签命中的 skill（PR-05）
+ * - 未关联 preset：基准为空——该 Agent 只分发 explicitOn 里单独开启的技能。
+ *   不存在「不绑定 = 跟随全部预设」的兜底：绑定与单独配置是两件互不替代的事，
+ *   想用预设就显式关联一个，不想用就什么都不关联。
  *
- * 预设没有启用开关：它就是「要分发什么」的决策本身。是否自动跟随变更由 Agent 自己决定——
+ * 这里也没有「管理模式」开关：是否使用预设完全由 preset 绑定本身表达。
+ * 预设同样没有启用开关——它就是「要分发什么」的决策本身。是否自动跟随变更由 Agent 决定：
  * 只有加入 activeAgents 的 Agent 会被自动同步；非活跃 Agent 保持现状，等待手动操作即时生效。
  */
 export function desiredContext(cfg: ConfigStore, allSkills: Skill[], agentKey?: string): DesiredContext {
   const ov = agentKey ? cfg.data.agents[agentKey] : undefined;
-  const mode = ov?.mode ?? 'preset';
   const onIds = ov?.explicitOn ?? [];
   const offIds = new Set(ov?.explicitOff ?? []);
   const offNames = new Set([...offIds].map(nameOf));
   const baselineNames = new Set<string>();
   const presetOf = new Map<string, string>();
 
-  if (mode === 'preset') {
-    // 标签命中：打有套餐关联标签的 skill 一并纳入（PR-05）
-    const byTag = (tags: string[], name: string, preset: string) => {
-      if (tags.length === 0) return;
-      const set = new Set(tags);
+  // 只有显式关联了预设才有基准；未关联则基准为空（不跟随任何预设）
+  const p = ov?.preset ? cfg.data.presets.find((x) => x.name === ov.preset) : undefined;
+  if (p) {
+    for (const id of p.skills) {
+      const name = nameOf(id);
+      baselineNames.add(name);
+      if (!presetOf.has(name)) presetOf.set(name, p.name);
+    }
+    // 标签命中：打有该预设关联标签的 skill 一并纳入（PR-05）
+    const tagSet = new Set(p.tags ?? []);
+    if (tagSet.size > 0) {
       for (const s of allSkills) {
-        if (effectiveTags(cfg.data, s).some((t) => set.has(t))) {
+        if (effectiveTags(cfg.data, s).some((t) => tagSet.has(t))) {
           baselineNames.add(s.name);
-          if (!presetOf.has(s.name)) presetOf.set(s.name, preset);
+          if (!presetOf.has(s.name)) presetOf.set(s.name, p.name);
         }
-      }
-      void name;
-    };
-    const pushBase = (id: string, preset: string) => {
-      baselineNames.add(nameOf(id));
-      if (!presetOf.has(nameOf(id))) presetOf.set(nameOf(id), preset);
-    };
-    const p = ov?.preset ? cfg.data.presets.find((x) => x.name === ov.preset) : undefined;
-    if (p) {
-      for (const id of p.skills) pushBase(id, p.name);
-      byTag(p.tags ?? [], p.name, p.name);
-    } else {
-      for (const q of cfg.data.presets) {
-        for (const id of q.skills) pushBase(id, q.name);
-        byTag(q.tags ?? [], q.name, q.name);
       }
     }
   }
@@ -98,7 +87,6 @@ export function desiredContext(cfg: ConfigStore, allSkills: Skill[], agentKey?: 
   for (const id of baselineNames) addById(id);
   for (const id of onIds) addById(id);
   return {
-    mode,
     preset: ov?.preset ?? '',
     desired,
     baselineNames,
@@ -214,7 +202,7 @@ export function deployAgent(cfg: ConfigStore, agentKey: string, desired: Map<str
   return result;
 }
 
-/** 触发式同步：将指定（默认活跃）agent 各按自身管理模式同步到期望 skill 集合 */
+/** 触发式同步：将指定（默认活跃）agent 各按自身期望 skill 集合对账落盘 */
 export function syncActive(cfg: ConfigStore, allSkills: Skill[], only?: string[], reason: string = 'manual'): SyncResult[] {
   const targets = only ?? cfg.data.activeAgents;
   const results = targets.map((k) => deployAgent(cfg, k, computeDesired(cfg, allSkills, k), allSkills));

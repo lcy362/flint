@@ -10,7 +10,7 @@
 | PRD 项 | 实现 | 位置 |
 |---|---|---|
 | **AA-01 / AA-04 活跃 Agent 多选器** | 「设置」页活跃集合列表（搜索/只看已安装），加入即同步就位；Agent 详情页也可「设为活跃」 | `views/Settings.tsx`、`views/Agents.tsx` |
-| **PR-02 / PR-03 preset →分发** | `desiredContext` 默认 `preset` 模式：未指定则跟随全部 preset（已去掉启用开关）；Agent 可关联指定 preset | `core/sync.ts`、`views/Agents.tsx` |
+| **PR-02 / PR-03 preset →分发** | 预设只对**显式关联**它的 Agent 生效：`desiredContext` 以 `agent.preset` 为唯一基准来源，未关联即无基准（无「跟随全部 preset」兜底，也无 preset/manual 模式开关） | `core/sync.ts`、`views/Agents.tsx` |
 | **PR-05 preset 关联标签** | preset.tags 与显式技能取并集；编辑弹窗可填标签 | `core/sync.ts`、`views/Presets.tsx` |
 | **TG-03 / PJ-01 项目打标签** | 新建项目可填标签，详情页可编辑，标签命中 skill 自动进项目 | `views/Projects.tsx` |
 | **UI-03 设置页** | 活跃集合 / 默认同步策略 / watcher 开关 / 自定义 Agent | `views/Settings.tsx`、`/settings` |
