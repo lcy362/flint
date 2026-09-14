@@ -6,7 +6,7 @@ import express from 'express';
 import { ConfigStore } from '../infra/config-store.js';
 import { log } from '../infra/logger.js';
 import { pickDirectory, pickFile } from '../infra/picker.js';
-import { listAgents, agentSkillRows, findAgentDef, resolveGlobalDir } from '../core/agents.js';
+import { listAgents, agentSkillRows, findAgentDef, resolveGlobalDir, effectiveAgentKey } from '../core/agents.js';
 import { scanAll, detectLayoutAbs } from '../core/scanner.js';
 import * as presets from '../core/presets.js';
 import * as active from '../core/active.js';
@@ -20,7 +20,7 @@ import { takeover } from '../core/takeover.js';
 import { applyFix } from '../core/fix.js';
 import { diagnose } from '../core/diagnose.js';
 import { mergeSkill } from '../core/merge.js';
-import { Repo, ForeignSource, CustomAgent } from '../config/types.js';
+import { Repo, ForeignSource, CustomAgent, AgentOverride } from '../config/types.js';
 import { agentCards, projectCards } from '../domain/cards.js';
 
 /** server 版本号，/api/logs 上报给用户用于 issue 定位（优先 cwd，兼容 dev 的 src 路径） */
@@ -347,12 +347,17 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   r.put('/agents/:key', (req, res) => {
     const key = req.params.key;
     if (!findAgentDef(cfg.data, key)) return res.status(404).json({ error: 'unknown agent' });
-    const over = cfg.data.agents[key] ?? {};
+    // 分发策略（预设 / 安装方式 / 显式开关）一律落到该目录的主 Agent：目录只有一份实体，
+    // 别名与主 Agent 必须共用同一套策略，否则两边会互相覆盖。
+    const target = effectiveAgentKey(cfg.data, key);
+    const over = cfg.data.agents[target] ?? {};
+    // 目录覆盖属于 Agent 自身：它决定「这个 Agent 解析到哪个目录」，必须写自己的条目
+    const own = cfg.data.agents[key] ?? {};
     const body = req.body ?? {};
     const { sync, globalDir, projectDir } = body;
     if (sync === 'symlink' || sync === 'copy') over.sync = sync;
-    if (globalDir !== undefined) { if (globalDir) over.globalDir = globalDir; else delete over.globalDir; }
-    if (projectDir !== undefined) { if (projectDir) over.projectDir = projectDir; else delete over.projectDir; }
+    if (globalDir !== undefined) { if (globalDir) own.globalDir = globalDir; else delete own.globalDir; }
+    if (projectDir !== undefined) { if (projectDir) own.projectDir = projectDir; else delete own.projectDir; }
     // 关联预设即取预设为基准；置空则不再使用任何预设（只保留单独开启的技能）
     if ('preset' in body) { if (body.preset) over.preset = body.preset; else delete over.preset; }
     // 每关系同步策略（SY-01）：{ skill, sync } 写入 skillSync
@@ -374,7 +379,15 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       if (field in body) { const list = Array.isArray(body[field]) ? body[field] : []; if (list.length) over[field] = list; else delete over[field]; }
     };
     setList('explicitOn'); setList('explicitOff');
-    cfg.data.agents[key] = over;
+    if (target === key) {
+      cfg.data.agents[key] = over;
+    } else {
+      // 别名自己那份策略永远不生效，顺手清掉，避免配置里留下看似有效、实则被忽略的旧值
+      pruneStrategyOverrides(own);
+      cfg.data.agents[target] = over;
+      if (Object.keys(own).length > 0) cfg.data.agents[key] = own;
+      else delete cfg.data.agents[key];
+    }
     cfg.save();
     if (cfg.data.activeAgents.includes(key)) {
       // 活跃 Agent：走全局同步，顺带修正其它活跃 Agent 的漂移
@@ -391,7 +404,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
         });
       }
     }
-    res.json(cfg.data.agents[key]);
+    res.json(cfg.data.agents[target] ?? {});
   });
   r.get('/agents/:key/skills', (req, res) => {
     const key = req.params.key;
@@ -694,4 +707,16 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   });
 
   return r;
+}
+
+/**
+ * 清掉「策略类」覆盖项，保留目录类覆盖（globalDir / projectDir）。
+ * 别名与主 Agent 共用同一目录，它自己那份策略永远不生效，不该继续留在配置里。
+ */
+function pruneStrategyOverrides(ov: AgentOverride): void {
+  delete ov.preset;
+  delete ov.sync;
+  delete ov.skillSync;
+  delete ov.explicitOn;
+  delete ov.explicitOff;
 }

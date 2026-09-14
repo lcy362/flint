@@ -91,10 +91,11 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
   for (const a of listAgents(cfg.data)) {
     if (!a.installed) continue;
     const isActive = active.has(a.key);
+    const alias = a.primaryKey !== a.key ? ` · 别名，策略随 ${a.primaryKey}` : '';
     groups.agent.push({
       key: `agent:${a.key}`,
       status: isActive ? 'ok' : 'warn',
-      message: `${a.name}: ${a.globalDir} (${a.sync})${isActive ? '' : ' 未设为活跃'}`,
+      message: `${a.name}: ${a.globalDir} (${a.sync})${isActive ? '' : ' 未设为活跃'}${alias}`,
     });
   }
   for (const k of cfg.data.activeAgents) {
@@ -120,10 +121,13 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
   if (diffs.length === 0) groups.sync.push({ key: 'sync:none', status: 'ok', message: '无活跃 agent，未比对' });
 
   // ---- durability 失效软链 ----
+  // 同目录的 Agent 共用一个目录，按目录去重，避免同一个失效软链报多次
   let hasBroken = false;
+  const scannedDirs = new Set<string>();
   for (const a of listAgents(cfg.data)) {
     if (!a.installed || !active.has(a.key)) continue;
-    if (!fs.existsSync(a.globalDir)) continue;
+    if (!fs.existsSync(a.globalDir) || scannedDirs.has(a.globalDir)) continue;
+    scannedDirs.add(a.globalDir);
     for (const ent of fs.readdirSync(a.globalDir)) {
       const p = path.join(a.globalDir, ent);
       let lstat;

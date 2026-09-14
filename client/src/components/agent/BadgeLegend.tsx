@@ -24,7 +24,7 @@ export default function BadgeLegend() {
         footer={<Button variant="ghost" onClick={() => setOpen(false)}>知道了</Button>}
       >
         <p className="badge-legend__intro">
-          每张卡片对应一个<strong>实际的技能目录</strong>。多个 Agent 指向同一目录时合成一张卡：卡片标题是其中的<strong>主 Agent</strong>（安装方式、预设等策略以它为准），其余以「别名 X」列出——它们和主 Agent 走的是同一个路径，点芯片可进入各自的详情页。
+          每张卡片对应一个<strong>实际的技能目录</strong>。多个 Agent 指向同一目录时合成一张卡：卡片标题是其中的<strong>主 Agent</strong>——安装方式、预设、是否活跃都以它为准，策略改动也落在它身上；其余以「别名 X」列出，它们和主 Agent 走的是同一个路径，点芯片可进入各自的详情页。
         </p>
         <div className="badge-legend">
           {AGENT_BADGE_LEGEND.map((it) => (

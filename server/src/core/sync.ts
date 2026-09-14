@@ -3,7 +3,7 @@ import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import { Skill } from './skill.js';
 import { effectiveTags } from './tags.js';
-import { findAgentDef, resolveGlobalDir, expandTilde, isManagedLinkTarget } from './agents.js';
+import { findAgentDef, resolveGlobalDir, expandTilde, isManagedLinkTarget, effectiveAgentKey } from './agents.js';
 import { log } from '../infra/logger.js';
 
 export interface SyncResult {
@@ -50,7 +50,9 @@ function nameOf(id: string): string {
  * 只有加入 activeAgents 的 Agent 会被自动同步；非活跃 Agent 保持现状，等待手动操作即时生效。
  */
 export function desiredContext(cfg: ConfigStore, allSkills: Skill[], agentKey?: string): DesiredContext {
-  const ov = agentKey ? cfg.data.agents[agentKey] : undefined;
+  // 别名（与主 Agent 共用同一目录的 Agent）没有独立的期望集：
+  // 目录只有一份实体，期望集只能由主 Agent 的策略推导，否则两边会互相覆盖。
+  const ov = agentKey ? cfg.data.agents[effectiveAgentKey(cfg.data, agentKey)] : undefined;
   const onIds = ov?.explicitOn ?? [];
   const offIds = new Set(ov?.explicitOff ?? []);
   const offNames = new Set([...offIds].map(nameOf));
@@ -110,9 +112,12 @@ export function desiredNamesFor(cfg: ConfigStore, allSkills: Skill[], agentKey: 
   return new Set([...computeDesired(cfg, allSkills, agentKey).values()].map((s) => s.name));
 }
 
-/** 每条 (skill, Agent) 关系的同步策略：关系覆盖 > agent 覆盖 > 全局默认（SY-01） */
+/**
+ * 每条 (skill, Agent) 关系的同步策略：关系覆盖 > agent 覆盖 > 全局默认（SY-01）。
+ * 别名沿用主 Agent 的设置——目录只有一份，同一个技能不可能对它同时软链又复制。
+ */
 export function resolveSyncMode(cfg: ConfigStore, agentKey: string, skillName: string): 'symlink' | 'copy' {
-  const ov = cfg.data.agents[agentKey];
+  const ov = cfg.data.agents[effectiveAgentKey(cfg.data, agentKey)];
   return ov?.skillSync?.[skillName] ?? ov?.sync ?? cfg.data.defaultSync;
 }
 
@@ -202,9 +207,18 @@ export function deployAgent(cfg: ConfigStore, agentKey: string, desired: Map<str
   return result;
 }
 
-/** 触发式同步：将指定（默认活跃）agent 各按自身期望 skill 集合对账落盘 */
+/**
+ * 触发式同步：将指定（默认活跃）agent 各按自身期望 skill 集合对账落盘。
+ *
+ * 同一目录只部署一次：目标先折算到该目录的主 Agent 再去重。别名与主 Agent 共用同一
+ * 个目录，若各自部署，两套期望集会在同一个目录里互相删除（后同步者获胜），
+ * 因此别名不参与部署，只共享主 Agent 的策略与结果。
+ */
 export function syncActive(cfg: ConfigStore, allSkills: Skill[], only?: string[], reason: string = 'manual'): SyncResult[] {
-  const targets = only ?? cfg.data.activeAgents;
+  const requested = only ?? cfg.data.activeAgents;
+  const targets = [
+    ...new Set(requested.map((k) => (findAgentDef(cfg.data, k) ? effectiveAgentKey(cfg.data, k) : k))),
+  ];
   const results = targets.map((k) => deployAgent(cfg, k, computeDesired(cfg, allSkills, k), allSkills));
   const created = results.reduce((n, r) => n + r.created.length, 0);
   const removed = results.reduce((n, r) => n + r.removed.length, 0);
@@ -212,7 +226,7 @@ export function syncActive(cfg: ConfigStore, allSkills: Skill[], only?: string[]
   const warnings = results.flatMap((r) => r.warnings ?? []);
   if (targets.length > 0) {
     log.info('sync', `同步完成（触发：${reason}）`, {
-      agents: targets.length, created, removed,
+      agents: targets.length, aliasesMerged: requested.length - targets.length, created, removed,
       failed: failed.length, warnings: warnings.length,
       failedDetail: failed.length ? failed : undefined,
     });
@@ -237,7 +251,9 @@ export interface SyncDiff {
  */
 export function diffSync(cfg: ConfigStore, allSkills: Skill[]): SyncDiff[] {
   const out: SyncDiff[] = [];
-  for (const key of cfg.data.activeAgents) {
+  // 同目录只看主 Agent：别名与它共用一份目录，重复比对会得出同一结论
+  const keys = [...new Set(cfg.data.activeAgents.map((k) => effectiveAgentKey(cfg.data, k)))];
+  for (const key of keys) {
     const def = findAgentDef(cfg.data, key);
     if (!def) continue;
     const dir = resolveGlobalDir(def, cfg.data.agents[key]?.globalDir);

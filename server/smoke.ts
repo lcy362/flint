@@ -107,3 +107,40 @@ let projBase = '';
   console.log('\n[preset-tags] 期望集 =', names.sort());
   console.log(names.includes('echarts') ? '✅ preset 标签命中通过' : '❌ preset 标签未生效');
 }
+
+// ---- 批次5: 同目录别名 smoke（一个目录只能有一套策略）----
+{
+  const { listAgents } = await import('./src/core/agents.js');
+  const { desiredContext } = await import('./src/core/sync.js');
+  const sharedDir = path.join(base, 'shared-skills');
+  // cline / warp 内置就共用 ~/.agents/skills，这里用目录覆盖指到同一临时目录来模拟
+  store.data.agents['cline'] = { globalDir: sharedDir, sync: 'symlink', preset: 'demo' };
+  store.data.agents['warp'] = { globalDir: sharedDir, preset: 'solo' }; // 别名自己那套不应生效
+  const lib6 = scanAll(store.data.repos, store.data.foreignSources);
+  const gamma = lib6.skills.find((s) => s.name === 'gamma');
+  presets.create(store, 'solo');
+  presets.update(store, 'solo', { skills: [gamma?.id ?? ''] });
+  active.set(store, ['cline', 'warp']);
+  store.save();
+
+  const views = listAgents(store.data);
+  const cline = views.find((a) => a.key === 'cline');
+  const warp = views.find((a) => a.key === 'warp');
+  const ran = syncActive(store, lib6.skills, undefined, 'smoke');
+  const deployed = fs.existsSync(sharedDir)
+    ? fs.readdirSync(sharedDir).filter((n) => !n.startsWith('.')).sort()
+    : [];
+  const aliasSync = syncActive(store, lib6.skills, ['warp'], 'smoke')[0];
+  const aliasPreset = desiredContext(store, lib6.skills, 'warp').preset;
+  console.log('\n[alias] warp.primaryKey =', warp?.primaryKey, '| warp 生效预设 =', warp?.preset, '| cline 的别名 =', cline?.sharedWith);
+  console.log('[alias] 活跃两个只部署 =', ran.length, '次 | 目录内容 =', deployed, '| 同步别名落到 =', aliasSync?.agent, '| 别名期望预设 =', aliasPreset);
+  const ok =
+    warp?.primaryKey === 'cline' &&
+    warp?.preset === 'demo' &&
+    ran.length === 1 &&
+    aliasSync?.agent === 'cline' &&
+    aliasPreset === 'demo' &&
+    deployed.includes('alpha') &&
+    !deployed.includes('gamma');
+  console.log(ok ? '✅ 同目录别名通过（只有主 Agent 部署，别名沿用其策略）' : '❌ 同目录别名失败');
+}

@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { HubConfig, CustomAgent } from '../config/types.js';
+import { HubConfig, CustomAgent, AgentOverride } from '../config/types.js';
 import type { Skill } from './skill.js';
 import { readSkill } from './skill.js';
 import type { DesiredContext } from './sync.js';
@@ -169,6 +169,15 @@ export interface AgentView extends AgentDef {
   sync: string;
   active: boolean;
   layers?: string[];
+  /**
+   * 同一技能目录的主 Agent key（自身即主 Agent 时与 key 相同）。
+   *
+   * 目录只有一份实体，而预设 / 安装方式 / 显式开关都是按 Agent 存的，同目录的多个
+   * Agent 不可能各自生效：同步按 Agent 逐个对账落盘，会互相覆盖。因此每个目录固定
+   * 选一个主 Agent 作为该目录策略的唯一落点，其余 Agent 视为它的「别名」——
+   * 只说明它们走的是同一个路径，策略读取与写入都以主 Agent 为准。
+   */
+  primaryKey: string;
   /** 与哪些 agent 解析到同一目录（自动比对，AG-02） */
   sharedWith: string[];
   /** 文档化跨产品复用 */
@@ -183,6 +192,40 @@ export interface AgentView extends AgentDef {
   /** 手动开启的 skill id */
   explicitOn?: string[];
   explicitOff?: string[];
+}
+
+/**
+ * 同一技能目录的主 Agent 挑选规则：活跃优先（只有活跃的会被自动同步，其策略才是
+ * 实际持续生效的那套），其次按名称稳定排序。前端卡片、同步目标、策略读写共用它。
+ */
+export function primaryOf(members: { key: string; name: string; active: boolean }[]): string {
+  return [...members].sort(
+    (a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)
+  )[0].key;
+}
+
+/** 某 Agent 所在目录的全部成员（含自身）；未登记的 key 返回空 */
+function dirMembers(cfg: HubConfig, key: string): { key: string; name: string; active: boolean }[] {
+  const def = findAgentDef(cfg, key);
+  if (!def) return [];
+  const dir = resolveGlobalDir(def, cfg.agents[key]?.globalDir);
+  return allAgentDefs(cfg)
+    .map((d) => ({
+      key: d.key,
+      name: d.name,
+      active: cfg.activeAgents.includes(d.key),
+      dir: resolveGlobalDir(d, cfg.agents[d.key]?.globalDir),
+    }))
+    .filter((m) => m.dir === dir);
+}
+
+/**
+ * 某 Agent 的分发策略落点 = 所在目录的主 Agent。
+ * 别名（非主 Agent）自己那份预设 / 安装方式 / 显式开关不生效，读写一律走这里。
+ */
+export function effectiveAgentKey(cfg: HubConfig, key: string): string {
+  const members = dirMembers(cfg, key);
+  return members.length > 0 ? primaryOf(members) : key;
 }
 
 export function listAgents(cfg: HubConfig): AgentView[] {
@@ -200,13 +243,14 @@ export function listAgents(cfg: HubConfig): AgentView[] {
       active,
       layers: def.shared ? [def.shared] : undefined,
       sharedWith: [],
+      primaryKey: def.key,
       ...(ov?.preset ? { preset: ov.preset } : {}),
       ...(ov?.skillSync ? { skillSync: ov.skillSync } : {}),
       ...(ov?.explicitOn ? { explicitOn: ov.explicitOn } : {}),
       ...(ov?.explicitOff ? { explicitOff: ov.explicitOff } : {}),
     };
   });
-  // 按解析后的 globalDir 分组，同目录者互为 sharedWith（AG-02）
+  // 按解析后的 globalDir 分组：同目录者互为 sharedWith，并统一指向该目录的主 Agent
   const byDir = new Map<string, AgentView[]>();
   for (const v of views) {
     const arr = byDir.get(v.globalDir) ?? [];
@@ -214,9 +258,26 @@ export function listAgents(cfg: HubConfig): AgentView[] {
     byDir.set(v.globalDir, arr);
   }
   for (const v of views) {
-    v.sharedWith = (byDir.get(v.globalDir) ?? []).filter((o) => o.key !== v.key).map((o) => o.name);
+    const members = byDir.get(v.globalDir) ?? [];
+    v.sharedWith = members.filter((o) => o.key !== v.key).map((o) => o.name);
+    v.primaryKey = primaryOf(members);
+  }
+  // 策略展示以生效者为准：别名沿用主 Agent 的预设 / 安装方式 / 显式开关
+  for (const v of views) {
+    if (v.primaryKey === v.key) continue;
+    const ov = cfg.agents[v.primaryKey];
+    v.sync = ov?.sync ?? cfg.defaultSync;
+    applyStrategyOverrides(v, ov);
   }
   return views.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || (b.installed ? 1 : 0) - (a.installed ? 1 : 0));
+}
+
+/** 把「策略类」覆盖项搬到 view 上（目录类覆盖 globalDir / projectDir 不在此列，它属于 Agent 自身） */
+function applyStrategyOverrides(view: AgentView, ov: AgentOverride | undefined): void {
+  if (ov?.preset) view.preset = ov.preset; else delete view.preset;
+  if (ov?.skillSync) view.skillSync = ov.skillSync; else delete view.skillSync;
+  if (ov?.explicitOn) view.explicitOn = ov.explicitOn; else delete view.explicitOn;
+  if (ov?.explicitOff) view.explicitOff = ov.explicitOff; else delete view.explicitOff;
 }
 
 export interface AgentSkillRow {

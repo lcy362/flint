@@ -28,7 +28,7 @@
 | **EK-03 收编第三方仓库** | 已由仓库级导入取代：自有仓库「导入」指向第三方库目录即完成拷贝（第三方库无需先登记） | `core/import.ts`、`/import`（repoId） |
 | **SR-04 auto 布局** | 登记默认 auto，扫描期自动检测 | `core/scanner.ts` |
 | **AG-01 清单补齐** | 补 `antigravity`/`omp_agent`/`pi`/`deepseek_harness`/`zencoder`/`zcode`/`autoclaw` + 20 个长尾，共 55 个 | `core/agents.ts` |
-| **AG-02 家族/共享目录标注** | 卡片与详情页展示家族、共享目录、亦被谁读取 | `core/agents.ts`、`views/Agents.tsx` |
+| **AG-02 同目录归并** | 一个实际技能目录一张卡片：主 Agent 作代表（策略唯一落点），其余以「别名」列出、详情页互相跳转；亦被谁读取在详情页说明 | `core/agents.ts`、`views/Agents.tsx` |
 
 内置 agent key 已对齐 PRD 命名（`claude_code`/`trae_cn`/`qwen_code`/`kilo_code`/`roo_code`/`gemini_cli`），旧配置在 `ConfigStore` 加载时自动迁移。
 

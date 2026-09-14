@@ -82,6 +82,12 @@
 - **佐证**：`touch()` 只对 `activeAgents` 成员触发；Agent 详情页「立即生效」。
 - **约束**：任何自动同步逻辑的作用域都必须是 activeAgents，不得静默扩散到全部 Agent。
 
+### C18. 一个目录只有一套策略，主 Agent 生效（AG-02）
+- **含义**：多个 Agent 解析到同一个全局技能目录时（Cline / Warp 共用 `~/.agents/skills`，Amp / Replit 共用 `~/.config/agents/skills`），该目录固定选出一个**主 Agent**（活跃优先，其次名称序）作为预设 / 安装方式 / 显式开关的唯一落点；其余 Agent 是它的**别名**，只说明「走同一个路径」，不持有各自生效的策略。
+- **为什么**：目录只有一份实体，而策略是按 Agent 存的。同步按 Agent 逐个对账落盘，两套期望集会在同一目录里互相删除（后同步者获胜），所以"同目录各配各的"实质无法生效。
+- **佐证**：`core/agents.ts` 的 `primaryOf` / `effectiveAgentKey`（下发给前端的 `AgentView.primaryKey`）；`core/sync.ts` 的 `desiredContext` / `resolveSyncMode` 折算到主 Agent、`syncActive` / `diffSync` 按目录去重；`PUT /agents/:key` 把策略写到主 Agent（目录类覆盖 `globalDir` / `projectDir` 仍写该 Agent 自己）。
+- **约束**：新增任何「按 Agent 存」的分发策略前先问一句"同目录的另一个 Agent 是否也读它"；会读就必须落到主 Agent，不得为别名保存独立策略。展示层同理：卡片与详情页只展示主 Agent 的生效值，别名另行标注身份即可。
+
 ### C13. 只读尊重，不侵入外部数据
 - **含义**：只读关联的外部来源（foreignSources.linked=true）只读不写；Agent 目录里「自带」技能不被本工具擅自改动；删除操作限定在「非期望」状态（残留/已停用）。
 - **佐证**：`DELETE /agents/:key/skills/:name` 校验 `wanted` 才拒删；scanner 对失效软链只跳过不修复。

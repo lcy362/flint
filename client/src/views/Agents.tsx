@@ -15,11 +15,9 @@ import { FieldInput, FieldSelect } from '../components/ui/Field';
 import { PathField } from '../components/ui/PathField';
 import Tag from '../components/ui/Tag';
 import BadgeLegend from '../components/agent/BadgeLegend';
-import { groupAgentsByDir, settingsDiffer } from '../components/agent/agentGroups';
+import { groupAgentsByDir } from '../components/agent/agentGroups';
 import {
   activeBadge,
-  activeCountBadge,
-  conflictBadge,
   familyBadge,
   notInstalledBadge,
   presetBadge,
@@ -67,20 +65,19 @@ export default function Agents() {
       title: primary.name,
       sub: <span className="mono">{primary.key}</span>,
       desc: <span className="mono">{g.dir}</span>,
-      status: activeCountBadge({ activeCount: g.activeCount, total: g.agents.length }),
-      // 分发策略取主 Agent：同目录只能落一份，别名各自的设置各不相同也无法同时生效
+      status: activeBadge(primary),
+      // 分发策略展示主 Agent 的生效值：目录只有一份，策略也只有一套
       badges: (
         <>
           {syncBadge(primary.sync)}
           {presetBadge(primary.preset ?? null)}
-          {g.conflicts.length > 0 && conflictBadge(g.conflicts.map((a) => a.name))}
           {!g.installed && notInstalledBadge()}
         </>
       ),
       // 别名只说明「与主 Agent 走同一个路径」，点进去仍是各自那个 Agent
       tags: g.aliases.map((a) => ({ label: `别名 ${a.name}`, onClick: () => openAgent(a.key) })),
       onClick: () => openAgent(primary.key),
-      muted: g.activeCount === 0,
+      muted: !primary.active,
     };
   });
 
@@ -219,8 +216,9 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
   const managed = (data?.skills ?? []).filter((s) => s.state === 'on');
 
-  // 同目录的其它 Agent 若与本 Agent 分发策略不同，两者不可能各自生效（目录只有一份）
-  const conflicts = siblings.filter((o) => settingsDiffer(o, agent));
+  // 别名（不是本目录主 Agent）：目录只有一份，预设 / 安装方式都落在主 Agent 上
+  const isAlias = agent.key !== agent.primaryKey;
+  const primaryAgent = siblings.find((o) => o.key === agent.primaryKey);
 
   const failedItems: EntityItem[] = (lastSync?.failed ?? []).map((f) => ({
     id: f.skill,
@@ -274,18 +272,20 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         </div>
       )}
 
-      {conflicts.length > 0 && (
+      {isAlias && (
         <div className="notice">
-          <span className="notice__title">同一目录下的分发策略不一致</span>
+          <span className="notice__title">它是主 Agent「{primaryAgent?.name ?? agent.primaryKey}」的别名</span>
           <span className="notice__body">
-            这个 Agent 与 {conflicts.map((o) => o.name).join('、')} 指向同一个技能目录，但预设 / 安装方式不同。
-            目录只有一份，两套策略会互相覆盖（实际以最后同步者为准）。建议让它们保持一致，或只保留一个活跃。
+            两者指向同一个技能目录，目录只有一份实体，预设 / 安装方式也只有一套（以主 Agent 为准）。
+            在这里改策略等同改主 Agent，两边看到的始终一致。
           </span>
         </div>
       )}
 
       <div className="panel">
-        <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>分发策略</div>
+        <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>
+          分发策略{isAlias ? `（作用于主 Agent ${primaryAgent?.name ?? agent.primaryKey}）` : ''}
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--sp-3)' }}>
           <FieldSelect
             label="关联预设"
