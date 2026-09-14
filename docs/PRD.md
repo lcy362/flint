@@ -46,7 +46,7 @@ Skills Hub 用一个本地优先的 Web 应用解决它：以文件系统为唯�
 | **自有仓库（Repository）** | 集中存放 skill 本体的目录，**非隐藏、路径可配置**，可脱离本工具独立编辑 / git 管理。可配置多个。 |
 | **第三方仓库（External Source）** | 外部 / 上游的开放内容库：登记后可只读关联（`linked=true`）纳入发现，不拷贝本体、不写其文件。 |
 | **来源（Source）** | skill 的来源命名空间：某仓库 / 第三方仓库的 id。用于区分重名 skill。 |
-| **Agent** | 本机某个编码工具，有全局技能目录（可选项目级目录）。内置 58 个 + 用户自定义。 |
+| **Agent** | 本机某个编码工具，有全局技能目录（可选项目级目录）。内置 59 个 + 用户自定义。 |
 | **活跃 Agent（activeAgents）** | 用户选定的"实时同步作用域"集合。结构性变更会自动同步到集合内成员的目录。 |
 | **主 Agent（primary）** | 当多个 Agent 解析到**同一个技能目录**时，该目录的分发策略唯一落点（目录只有一份实体，策略只能存一份）。 |
 | **Preset（预设）** | 一组命名的 skill 集合 = 显式成员 ∪ 关联标签命中。预设即决策，**无独立启用开关**。 |
@@ -74,7 +74,7 @@ Skills Hub 用一个本地优先的 Web 应用解决它：以文件系统为唯�
 
 ### 5.2 Agent 管理（AG）
 
-- **AG-01 覆盖生态**：内置 58 个 Agent（清单见 §5.2.1），并对**共享标准目录**（Agent Skills 开放标准 `~/.agents/skills`、`~/.config/agents/skills`）做归并标注。
+- **AG-01 覆盖生态**：内置 59 个 Agent（清单见 §5.2.1），并对**共享标准目录**（Agent Skills 开放标准 `~/.agents/skills`、`~/.config/agents/skills`）做归并标注。
 - **AG-02 同目录归并 + 主 Agent**：多个 Agent 解析到同一技能目录时，UI 合成一张卡片（标题罗列全部 Agent），并明确它们**共用同一套策略**。该目录固定选一个**主 Agent** 作为策略唯一落点：显式指定优先，否则"活跃优先、其次名称序"自动判定。同目录其它 Agent 的无效策略会被自动清理。
 - **AG-03 自定义 Agent**：可新增任意名称 + 全局目录（+ 可选项目目录、递归扫描开关），并支持删除。
 - **AG-04 路径覆盖**：每个 Agent 的全局目录、项目级目录均可覆盖；覆盖后视为"已安装可用"。
@@ -116,6 +116,7 @@ Skills Hub 用一个本地优先的 Web 应用解决它：以文件系统为唯�
 | qwen_code | Qwen Code | `~/.qwen/skills` | — | Qoder / 千问系列 |
 | qoderwork | QoderWork | `~/.qoderwork/skills` | `.qoderwork/skills` | Qoder / 千问系列 |
 | qoderworkcn | QoderWork CN | `~/.qoderworkcn/skills` | `.qoderworkcn/skills` | Qoder / 千问系列 |
+| qwenworkcn | 千问办公 | `~/.qwenworkcn/skills` | — | Qoder / 千问系列 |
 | codebuddy | CodeBuddy | `~/.codebuddy/skills` | `.codebuddy/skills` | — |
 | zencoder | Zencoder | `~/.zencoder/skills` | — | — |
 | zcode | ZCode | `~/.zcode/skills` | `.zcode/skills` | — |

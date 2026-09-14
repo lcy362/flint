@@ -58,6 +58,7 @@ export const builtinAgents: AgentDef[] = [
   { key: 'qwen_code', name: 'Qwen Code', global: '.qwen/skills', category: 'coding', family: 'Qoder' },
   { key: 'qoderwork', name: 'QoderWork', global: '.qoderwork/skills', project: '.qoderwork/skills', category: 'coding', family: 'Qoder' },
   { key: 'qoderworkcn', name: 'QoderWork CN', global: '.qoderworkcn/skills', project: '.qoderworkcn/skills', category: 'coding', family: 'Qoder' },
+  { key: 'qwenworkcn', name: '千问办公', global: '.qwenworkcn/skills', category: 'coding', family: 'Qoder' },
   { key: 'codebuddy', name: 'CodeBuddy', global: '.codebuddy/skills', project: '.codebuddy/skills', category: 'coding' },
   { key: 'zencoder', name: 'Zencoder', global: '.zencoder/skills', category: 'coding' },
   { key: 'zcode', name: 'ZCode', global: '.zcode/skills', project: '.zcode/skills', category: 'coding' },
