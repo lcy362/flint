@@ -11,7 +11,7 @@ import { log } from '../infra/logger.js';
 export type DiagStatus = 'ok' | 'warn' | 'error';
 
 export type DiagDimension =
-  | 'agent' | 'sync' | 'dup' | 'durability'
+  | 'sync' | 'dup' | 'durability'
   | 'config' | 'repo' | 'project';
 
 export interface DiagItem {
@@ -23,7 +23,6 @@ export interface DiagItem {
 }
 
 export interface DiagGroups {
-  agent: DiagItem[];
   sync: DiagItem[];
   dup: DiagItem[];
   durability: DiagItem[];
@@ -47,11 +46,20 @@ interface Deps {
   desired: Map<string, Skill>;
 }
 
-const DIMS: DiagDimension[] = ['agent', 'sync', 'dup', 'durability', 'config', 'repo', 'project'];
+const DIMS: DiagDimension[] = ['sync', 'dup', 'durability', 'config', 'repo', 'project'];
 
-/** 纯只读体检，覆盖 7 维度：config/repo/project/agent/sync/durability/dup */
+/**
+ * 纯只读体检，覆盖 6 维度：sync / dup / durability / config / repo / project。
+ *
+ * 不含「Agent」维度：Agent 侧没有能独立成立的健康问题——
+ * 已登记 Agent 只是「登记了什么」的罗列，不是问题；
+ * 「活跃但目录未安装」会由 deployAgent 自动 mkdir 补齐（任何结构性变更都会重跑全部活跃 Agent），
+ * 且已由 sync 维度逐个比对报为「缺 N」并能就地修复；
+ * 「主 Agent 指定失效」则由 dirMembers 按目录过滤成员兜住，不会真的坏。
+ * 因此不再单列一个只会产出 OK 的分组。
+ */
 export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
-  const groups: DiagGroups = { agent: [], sync: [], dup: [], durability: [], config: [], repo: [], project: [] };
+  const groups: DiagGroups = { sync: [], dup: [], durability: [], config: [], repo: [], project: [] };
   const items: DiagItem[] = [];
 
   // ---- config 配置解析 ----
@@ -86,26 +94,10 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
     groups.project.push({ key: `project:${home}`, status: fs.existsSync(ag) ? 'ok' : 'warn', message: `项目 ${home}（已登记，未生成 .agents/skills）` });
   }
 
-  // ---- agent 列表 ----
+  // ---- 活跃集合 ----
+  // 仅作为下面 durability 扫描的作用域依据（失效软链只关心活跃 Agent 的目录），
+  // 不再单独产出诊断项：见函数头注释。
   const active = new Set(cfg.data.activeAgents);
-  for (const a of listAgents(cfg.data)) {
-    if (!a.installed) continue;
-    const isActive = active.has(a.key);
-    // 共用同一目录的 Agent：策略只有一套，说明它跟随谁
-    const shared = a.primaryKey !== a.key ? ` · 与 ${a.primaryKey} 同一目录，策略随它` : '';
-    // 「是否加入活跃集合」不是健康问题：未加入只是不自动跟随变更、等手动操作即时生效。
-    // 判成 warn 等于把「用户没勾选」误报成待处理异常，因此这里只作中性信息陈列。
-    const activeNote = isActive ? '' : ' · 未加入活跃集合';
-    groups.agent.push({
-      key: `agent:${a.key}`,
-      status: 'ok',
-      message: `${a.name}: ${a.globalDir} (${a.sync})${activeNote}${shared}`,
-    });
-  }
-  for (const k of cfg.data.activeAgents) {
-    const a = listAgents(cfg.data).find((x) => x.key === k);
-    if (a && !a.installed) groups.agent.push({ key: `agent:${k}`, status: 'warn', message: `活跃 agent ${k} 目录未安装` });
-  }
 
   // ---- sync 是否已同步（只读比对） ----
   const diffs = diffSync(cfg, deps.lib.skills);

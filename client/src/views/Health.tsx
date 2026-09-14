@@ -15,14 +15,13 @@ import { useToast } from '../components/ui/Toast';
  * 复数形态一并保留，兼容历史结果的键名。
  */
 const KEY_LABEL: Record<string, string> = {
-  agent: '智能体',
   sync: '同步',
   dup: '重复技能',
   durability: '失效软链',
   config: '配置',
   repo: '仓库',
   project: '项目',
-  agents: '智能体', repos: '仓库', skills: '技能', presets: '预设',
+  repos: '仓库', skills: '技能', presets: '预设',
   projects: '项目', sources: '来源',
 };
 
