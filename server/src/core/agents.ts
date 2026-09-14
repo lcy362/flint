@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { HubConfig, CustomAgent, AgentOverride } from '../config/types.js';
+import { HubConfig, CustomAgent, AgentOverride, Repo } from '../config/types.js';
 import type { Skill } from './skill.js';
 import { readSkill } from './skill.js';
 import type { DesiredContext } from './sync.js';
@@ -134,9 +134,14 @@ export function expandTilde(p: string): string {
   return p.startsWith('~/') || p === '~' ? path.join(os.homedir(), p.slice(2)) : p;
 }
 
-/** 自有仓库的 skill 根目录（与 scanner.scanRepo 的换算保持一致） */
+/** 单个自有仓库的 skill 根目录（与 scanner.scanRepo 的换算保持一致） */
+export function repoSkillRoot(repo: Repo): string {
+  return repo.root ? expandTilde(repo.root) : path.join(expandTilde(repo.path), 'skills');
+}
+
+/** 全部自有仓库的 skill 根目录 */
 function repoSkillRoots(cfg: HubConfig): string[] {
-  return cfg.repos.map((r) => (r.root ? expandTilde(r.root) : path.join(expandTilde(r.path), 'skills')));
+  return cfg.repos.map(repoSkillRoot);
 }
 
 /** 解析真实路径；目标不存在时退回字面绝对路径 */
@@ -148,22 +153,31 @@ function realOrResolve(p: string): string {
   }
 }
 
-/**
- * 判断软链目标是否由本工具部署（落在某个自有仓库的 skill 根之下）。
- *
- * 这条判断同时服务两件事：
- * - 展示：区分「本工具分发的软链」与「外部工具 / 手工创建的软链」，后者不该被标成"预设引入"；
- * - 安全：同步的清理阶段只回收本工具自己部署的软链，绝不误删外部软链。
- */
-export function isManagedLinkTarget(cfg: HubConfig, target: string | undefined, baseDir?: string): boolean {
+/** 目标（可能是相对路径）是否落在某个根目录之下 */
+function underRoot(root: string, target: string | undefined, baseDir?: string): boolean {
   if (!target) return false;
   // readlink 可能给出相对路径，需相对软链所在目录解析
   const link = path.isAbsolute(target) ? target : path.resolve(baseDir ?? process.cwd(), target);
   const abs = realOrResolve(link);
-  return repoSkillRoots(cfg).some((root) => {
-    const r = realOrResolve(root);
-    return abs === r || abs.startsWith(r + path.sep);
-  });
+  const r = realOrResolve(root);
+  return abs === r || abs.startsWith(r + path.sep);
+}
+
+/**
+ * 「被接管」的两种口径（同一件事，看问题的角度不同）：
+ * - 系统角度：软链指向**任一**自有仓库内的技能 → 已在本系统管理范围内（下面这个函数）；
+ * - 仓库角度：软链指向**某个具体仓库**内的技能 → 被该仓库接管（`isLinkInRepo`）。
+ * 指向仓库之外的软链两种口径下都**不算接管**，按 agent 自带技能处理（可归集、可接管）。
+ *
+ * 这条判断同时服务展示与安全：同步的清理阶段只回收本工具自己部署的软链，绝不误删外部软链。
+ */
+export function isManagedLinkTarget(cfg: HubConfig, target: string | undefined, baseDir?: string): boolean {
+  return repoSkillRoots(cfg).some((root) => underRoot(root, target, baseDir));
+}
+
+/** 仓库角度：该软链是否指向「指定仓库」内的技能（只有自己仓库过去的软链才算被它接管） */
+export function isLinkInRepo(repo: Repo, target: string | undefined, baseDir?: string): boolean {
+  return underRoot(repoSkillRoot(repo), target, baseDir);
 }
 
 export interface AgentView extends AgentDef {
@@ -378,6 +392,8 @@ export interface AgentSkillRow {
    * - shared：额外读取的共享标准目录，本 Agent 直接可用，但由该目录自己的策略管理（只读）。
    */
   readVia?: 'own' | 'shared';
+  /** 已接管：本目录这条是指向仓库内技能的软链（系统口径：任一自有仓库；指向仓库外的不算） */
+  takenOver?: boolean;
   /** 套餐基准里被显式关闭（offOverride）→ 该行不 wanted，提示"套餐成员·已停用" */
   offOverride?: boolean;
   /** 来源套餐名（reason=preset 时） */
@@ -438,15 +454,18 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
     let store: AgentSkillRow['store'] = 'pending';
     if (present) store = isLinkEnt ? 'symlink' : 'copy';
     const dirPath = present ? path.join(ownDir, skill.name) : undefined;
+    const linkTarget = present && isLinkEnt ? linkTo(dirPath!) : undefined;
     rows.push({
       name: skill.name, title: skill.name, description: skill.description,
       source: 'managed', wanted: true, present, store,
-      linkTarget: present && isLinkEnt ? linkTo(dirPath!) : undefined,
+      linkTarget,
       reason: inBase ? 'preset' : 'manual',
       preset: ctx.presetOf.get(skill.name),
       repo: skill.source, skillId: skill.id,
       dir: dirPath,
       link: present ? isLinkEnt : undefined,
+      // 指向仓库内技能的软链 = 已接管；指向仓库外的不算
+      takenOver: !!linkTarget && isManagedLinkTarget(cfg, linkTarget, ownDir),
       disableVia: inBase && !inOn ? 'off' : 'on',
       fromDir: ownDir, readVia: 'own',
     });
@@ -471,10 +490,14 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
         description: readSkill(p)?.description, // readSkill 顺着软链读到目标
         source: 'managed', wanted: false, present: true, store: 'symlink',
         linkTarget: target,
-        reason: externalLink ? 'external' : 'preset', offOverride, externalLink,
+        // 残留的来源按基准归属判断：来自预设的记 preset，其余（如接管后停用）记 manual，
+        // 不再一律记成「预设引入」——那会让已接管的技能被误标成预设带来的。
+        reason: externalLink ? 'external' : (ctx.baselineNames.has(name) ? 'preset' : 'manual'),
+        offOverride, externalLink,
         preset: ctx.presetOf.get(name),
         skillId: src?.id, repo: src?.source,
         dir: p, link: true, fromDir: ownDir, readVia: 'own',
+        takenOver: !externalLink,
       });
     } else {
       const p = path.join(ownDir, name);
@@ -488,7 +511,8 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
     }
   }
 
-  // 4) 额外读取的共享标准目录：只读展示，本 Agent 的分发策略不管理它们。
+  // 4) 额外读取的共享标准目录：**只做展示**，既不进期望集、也不参与归集 / 接管
+  //    （归集预览只扫自身 globalDir，所以这些条目不会出现在可归集清单里；这里也不给任何操作）。
   //    同名技能以自身目录为准（前面已收录），共享目录只补自身目录没有的。
   const seen = new Set(rows.map((r) => r.name));
   for (const sharedDir of sharedReadDirs(def, ownDir)) {

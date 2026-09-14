@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import { scanDir, detectLayoutAbs } from './scanner.js';
-import { expandTilde } from './agents.js';
+import { expandTilde, repoSkillRoot } from './agents.js';
 
 export interface ImportResult { source: string; imported: string[]; skipped: string[] }
 
@@ -42,7 +42,8 @@ export function importDirs(cfg: ConfigStore, sourceDirs: string[], repoId?: stri
     const res: ImportResult = { source: sd, imported: [], skipped: [] };
     if (!fs.existsSync(abs)) { res.skipped.push(`(路径不存在)`); out.push(res); continue; }
     if (!repo) { res.skipped.push('(无仓库可导入)'); out.push(res); continue; }
-    const skillsRoot = path.join(expandTilde(repo.path), 'skills');
+    // 用统一的仓库 skill 根换算（honors repo.root）：否则自定义 root 的仓库会出现"导入了却扫不到"
+    const skillsRoot = repoSkillRoot(repo);
     fs.mkdirSync(skillsRoot, { recursive: true });
     const found = scanDir(abs, 'import', 'nested');
     for (const s of found) {

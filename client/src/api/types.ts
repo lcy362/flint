@@ -97,6 +97,8 @@ export interface SkillCardView {
   fromDir?: string;
   /** own=本体目录（本工具分发）；shared=额外读取的目录（只读） */
   readVia?: 'own' | 'shared';
+  /** 已接管：本目录这条是指向仓库内技能的软链（系统口径，任一自有仓库；指向仓库外的不算） */
+  takenOver?: boolean;
   /** 客户端派生：直接展示来源目录的徽标文案，仅多目录 Agent 需要 */
   dirLabel?: string;
   dirTitle?: string;

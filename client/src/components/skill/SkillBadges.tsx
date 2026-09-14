@@ -5,15 +5,15 @@ import Badge from '../ui/Badge';
 const REASON_LABEL: Record<SkillReason, string> = {
   own: '自带',
   preset: '预设引入',
-  external: '外部链接',
+  external: '外部软链',
   manual: '',
   shared: '',
 };
 
 const REASON_TITLE: Record<SkillReason, string> = {
-  own: '它是这个目录里本来就有的技能，还没纳入技能库；可执行「收编到仓库」统一管理',
+  own: '它是这个目录里本来就有的技能，还没纳入技能库；可执行「归集到仓库」统一管理',
   preset: '由关联的预设组引入',
-  external: '这个软链由本工具之外的来源创建（目标不在任何已登记仓库内）：本工具既不会分发它，也不会自动清理它',
+  external: '这个软链指向仓库之外（不在任何已登记仓库内），因此不算被接管；按自带技能同样处理：可以归集入库，也可以接管（接管后本目录改为指向仓库副本）',
   manual: '由用户手动加入',
   shared: '它在该 Agent 额外读取的共享标准目录里：放到那里的技能它直接可用，但不由本 Agent 的分发策略管理（只读）',
 };
@@ -54,6 +54,7 @@ export const SKILL_BADGE_LEGEND: BadgeLegendItem[] = [
   { label: STATE_LABEL.off, tone: 'neutral', dot: 'neutral', desc: STATE_TITLE.off },
   { label: STATE_LABEL.unmanaged, tone: 'info', desc: STATE_TITLE.unmanaged },
   { label: '只读', tone: 'info', desc: '来自该 Agent 额外读取的目录：直接可用，但不由本工具分发，这里不能开关。' },
+  { label: '已接管', tone: 'good', desc: '本目录这条是指向仓库内技能的软链：改仓库里那份，这里立刻生效，不再有第二份副本。' },
 ];
 
 /** 开关的选中态：只有「在分发名单内」才算开启 */
@@ -112,6 +113,16 @@ export function dirBadge(item: SkillCardView) {
   );
 }
 
+/** 已接管徽标：本目录这条是指向仓库内技能的软链 */
+export function takenOverBadge(item: SkillCardView) {
+  if (!item.takenOver) return null;
+  return (
+    <Badge tone="good" title="已接管：本目录这条是指向仓库内技能的软链。改仓库里那份，这里立刻生效，不再有第二份副本。">
+      已接管
+    </Badge>
+  );
+}
+
 /** 共享目录里的软链：store 徽标不适用，单独用一个中性「软链」徽标点明形态 */
 export function linkBadge(item: SkillCardView) {
   if (item.reason !== 'shared' || !item.linkTarget) return null;
@@ -127,7 +138,9 @@ export function skillBadges(item: SkillCardView) {
     <>
       {reasonBadge(item)}
       {dirBadge(item)}
-      {storeBadge(item)}
+      {takenOverBadge(item)}
+      {/* 已接管本身就说清了形态，不再重复出「软链」 */}
+      {!item.takenOver && storeBadge(item)}
       {linkBadge(item)}
       {item.preset && <Badge tone="accent">{item.preset}</Badge>}
     </>

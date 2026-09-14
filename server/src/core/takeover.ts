@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
-import { listAgents, expandTilde } from './agents.js';
+import { listAgents, repoSkillRoot } from './agents.js';
 import { symlinkSkill } from './sync.js';
 
 export interface TakeoverResult {
@@ -34,7 +34,7 @@ export function takeover(cfg: ConfigStore, agentKey: string, name: string, repoI
   const repo = repoId ? cfg.data.repos.find((r) => r.id === repoId) : undefined;
   if (repoId && !repo) return { agentKey, name, linked: false, reason: `repo 不存在: ${repoId}` };
 
-  const skillsRoot = path.join(expandTilde(repo?.path ?? a.globalDir), 'skills');
+  const skillsRoot = repo ? repoSkillRoot(repo) : a.globalDir; // 仓库 skill 根（honors repo.root）
   const target = path.join(skillsRoot, name); // 仓库内副本
   const src = path.join(a.globalDir, name);   // agent 目录里的条目
 

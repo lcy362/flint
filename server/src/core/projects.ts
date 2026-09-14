@@ -5,7 +5,7 @@ import { Skill } from './skill.js';
 import { readSkill } from './skill.js';
 import { effectiveTags } from './tags.js';
 import { listAgents, resolveProjectDir, findAgentDef } from './agents.js';
-import { expandTilde } from './agents.js';
+import { expandTilde, repoSkillRoot } from './agents.js';
 import { ProjectLink } from '../config/types.js';
 
 /** 项目技能目录的清单文件名（目录 = INDEX.md，被管理/已安装的 skill 登记于此） */
@@ -295,7 +295,7 @@ export function pushProjectToRepo(
   if (!repo) { res.errors.push('无仓库可回写'); return res; }
   if (!fs.existsSync(agentsRoot)) { res.errors.push('项目尚无 .agents/skills'); return res; }
 
-  const skillsRoot = repo.root ? expandTilde(repo.root) : path.join(expandTilde(repo.path), 'skills');
+  const skillsRoot = repoSkillRoot(repo);
   fs.mkdirSync(skillsRoot, { recursive: true });
   const want = names && names.length ? new Set(names) : undefined;
 

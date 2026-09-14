@@ -309,8 +309,12 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
   );
 
   const agents = data ?? [];
-  /** 可直接调整：已是软链但指向仓库之外，且仓库内已有同名副本 */
-  const adjustable = (it: AgentCollectItem) => it.symlink && !it.inRepo && it.exists;
+  /**
+   * 可接管：本仓库里已有同名副本（exists），且本目录这条还没指向本仓库。
+   * 覆盖两种对象——① agent 自带的真实目录；② 指向仓库之外（或别的仓库）的软链。
+   * 接管后本目录这条统一变成指向本仓库副本的软链。
+   */
+  const adjustable = (it: AgentCollectItem) => !it.inRepo && it.exists;
 
   /** Agent 接管状态：所有 skill 均为指向仓库的软链 = 已接管 */
   const takeoverStatus = (a: AgentCollectPreview): { tone: 'good' | 'accent' | 'neutral'; label: string } => {
@@ -589,7 +593,7 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
               <>
                 {st.label === '未接管' && (
                   <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
-                    未接管：归集入库后可执行「接管」，把本目录替换为指向仓库的软链
+                    未接管：本目录的条目还是实体目录 / 指向仓库外的软链；仓库里已有同名副本时，可对它执行「接管」，把本目录换成指向仓库副本的软链
                   </span>
                 )}
                 {a.items.length > 0 && (
@@ -623,7 +627,9 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
                   size="sm"
                   loading={adjusting === `${a.agentKey}:${it.name}`}
                   onClick={() => adjust(a.agentKey, it.name)}
-                  title="接管：这条软链当前指向仓库之外，而仓库内已有同名副本；接管后本目录改指仓库副本（外部原目录不受影响，原链接不再保留）"
+                  title={it.symlink
+                    ? '接管：这条软链当前指向仓库之外，接管后改指仓库副本（它指向的外部目录不受影响，原链接不再保留）'
+                    : '接管：本目录这条真实技能目录会被替换为指向仓库副本的软链；如果本目录这版有改动，请先勾选它做「归集」'}
                 >
                   接管
                 </Button>

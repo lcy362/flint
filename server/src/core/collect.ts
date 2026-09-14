@@ -3,7 +3,7 @@ import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import { Repo } from '../config/types.js';
 import { scanDir } from './scanner.js';
-import { listAgents, expandTilde } from './agents.js';
+import { listAgents, repoSkillRoot, isLinkInRepo } from './agents.js';
 
 export interface AgentCollectItem {
   name: string;
@@ -28,16 +28,15 @@ export interface AgentCollectPreview {
 }
 export interface CollectResult { collected: string[]; skipped: string[] }
 
-function skillsRootOf(repo: Repo): string {
-  return repo.root ? expandTilde(repo.root) : path.join(expandTilde(repo.path), 'skills');
-}
-
 /**
  * 预览：列出所有「已安装」agent 目录内的 skill，标注是否已存在于目标仓库，
  * 并区分本体是真实目录还是软链（含指向）。仅扫描，绝不写盘、不动 agent。
+ *
+ * `inRepo` 是**仓库口径**的「被本仓库接管」：只有指向「这个仓库」的软链才算；
+ * 指向别的仓库或仓库之外的软链都不算（后者按 agent 自带技能处理，可归集、可接管）。
  */
 export function previewCollect(cfg: ConfigStore, repo: Repo): AgentCollectPreview[] {
-  const root = skillsRootOf(repo);
+  const root = repoSkillRoot(repo);
   const out: AgentCollectPreview[] = [];
   for (const a of listAgents(cfg.data)) {
     if (!a.installed) continue;
@@ -46,18 +45,14 @@ export function previewCollect(cfg: ConfigStore, repo: Repo): AgentCollectPrevie
       const st = fs.lstatSync(s.dir, { throwIfNoEntry: false });
       const symlink = st?.isSymbolicLink() ?? false;
       let linkTarget: string | undefined;
-      let inRepo: boolean | undefined;
       if (symlink) {
-        try {
-          linkTarget = fs.realpathSync(s.dir);
-          // macOS 下 /tmp 是 /private/tmp 的软链，root 与 realpath 结果必须同口径比较
-          const realRoot = fs.realpathSync(root);
-          inRepo = linkTarget === realRoot || linkTarget.startsWith(realRoot + path.sep);
-        } catch {
+        try { linkTarget = fs.realpathSync(s.dir); }
+        catch {
           // 悬空软链：realpath 失败，退回 readlink 原始值供展示
           try { linkTarget = fs.readlinkSync(s.dir); } catch { /* ignore */ }
         }
       }
+      const inRepo = symlink ? isLinkInRepo(repo, linkTarget, path.dirname(s.dir)) : undefined;
       return {
         name: s.name,
         dir: s.dir,
@@ -84,7 +79,7 @@ export function collectAgentSkill(cfg: ConfigStore, repo: Repo, agentKey: string
   const a = listAgents(cfg.data).find((x) => x.key === agentKey);
   const res: CollectResult = { collected: [], skipped: [] };
   if (!a?.installed) { res.skipped.push(`(agent 未安装: ${agentKey})`); return res; }
-  const skillsRoot = skillsRootOf(repo);
+  const skillsRoot = repoSkillRoot(repo);
   fs.mkdirSync(skillsRoot, { recursive: true });
   const found = scanDir(a.globalDir, `agent:${a.key}`, 'nested');
   const want = names && names.length ? found.filter((s) => names.includes(s.name)) : found;

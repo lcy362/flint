@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import type { Skill } from './skill.js';
-import { expandTilde } from './agents.js';
+import { expandTilde, repoSkillRoot } from './agents.js';
 
 /**
  * 合并仲裁（IM-02）：同名 skill 多来源重合时，由用户裁决保留哪个来源。
@@ -15,7 +15,7 @@ export function mergeSkill(cfg: ConfigStore, allSkills: Skill[], name: string, k
   if (!winner) throw new Error(`skill 不存在: ${name}`);
   const primary = cfg.data.repos[0];
   if (primary && !cfg.data.repos.some((r) => r.id === winner.source)) {
-    const skillsRoot = primary.root ? expandTilde(primary.root) : path.join(expandTilde(primary.path), 'skills');
+    const skillsRoot = repoSkillRoot(primary);
     const dest = path.join(skillsRoot, name);
     if (!fs.existsSync(dest)) {
       fs.mkdirSync(path.dirname(dest), { recursive: true });

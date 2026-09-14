@@ -26,6 +26,8 @@ export interface SkillCardView {
   fromDir?: string;
   /** own=自身目录（本工具分发）；shared=额外读取的共享标准目录（只读） */
   readVia?: 'own' | 'shared';
+  /** 已接管：本目录这条是指向仓库内技能的软链（系统口径，任一自有仓库；指向仓库外的不算） */
+  takenOver?: boolean;
 }
 
 interface CommonRow { wanted: boolean; present: boolean; store: SkillStore; reason: SkillReason; offOverride?: boolean }
@@ -83,7 +85,7 @@ export function agentCard(row: AgentSkillRow): SkillCardView {
     store: (reason === 'external' || reason === 'shared') ? 'own' : row.store,
     state: stateOf(r),
     offOverride: row.offOverride, linkTarget: row.linkTarget, preset: row.preset,
-    fromDir: row.fromDir, readVia: row.readVia,
+    fromDir: row.fromDir, readVia: row.readVia, takenOver: row.takenOver,
     actions: acts(r, 'agent'),
   };
 }
