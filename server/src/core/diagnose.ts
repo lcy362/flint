@@ -93,10 +93,13 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
     const isActive = active.has(a.key);
     // 共用同一目录的 Agent：策略只有一套，说明它跟随谁
     const shared = a.primaryKey !== a.key ? ` · 与 ${a.primaryKey} 同一目录，策略随它` : '';
+    // 「是否加入活跃集合」不是健康问题：未加入只是不自动跟随变更、等手动操作即时生效。
+    // 判成 warn 等于把「用户没勾选」误报成待处理异常，因此这里只作中性信息陈列。
+    const activeNote = isActive ? '' : ' · 未加入活跃集合';
     groups.agent.push({
       key: `agent:${a.key}`,
-      status: isActive ? 'ok' : 'warn',
-      message: `${a.name}: ${a.globalDir} (${a.sync})${isActive ? '' : ' 未设为活跃'}${shared}`,
+      status: 'ok',
+      message: `${a.name}: ${a.globalDir} (${a.sync})${activeNote}${shared}`,
     });
   }
   for (const k of cfg.data.activeAgents) {
