@@ -373,17 +373,15 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   const enabledViaPreset = enabledRows.filter((s) => s.state === 'on' && s.reason === 'preset').length;
   const enabledDirect = enabledRows.filter((s) => s.state === 'on' && s.reason === 'manual').length;
 
-  // 多目录 Agent：给每行技能补上「来自哪个目录」的目录徽标（单目录时无需展示，避免噪音）
+  // 多目录 Agent：给每行技能补上「来自哪个目录」的徽标，直接显示目录本身（单目录时无需展示，避免噪音）
   const sharedDir = agent.sharedDir && agent.sharedDir !== agent.globalDir ? agent.sharedDir : undefined;
+  // 目录展示：home 前缀压成 ~，更短好读；拿不到 home 就原样展示绝对路径
+  const shortDir = (p: string): string => (state?.home && p.startsWith(`${state.home}/`) ? `~${p.slice(state.home.length)}` : p);
   const withDir = (items: SkillCardView[]): SkillCardView[] => {
     if (!sharedDir) return items;
-    return items.map((s) => ({
-      ...s,
-      dirLabel: s.readVia === 'shared' ? '共享目录' : '自身目录',
-      dirTitle: s.readVia === 'shared'
-        ? `来自共享标准目录 ${sharedDir}：该 Agent 会读取它，但不由本 Agent 的分发策略管理。`
-        : `来自本 Agent 的技能目录 ${agent.globalDir}。`,
-    }));
+    return items.map((s) => (s.fromDir
+      ? { ...s, dirLabel: shortDir(s.fromDir), dirTitle: `这个技能来自 ${s.fromDir}` }
+      : s));
   };
 
   // 直接添加技能：乐观更新 + 串行提交，成功后再刷新（草稿由 rowsByName 比对自动回收）
@@ -412,8 +410,8 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         value={agent.skillSync?.[s.name] ?? agent.sync}
         onChange={(e) => setSkillSync(s.name, e.target.value as 'symlink' | 'copy')}
       >
-        <option value="symlink">软链安装（不复制文件，即时生效）</option>
-        <option value="copy">复制安装（独立副本，需重新同步）</option>
+        <option value="symlink">软链（不复制文件，即时生效）</option>
+        <option value="copy">复制（独立副本，需重新同步）</option>
       </FieldSelect>
     ),
   }));
@@ -476,8 +474,9 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
         <div className="panel panel--quiet">
           <div className="panel__hint" style={{ marginBottom: 'var(--sp-3)', display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
-            <span className="mono">自身目录 {agent.globalDir}</span>
-            {sharedDir && <span className="mono">另读共享 {sharedDir}</span>}
+            <span title="这个 Agent 会读取这些目录里的技能">
+              技能目录 <span className="mono">{[agent.globalDir, ...(sharedDir ? [sharedDir] : [])].map(shortDir).join('、')}</span>
+            </span>
             {agent.project && <span className="mono">项目 {agent.project}</span>}
             {agent.alsoUsedBy?.length ? <span>该目录也被 {agent.alsoUsedBy.join('、')} 直接读取，无需单独安装</span> : null}
             {siblings.length > 0 && (
@@ -630,8 +629,8 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
                   hint="可在下方按技能单独覆盖"
                   onChange={(e) => void busy(() => api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ sync: e.target.value }) }))}
                 >
-                  <option value="symlink">软链安装（不复制文件，即时生效）</option>
-                  <option value="copy">复制安装（独立副本，需重新同步）</option>
+                  <option value="symlink">软链（不复制文件，即时生效）</option>
+                  <option value="copy">复制（独立副本，需重新同步）</option>
                 </FieldSelect>
                 {siblings.length > 0 && (
                   <FieldSelect

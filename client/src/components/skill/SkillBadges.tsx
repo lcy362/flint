@@ -7,7 +7,7 @@ const REASON_LABEL: Record<SkillReason, string> = {
   preset: '预设引入',
   external: '外部链接',
   manual: '',
-  shared: '共享目录',
+  shared: '',
 };
 
 const REASON_TITLE: Record<SkillReason, string> = {
@@ -18,10 +18,10 @@ const REASON_TITLE: Record<SkillReason, string> = {
   shared: '它在该 Agent 额外读取的共享标准目录里：放到那里的技能它直接可用，但不由本 Agent 的分发策略管理（只读）',
 };
 
-// 与 Agent 卡片的「软链安装 / 复制安装」保持同一套说法：同一件事只叫一个名字
+// 全站统一用「软链 / 复制」描述装入形态（安装方式下拉、技能库接管等都用同一个词）
 const STORE_LABEL: Partial<Record<SkillStore, string>> = {
-  symlink: '软链安装',
-  copy: '复制安装',
+  symlink: '软链',
+  copy: '复制',
   pending: '待部署',
 };
 
@@ -47,14 +47,13 @@ export const SKILL_BADGE_LEGEND: BadgeLegendItem[] = [
   { label: REASON_LABEL.own, tone: 'accent', desc: REASON_TITLE.own },
   { label: REASON_LABEL.preset, tone: 'accent', desc: REASON_TITLE.preset },
   { label: REASON_LABEL.external, tone: 'warn', desc: REASON_TITLE.external },
-  { label: REASON_LABEL.shared, tone: 'info', desc: REASON_TITLE.shared },
   { label: STORE_LABEL.symlink!, tone: 'info', desc: STORE_TITLE.symlink! },
   { label: STORE_LABEL.copy!, tone: 'info', desc: STORE_TITLE.copy! },
   { label: STORE_LABEL.pending!, tone: 'warn', desc: STORE_TITLE.pending! },
   { label: STATE_LABEL.on, tone: 'good', dot: 'good', desc: STATE_TITLE.on },
   { label: STATE_LABEL.off, tone: 'neutral', dot: 'neutral', desc: STATE_TITLE.off },
   { label: STATE_LABEL.unmanaged, tone: 'info', desc: STATE_TITLE.unmanaged },
-  { label: '软链', tone: 'info', desc: '该技能是软链接，指向另一个真实目录；改动能即时跟进目标。' },
+  { label: '只读', tone: 'info', desc: '来自该 Agent 额外读取的目录：直接可用，但不由本工具分发，这里不能开关。' },
 ];
 
 /** 开关的选中态：只有「在分发名单内」才算开启 */
@@ -103,10 +102,14 @@ export function stateBadge(item: SkillCardView) {
   }
 }
 
-/** 目录徽标：说明技能「来自哪个目录」（仅多目录 Agent 由页面派生 dirLabel 后展示） */
+/** 来源目录徽标：直接显示技能所在的目录（仅多目录 Agent 由页面派生 dirLabel 后展示） */
 export function dirBadge(item: SkillCardView) {
   if (!item.dirLabel) return null;
-  return <Badge tone="neutral" title={item.dirTitle ?? item.dirLabel}>{item.dirLabel}</Badge>;
+  return (
+    <Badge tone="neutral" title={item.dirTitle ?? item.dirLabel}>
+      <span className="mono">{item.dirLabel}</span>
+    </Badge>
+  );
 }
 
 /** 共享目录里的软链：store 徽标不适用，单独用一个中性「软链」徽标点明形态 */

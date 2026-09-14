@@ -184,8 +184,8 @@ export default function Settings() {
                   hint="新建 Agent 的默认值；可在各 Agent 详情页单独覆盖"
                   onChange={(e) => void putSetting({ defaultSync: e.target.value as SettingsView['defaultSync'] })}
                 >
-                  <option value="symlink">软链安装（不复制文件，即时生效）</option>
-                  <option value="copy">复制安装（独立副本，需重新同步）</option>
+                  <option value="symlink">软链（不复制文件，即时生效）</option>
+                  <option value="copy">复制（独立副本，需重新同步）</option>
                 </FieldSelect>
               </div>
               <div>
@@ -196,7 +196,7 @@ export default function Settings() {
                   </span>
                 </label>
                 <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 'var(--sp-1)' }}>
-                  开启后会监听技能库的变化，自动把改动同步给用「复制安装」的 Agent（复制出来的副本不会自己更新）。
+                  开启后会监听技能库的变化，自动把改动同步给用「复制」的 Agent（复制出来的副本不会自己更新）。
                   平时同步都由操作触发，不需要常驻进程。
                 </div>
               </div>

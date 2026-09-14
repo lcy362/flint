@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -87,6 +88,8 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       sources: cfg.data.foreignSources,
       customAgents: cfg.data.customAgents,
       settings: { defaultSync: cfg.data.defaultSync, watchers: cfg.data.watchers },
+      // 供前端把绝对路径显示成 ~ 开头的形式（如 ~/.agents/skills）
+      home: os.homedir(),
     });
   });
 

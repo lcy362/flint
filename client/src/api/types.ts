@@ -59,6 +59,8 @@ export interface StateView {
   sources: SourceView[];
   customAgents: CustomAgentView[];
   settings: SettingsView;
+  /** 用户主目录；前端用它把绝对路径显示成 ~ 开头的短形式 */
+  home: string;
 }
 /** 自有仓库；id 参与 skill 标识（name@id）不可变，name 仅作显示、缺省回落 id */
 export interface RepoView { id: string; name?: string; path: string; layout: string; root?: string }
@@ -93,9 +95,9 @@ export interface SkillCardView {
   preset?: string;
   /** 该技能物理所在的可读目录（多目录 Agent 用于说明「来自哪个目录」） */
   fromDir?: string;
-  /** own=自身目录（本工具分发）；shared=额外读取的共享标准目录（只读） */
+  /** own=本体目录（本工具分发）；shared=额外读取的目录（只读） */
   readVia?: 'own' | 'shared';
-  /** 客户端派生：目录徽标文案（如「自身目录」「共享目录」），仅多目录 Agent 需要 */
+  /** 客户端派生：直接展示来源目录的徽标文案，仅多目录 Agent 需要 */
   dirLabel?: string;
   dirTitle?: string;
   actions: SkillAction[];
