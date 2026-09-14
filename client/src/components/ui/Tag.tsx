@@ -14,7 +14,11 @@ export default function Tag({ children, selected, onClick, muted }: TagProps) {
       type="button"
       className="tag"
       style={muted ? { opacity: 0.55, background: 'var(--c-surface-2)', color: 'var(--c-ink-3)' } : undefined}
-      onClick={onClick}
+      onClick={(e) => {
+        // 芯片常嵌在整块可点击的卡片 / 行内，点芯片只应触发它自己
+        e.stopPropagation();
+        onClick();
+      }}
     >
       {selected ? '✓ ' : ''}
       {children}

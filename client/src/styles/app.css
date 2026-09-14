@@ -598,6 +598,14 @@ select.field {
 }
 
 /* ============ 标签说明（徽标图例） ============ */
+.badge-legend__intro {
+  font-size: var(--fs-13);
+  color: var(--c-ink-2);
+  line-height: 1.6;
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+}
 .badge-legend {
   display: flex;
   flex-direction: column;

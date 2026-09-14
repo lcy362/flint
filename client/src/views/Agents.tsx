@@ -13,13 +13,16 @@ import LoadingBoundary from '../components/ui/LoadingBoundary';
 import Modal from '../components/ui/Modal';
 import { FieldInput, FieldSelect } from '../components/ui/Field';
 import { PathField } from '../components/ui/PathField';
+import Tag from '../components/ui/Tag';
 import BadgeLegend from '../components/agent/BadgeLegend';
+import { groupAgentsByDir, settingsDiffer } from '../components/agent/agentGroups';
 import {
   activeBadge,
+  activeCountBadge,
+  conflictBadge,
   familyBadge,
   notInstalledBadge,
   presetBadge,
-  sharedDirBadge,
   syncBadge,
 } from '../components/agent/agentBadges';
 import { useToast } from '../components/ui/Toast';
@@ -39,42 +42,58 @@ export default function Agents() {
   const openAgent = (key: string) => navigate({ ...route, sub: key });
   const backToList = () => navigate({ ...route, sub: null });
 
+  // 一个实际技能目录一张卡片：同目录的多个 Agent 收进同一张卡
+  const groups = useMemo(() => groupAgentsByDir(data ?? []), [data]);
   const shown = useMemo(() => {
     const kw = q.trim().toLowerCase();
-    return (data ?? []).filter((a) => {
-      if (onlyInstalled && !a.installed) return false;
+    return groups.filter((g) => {
+      if (onlyInstalled && !g.installed) return false;
       if (!kw) return true;
-      return `${a.name} ${a.key} ${a.globalDir}`.toLowerCase().includes(kw);
+      return `${g.names.join(' ')} ${g.keys.join(' ')} ${g.dir}`.toLowerCase().includes(kw);
     });
-  }, [data, q, onlyInstalled]);
+  }, [groups, q, onlyInstalled]);
   const filtered = !!q.trim() || onlyInstalled;
   const [viewMode, setViewMode] = useViewMode();
 
-  const items: EntityItem[] = shown.map((a) => ({
-    id: a.key,
-    title: a.name,
-    sub: <span className="mono">{a.key}</span>,
-    desc: <span className="mono">{a.globalDir}</span>,
-    status: activeBadge(a),
-    badges: (
-      <>
-        {syncBadge(a)}
-        {presetBadge(a)}
-        {familyBadge(a)}
-        {sharedDirBadge(a)}
-        {!a.installed && notInstalledBadge()}
-      </>
-    ),
-    onClick: () => openAgent(a.key),
-    muted: !a.active,
-  }));
+  // 同一目录的其它 Agent（详情页里互相跳转用）
+  const siblings: AgentView[] = selected
+    ? (data ?? []).filter((a) => a.globalDir === selected.globalDir && a.key !== selected.key)
+    : [];
+
+  const items: EntityItem[] = shown.map((g) => {
+    const { primary } = g;
+    return {
+      id: g.dir,
+      title: primary.name,
+      sub: <span className="mono">{primary.key}</span>,
+      desc: <span className="mono">{g.dir}</span>,
+      status: activeCountBadge({ activeCount: g.activeCount, total: g.agents.length }),
+      // 分发策略取主 Agent：同目录只能落一份，别名各自的设置各不相同也无法同时生效
+      badges: (
+        <>
+          {syncBadge(primary.sync)}
+          {presetBadge(primary.preset ?? null)}
+          {g.conflicts.length > 0 && conflictBadge(g.conflicts.map((a) => a.name))}
+          {!g.installed && notInstalledBadge()}
+        </>
+      ),
+      // 别名只说明「与主 Agent 走同一个路径」，点进去仍是各自那个 Agent
+      tags: g.aliases.map((a) => ({ label: `别名 ${a.name}`, onClick: () => openAgent(a.key) })),
+      onClick: () => openAgent(primary.key),
+      muted: g.activeCount === 0,
+    };
+  });
 
   return (
     <>
-      <PageHeader title="Agents" sub={data ? `共 ${data.length} 个 Agent` : undefined} actions={<Button variant="ghost" onClick={reload}>刷新</Button>} />
+      <PageHeader
+        title="Agents"
+        sub={data ? `共 ${groups.length} 个技能目录 · ${data.length} 个 Agent` : undefined}
+        actions={<Button variant="ghost" onClick={reload}>刷新</Button>}
+      />
       {selectedKey ? (
         selected ? (
-          <AgentDetail agent={selected} onBack={backToList} onChanged={reload} />
+          <AgentDetail agent={selected} siblings={siblings} onOpenAgent={openAgent} onBack={backToList} onChanged={reload} />
         ) : (
           <LoadingBoundary
             state={{ loading, error, data }}
@@ -102,7 +121,7 @@ export default function Agents() {
             {() => (
               <EntityList
                 items={items}
-                title={`${filtered ? '筛选结果' : '全部 Agent'} · ${items.length}${filtered ? ` / ${(data ?? []).length}` : ''}`}
+                title={`${filtered ? '筛选结果' : '全部技能目录'} · ${items.length}${filtered ? ` / ${groups.length}` : ''}`}
                 hideToggle
               />
             )}
@@ -113,7 +132,14 @@ export default function Agents() {
   );
 }
 
-function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: () => void; onChanged: () => void }) {
+function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
+  agent: AgentView;
+  /** 与它指向同一技能目录的其它 Agent */
+  siblings: AgentView[];
+  onOpenAgent: (key: string) => void;
+  onBack: () => void;
+  onChanged: () => void;
+}) {
   const toast = useToast();
   const { data, loading, error, reload } = useAsync<AgentSkillsResp>(
     () => api(`/agents/${encodeURIComponent(agent.key)}/skills`),
@@ -193,6 +219,9 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
 
   const managed = (data?.skills ?? []).filter((s) => s.state === 'on');
 
+  // 同目录的其它 Agent 若与本 Agent 分发策略不同，两者不可能各自生效（目录只有一份）
+  const conflicts = siblings.filter((o) => settingsDiffer(o, agent));
+
   const failedItems: EntityItem[] = (lastSync?.failed ?? []).map((f) => ({
     id: f.skill,
     title: f.skill,
@@ -245,6 +274,16 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
         </div>
       )}
 
+      {conflicts.length > 0 && (
+        <div className="notice">
+          <span className="notice__title">同一目录下的分发策略不一致</span>
+          <span className="notice__body">
+            这个 Agent 与 {conflicts.map((o) => o.name).join('、')} 指向同一个技能目录，但预设 / 安装方式不同。
+            目录只有一份，两套策略会互相覆盖（实际以最后同步者为准）。建议让它们保持一致，或只保留一个活跃。
+          </span>
+        </div>
+      )}
+
       <div className="panel">
         <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>分发策略</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--sp-3)' }}>
@@ -270,7 +309,15 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
         <div style={{ marginTop: 'var(--sp-3)', display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
           <span className="mono">全局 {agent.globalDir}</span>
           {agent.project && <span className="mono">项目 {agent.project}</span>}
-          {agent.sharedWith.length > 0 && <span>与 {agent.sharedWith.join('、')} 指向同一个技能目录：分发一次，它们同时生效</span>}
+          {siblings.length > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--sp-1)' }}>
+              与
+              {siblings.map((o) => (
+                <Tag key={o.key} onClick={() => onOpenAgent(o.key)}>{o.name}</Tag>
+              ))}
+              指向同一个技能目录（目录只有一份，分发一次它们共用）
+            </span>
+          )}
           {agent.alsoUsedBy?.length ? <span>该目录也被 {agent.alsoUsedBy.join('、')} 直接读取，无需单独安装</span> : null}
         </div>
       </div>
