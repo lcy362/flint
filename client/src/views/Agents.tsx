@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, type AgentView, type AgentSkillsResp, type PresetView, type SkillAction, type SkillCardView, type StateView, type SyncResult } from '../api/types';
+import { api, type AgentView, type AgentSkillsResp, type AgentCollectItem, type AgentCollectPreview, type PresetView, type SkillAction, type SkillCardView, type StateView, type SyncResult } from '../api/types';
 import SkillList from '../components/skill/SkillList';
 import { skillViewToCard } from '../components/skill/adapters';
 import { SKILL_BADGE_LEGEND } from '../components/skill/SkillBadges';
@@ -171,11 +171,38 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   const [dirOpen, setDirOpen] = useState(false);
   const [lastSync, setLastSync] = useState<SyncResult | null>(null);
   const [syncing, setSyncing] = useState(false);
-  // 归集到仓库：待归集的技能 + 选定的目标仓库 + 是否顺带接管
+  // 归集到仓库：与技能库「从 Agent 归集」同源（同一 preview + 同一 collect 接口）
   const [collectItem, setCollectItem] = useState<SkillCardView | null>(null);
   const [collectRepo, setCollectRepo] = useState('');
   const [collectTakeover, setCollectTakeover] = useState(false);
+  /** 归集前先查该仓库的归集预览：仓库是否已有同名、是否已指向仓库本体 */
+  const [collectPreview, setCollectPreview] = useState<AgentCollectItem | null>(null);
+  const [previewState, setPreviewState] = useState<'loading' | 'ready' | 'none'>('loading');
+  /** 仓库已有同名时：false=保持仓库现状（默认），true=用本目录版本覆盖仓库副本 */
+  const [collectOverwrite, setCollectOverwrite] = useState(false);
   const [collecting, setCollecting] = useState(false);
+
+  useEffect(() => {
+    if (!collectItem || !collectRepo) { setCollectPreview(null); setPreviewState('none'); return; }
+    let alive = true;
+    setPreviewState('loading');
+    setCollectPreview(null);
+    setCollectOverwrite(false);
+    api<AgentCollectPreview[]>(`/repos/${encodeURIComponent(collectRepo)}/collect/preview`)
+      .then((list) => {
+        if (!alive) return;
+        const a = list.find((x) => x.agentKey === agent.key) ?? list.find((x) => x.agentName === agent.name);
+        const item = a?.items.find((it) => it.name === collectItem.name) ?? null;
+        setCollectPreview(item);
+        setPreviewState(item ? 'ready' : 'none');
+      })
+      .catch(() => { if (alive) { setCollectPreview(null); setPreviewState('none'); } });
+    return () => { alive = false; };
+  }, [collectItem, collectRepo, agent.key, agent.name]);
+
+  const previewExists = collectPreview?.exists === true;
+  const previewInRepo = !!collectPreview && collectPreview.symlink && collectPreview.inRepo === true;
+  const canCollect = previewState === 'ready' && !previewInRepo;
 
   // 直接添加技能：本地草稿（乐观更新）+ 串行提交，连点开关时不丢操作、不后发先至
   const [draftOn, setDraftOn] = useState<Record<string, boolean>>({});
@@ -235,13 +262,21 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
   // 归集到仓库：把该技能复制进选定仓库（源目录不动）；勾选「同时接管」时再把它换成指向仓库副本的软链
   const runCollect = async () => {
-    if (!collectItem || !collectRepo) return;
+    if (!collectItem || !collectRepo || !canCollect) return;
     const name = collectItem.name;
     setCollecting(true);
     try {
       const res = await api<{ collected: string[]; skipped: string[] }>(
         `/repos/${encodeURIComponent(collectRepo)}/collect`,
-        { method: 'POST', body: JSON.stringify({ agentKey: agent.key, names: [name] }) }
+        {
+          method: 'POST',
+          // 与技能库归集一致：仓库已有同名且用户选择覆盖时，才把该名字放进 replaceNames
+          body: JSON.stringify({
+            agentKey: agent.key,
+            names: [name],
+            replaceNames: previewExists && collectOverwrite ? [name] : undefined,
+          }),
+        }
       );
       if (res.collected.length) toast.push(`已归集「${name}」到仓库`, 'good');
       else toast.push(`未复制到仓库：${res.skipped.join('；') || '无变化'}`, 'bad');
@@ -704,7 +739,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         footer={
           <>
             <Button variant="ghost" onClick={() => setCollectItem(null)}>取消</Button>
-            <Button variant="primary" loading={collecting} disabled={!collectRepo} onClick={() => void runCollect()}>归集</Button>
+            <Button variant="primary" loading={collecting} disabled={!collectRepo || !canCollect} onClick={() => void runCollect()}>归集</Button>
           </>
         }
       >
@@ -728,7 +763,33 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
             </p>
           )}
 
-          <SwitchLabel checked={collectTakeover} onChange={setCollectTakeover}>
+          {/* 与技能库「从 Agent 归集」同一套判定：仓库已有同名 → 由用户选保持现状 / 覆盖 */}
+          {previewState === 'loading' && collectRepo && (
+            <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>正在检查该仓库是否已有同名技能…</span>
+          )}
+          {previewState === 'none' && (
+            <p className="panel__hint" style={{ marginBottom: 0 }}>
+              这一条不在可归集清单里（可能是失效软链，或不是带 SKILL.md 的技能目录），暂时无法归集。
+            </p>
+          )}
+          {previewState === 'ready' && previewInRepo && (
+            <p className="panel__hint" style={{ marginBottom: 0 }}>
+              它已经是指向本仓库的软链，内容就是仓库本体，无需归集。
+            </p>
+          )}
+          {previewState === 'ready' && !previewInRepo && previewExists && (
+            <FieldSelect
+              label="仓库已有同名技能"
+              hint="与技能库归集一致：保持现状则不动仓库副本，覆盖会先删除仓库里的同名目录再写入本目录的版本"
+              value={collectOverwrite ? 'overwrite' : 'keep'}
+              onChange={(e) => setCollectOverwrite(e.target.value === 'overwrite')}
+            >
+              <option value="keep">保持仓库现状（不覆盖）</option>
+              <option value="overwrite">用本目录的版本覆盖仓库副本</option>
+            </FieldSelect>
+          )}
+
+          <SwitchLabel checked={collectTakeover} onChange={setCollectTakeover} disabled={!canCollect}>
             同时接管：把本目录里的技能换成指向仓库副本的软链
           </SwitchLabel>
           {collectTakeover && (
