@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillAction } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
+import { SKILL_BADGE_LEGEND } from '../components/skill/SkillBadges';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
+import BadgeLegend from '../components/common/BadgeLegend';
 import FilterBar from '../components/common/FilterBar';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
@@ -122,6 +124,17 @@ export default function Library() {
           }
           hasFilters={hasFilter}
           onReset={clearFilters}
+          actions={
+            <BadgeLegend
+              title="技能卡片上的标签是什么意思？"
+              items={SKILL_BADGE_LEGEND}
+              intro={
+                <>
+                  技能卡片上的徽标只说明<strong>本工具对它做了什么</strong>：行首开关表示是否在分发名单里，徽标说明它的来源与装入目录的形态。
+                </>
+              }
+            />
+          }
           view={{ value: viewMode, onChange: setViewMode }}
         />
       </div>

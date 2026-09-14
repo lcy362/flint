@@ -1,4 +1,5 @@
 import type { AgentView } from '../../api/types';
+import type { BadgeLegendItem, BadgeTone } from '../common/BadgeLegend';
 import Badge from '../ui/Badge';
 
 /**
@@ -10,12 +11,10 @@ import Badge from '../ui/Badge';
  * Agents / 预设详情 / 设置三处都从这里取，避免同一件事出现多种说法。
  */
 
-type Tone = 'neutral' | 'accent' | 'good' | 'warn' | 'bad' | 'info';
-
 export interface BadgeMeta {
   /** 徽标文字；含具体名称的（预设）在渲染时替换 */
   label: string;
-  tone: Tone;
+  tone: BadgeTone;
   /** 人话解释：徽标 title 与「标签说明」共用同一句 */
   desc: string;
 }
@@ -132,13 +131,6 @@ export function familyBadge(agent: Pick<AgentView, 'family'>) {
 }
 
 /** 「标签说明」弹窗的数据源：顺序即卡片上的常见排列顺序 */
-export interface BadgeLegendItem {
-  label: string;
-  tone: Tone;
-  dot?: 'good' | 'warn' | 'bad' | 'neutral';
-  desc: string;
-}
-
 export const AGENT_BADGE_LEGEND: BadgeLegendItem[] = [
   { ...ACTIVE_META, dot: 'good' },
   { ...INACTIVE_META, dot: 'neutral' },

@@ -14,9 +14,10 @@ import Modal from '../components/ui/Modal';
 import { FieldInput, FieldSelect } from '../components/ui/Field';
 import { PathField } from '../components/ui/PathField';
 import Tag from '../components/ui/Tag';
-import BadgeLegend from '../components/agent/BadgeLegend';
+import BadgeLegend from '../components/common/BadgeLegend';
 import { groupAgentsByDir } from '../components/agent/agentGroups';
 import {
+  AGENT_BADGE_LEGEND,
   activeBadge,
   familyBadge,
   notInstalledBadge,
@@ -107,7 +108,17 @@ export default function Agents() {
               controls={<SwitchLabel checked={onlyInstalled} onChange={setOnlyInstalled}>只看已安装</SwitchLabel>}
               hasFilters={filtered}
               onReset={() => { setQ(''); setOnlyInstalled(false); }}
-              actions={<BadgeLegend />}
+              actions={
+                <BadgeLegend
+                  title="卡片上的标签是什么意思？"
+                  items={AGENT_BADGE_LEGEND}
+                  intro={
+                    <>
+                      每张卡片对应一个<strong>实际的技能目录</strong>。多个 Agent 指向同一目录时合成一张卡：卡片标题是其中的<strong>主 Agent</strong>——安装方式、预设、是否活跃都以它为准，策略改动也落在它身上；其余以「别名 X」列出，它们和主 Agent 走的是同一个路径，点芯片可进入各自的详情页。
+                    </>
+                  }
+                />
+              }
               view={{ value: viewMode, onChange: setViewMode }}
             />
           </div>

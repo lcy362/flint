@@ -1,4 +1,5 @@
 import type { SkillCardView, SkillReason, SkillStore } from '../../api/types';
+import type { BadgeLegendItem } from '../common/BadgeLegend';
 import Badge from '../ui/Badge';
 
 const REASON_LABEL: Record<SkillReason, string> = {
@@ -28,7 +29,29 @@ const STORE_TITLE: Partial<Record<SkillStore, string>> = {
   pending: '已列入分发名单，但还没有写入技能目录',
 };
 
+/** 状态徽标文案：只说明「本工具对该技能的处置」 */
+const STATE_LABEL = { on: '启用', off: '已停用', unmanaged: '未纳管' } as const;
+
+const STATE_TITLE: Record<keyof typeof STATE_LABEL, string> = {
+  on: '已列入该 Agent / 项目的分发名单，并且已经写入目录',
+  off: '曾由本工具分发到该目录，现在已移出分发名单',
+  unmanaged: '它存在于这个目录，但不属于本工具的分发范围（自带或外部链接），所以没有启用 / 停用开关',
+};
+
 export { REASON_LABEL, STORE_LABEL };
+
+/** 「标签说明」弹窗的数据源：与徽标本体共用同一份文案，避免两处各说各话 */
+export const SKILL_BADGE_LEGEND: BadgeLegendItem[] = [
+  { label: REASON_LABEL.own, tone: 'accent', desc: REASON_TITLE.own },
+  { label: REASON_LABEL.preset, tone: 'accent', desc: REASON_TITLE.preset },
+  { label: REASON_LABEL.external, tone: 'warn', desc: REASON_TITLE.external },
+  { label: STORE_LABEL.symlink!, tone: 'info', desc: STORE_TITLE.symlink! },
+  { label: STORE_LABEL.copy!, tone: 'info', desc: STORE_TITLE.copy! },
+  { label: STORE_LABEL.pending!, tone: 'warn', desc: STORE_TITLE.pending! },
+  { label: STATE_LABEL.on, tone: 'good', dot: 'good', desc: STATE_TITLE.on },
+  { label: STATE_LABEL.off, tone: 'neutral', dot: 'neutral', desc: STATE_TITLE.off },
+  { label: STATE_LABEL.unmanaged, tone: 'info', desc: STATE_TITLE.unmanaged },
+];
 
 /** 开关的选中态：只有「在分发名单内」才算开启 */
 export function isOn(item: SkillCardView): boolean {
@@ -62,23 +85,11 @@ export function storeBadge(item: SkillCardView) {
 export function stateBadge(item: SkillCardView) {
   switch (item.state) {
     case 'on':
-      return (
-        <Badge tone="good" dot="good" title="已列入该 Agent/项目的分发名单">
-          启用
-        </Badge>
-      );
+      return <Badge tone="good" dot="good" title={STATE_TITLE.on}>{STATE_LABEL.on}</Badge>;
     case 'off':
-      return (
-        <Badge tone="neutral" dot="neutral" title="曾由本工具分发，现已移出分发名单">
-          已停用
-        </Badge>
-      );
+      return <Badge tone="neutral" dot="neutral" title={STATE_TITLE.off}>{STATE_LABEL.off}</Badge>;
     case 'unmanaged':
-      return (
-        <Badge tone="info" title="它存在于这个目录，但不属于本工具的分发范围（自带或外部链接），所以没有启用 / 停用开关">
-          未纳管
-        </Badge>
-      );
+      return <Badge tone="info" title={STATE_TITLE.unmanaged}>{STATE_LABEL.unmanaged}</Badge>;
     default:
       return null;
   }
