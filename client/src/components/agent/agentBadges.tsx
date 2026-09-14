@@ -54,6 +54,19 @@ export const FAMILY_META: BadgeMeta = {
   desc: '同系列产品（如国际版 / 国内版）：技能目录各自独立，只是归在一起便于对照。',
 };
 
+/** 自定义 Agent（AG-03）：内置清单之外由用户新增的工具 */
+export const CUSTOM_META: BadgeMeta = {
+  label: '自定义',
+  tone: 'accent',
+  desc: '内置清单之外由用户新增的工具：指定了全局 skill 目录；可在此页或设置页删除。',
+};
+
+/** 自定义 Agent 标记；内置 Agent 不出此徽标 */
+export function customBadge(agent: Pick<AgentView, 'custom'>) {
+  if (!agent.custom) return null;
+  return <Badge tone={CUSTOM_META.tone} title={CUSTOM_META.desc}>{CUSTOM_META.label}</Badge>;
+}
+
 /** 本机是否已有该技能目录 */
 export const INSTALLED_META: BadgeMeta = {
   label: '已安装',
@@ -140,6 +153,7 @@ export const AGENT_BADGE_LEGEND: BadgeLegendItem[] = [
   { ...INACTIVE_META, dot: 'neutral' },
   { label: `另读 ${SHARED_READ_DIR.agents}`, tone: 'info' as const, desc: '该 Agent 除自身目录外，还会读取共享标准目录 ~/.agents/skills：放到那里的技能它对也可用。' },
   { label: `另读 ${SHARED_READ_DIR['config-agents']}`, tone: 'info' as const, desc: '该 Agent 除自身目录外，还会读取共享标准目录 ~/.config/agents/skills：放到那里的技能它对也可用。' },
+  CUSTOM_META,
   { ...PRESET_META, label: '预设 名称' },
   NO_PRESET_META,
   NOT_INSTALLED_META,

@@ -66,7 +66,7 @@ export interface RepoView { id: string; name?: string; path: string; layout: str
 export interface SourceView { id: string; name: string; path: string; layout: string; linked: boolean }
 
 /* ---------- 统一技能展示契约（三处上下文共用） ---------- */
-export type SkillReason = 'own' | 'preset' | 'manual' | 'external';
+export type SkillReason = 'own' | 'preset' | 'manual' | 'external' | 'shared';
 export type SkillStore = 'symlink' | 'copy' | 'own' | 'pending';
 /** detail 仅客户端使用：技能库里打开技能详情 */
 export type SkillActionKind = 'toggle' | 'collect' | 'merge' | 'delete' | 'detail';
@@ -91,6 +91,13 @@ export interface SkillCardView {
   offOverride?: boolean;
   linkTarget?: string;
   preset?: string;
+  /** 该技能物理所在的可读目录（多目录 Agent 用于说明「来自哪个目录」） */
+  fromDir?: string;
+  /** own=自身目录（本工具分发）；shared=额外读取的共享标准目录（只读） */
+  readVia?: 'own' | 'shared';
+  /** 客户端派生：目录徽标文案（如「自身目录」「共享目录」），仅多目录 Agent 需要 */
+  dirLabel?: string;
+  dirTitle?: string;
   actions: SkillAction[];
 }
 export interface AddableSkill { id: string; name: string; repo: string }

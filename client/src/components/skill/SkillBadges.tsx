@@ -7,6 +7,7 @@ const REASON_LABEL: Record<SkillReason, string> = {
   preset: '预设引入',
   external: '外部链接',
   manual: '',
+  shared: '共享目录',
 };
 
 const REASON_TITLE: Record<SkillReason, string> = {
@@ -14,6 +15,7 @@ const REASON_TITLE: Record<SkillReason, string> = {
   preset: '由关联的预设组引入',
   external: '这个软链由本工具之外的来源创建（目标不在任何已登记仓库内）：本工具既不会分发它，也不会自动清理它',
   manual: '由用户手动加入',
+  shared: '它在该 Agent 额外读取的共享标准目录里：放到那里的技能它直接可用，但不由本 Agent 的分发策略管理（只读）',
 };
 
 // 与 Agent 卡片的「软链安装 / 复制安装」保持同一套说法：同一件事只叫一个名字
@@ -45,12 +47,14 @@ export const SKILL_BADGE_LEGEND: BadgeLegendItem[] = [
   { label: REASON_LABEL.own, tone: 'accent', desc: REASON_TITLE.own },
   { label: REASON_LABEL.preset, tone: 'accent', desc: REASON_TITLE.preset },
   { label: REASON_LABEL.external, tone: 'warn', desc: REASON_TITLE.external },
+  { label: REASON_LABEL.shared, tone: 'info', desc: REASON_TITLE.shared },
   { label: STORE_LABEL.symlink!, tone: 'info', desc: STORE_TITLE.symlink! },
   { label: STORE_LABEL.copy!, tone: 'info', desc: STORE_TITLE.copy! },
   { label: STORE_LABEL.pending!, tone: 'warn', desc: STORE_TITLE.pending! },
   { label: STATE_LABEL.on, tone: 'good', dot: 'good', desc: STATE_TITLE.on },
   { label: STATE_LABEL.off, tone: 'neutral', dot: 'neutral', desc: STATE_TITLE.off },
   { label: STATE_LABEL.unmanaged, tone: 'info', desc: STATE_TITLE.unmanaged },
+  { label: '软链', tone: 'info', desc: '该技能是软链接，指向另一个真实目录；改动能即时跟进目标。' },
 ];
 
 /** 开关的选中态：只有「在分发名单内」才算开启 */
@@ -61,8 +65,8 @@ export function isOn(item: SkillCardView): boolean {
 export function reasonBadge(item: SkillCardView) {
   const label = item.reasonLabel ?? REASON_LABEL[item.reason];
   if (!label) return null; // manual 不再作为明显的来源标志展示
-  // 外部软链不是本工具的产物，用警示色与「预设引入」区分开
-  const tone = item.reason === 'external' ? 'warn' : 'accent';
+  // 外部软链不是本工具的产物（警示色）；共享目录读取只读且非本 Agent 分发（信息色）
+  const tone = item.reason === 'external' ? 'warn' : item.reason === 'shared' ? 'info' : 'accent';
   return <Badge tone={tone} title={item.reasonTitle ?? REASON_TITLE[item.reason]}>{label}</Badge>;
 }
 
@@ -83,6 +87,10 @@ export function storeBadge(item: SkillCardView) {
  * 否则会和同一行的开关自相矛盾（例如"使用中"配一个关闭的开关）。
  */
 export function stateBadge(item: SkillCardView) {
+  // 共享标准目录里的技能：该 Agent 直接可用，但不由本工具分发，也不能在这里开关——用「只读」表达
+  if (item.reason === 'shared') {
+    return <Badge tone="info" title="它在该 Agent 额外读取的共享标准目录里：直接可用，但不由本工具分发，这里不能开关。">只读</Badge>;
+  }
   switch (item.state) {
     case 'on':
       return <Badge tone="good" dot="good" title={STATE_TITLE.on}>{STATE_LABEL.on}</Badge>;
@@ -95,15 +103,29 @@ export function stateBadge(item: SkillCardView) {
   }
 }
 
+/** 目录徽标：说明技能「来自哪个目录」（仅多目录 Agent 由页面派生 dirLabel 后展示） */
+export function dirBadge(item: SkillCardView) {
+  if (!item.dirLabel) return null;
+  return <Badge tone="neutral" title={item.dirTitle ?? item.dirLabel}>{item.dirLabel}</Badge>;
+}
+
+/** 共享目录里的软链：store 徽标不适用，单独用一个中性「软链」徽标点明形态 */
+export function linkBadge(item: SkillCardView) {
+  if (item.reason !== 'shared' || !item.linkTarget) return null;
+  return <Badge tone="info" title={`软链，指向 ${item.linkTarget}`}>软链</Badge>;
+}
+
 /**
- * 统一渲染 reason / store / preset 三个徽标（卡片与列表行共用）。
+ * 统一渲染 reason / 目录 / store / preset 等徽标（卡片与列表行共用）。
  * 不含 state —— 状态由 EntityItem.status 单独展示在卡片右上角 / 行右侧。
  */
 export function skillBadges(item: SkillCardView) {
   return (
     <>
       {reasonBadge(item)}
+      {dirBadge(item)}
       {storeBadge(item)}
+      {linkBadge(item)}
       {item.preset && <Badge tone="accent">{item.preset}</Badge>}
     </>
   );

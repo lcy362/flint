@@ -2,7 +2,7 @@ import type { AgentSkillRow } from '../core/agents.js';
 import type { ProjectSkillRow } from '../core/projects.js';
 
 /* ---------- SkillCardView（前端 api/types.ts 契约） ---------- */
-export type SkillReason = 'own' | 'preset' | 'manual' | 'external';
+export type SkillReason = 'own' | 'preset' | 'manual' | 'external' | 'shared';
 export type SkillStore = 'symlink' | 'copy' | 'own' | 'pending';
 export type SkillActionKind = 'toggle' | 'collect' | 'merge' | 'delete';
 /**
@@ -22,6 +22,10 @@ export interface SkillCardView {
   tags: string[];
   reason: SkillReason; store: SkillStore; state: SkillState;
   offOverride?: boolean; linkTarget?: string; preset?: string; actions: SkillAction[];
+  /** 该技能物理所在的可读目录（多目录 Agent 用来标注「来自哪个目录」） */
+  fromDir?: string;
+  /** own=自身目录（本工具分发）；shared=额外读取的共享标准目录（只读） */
+  readVia?: 'own' | 'shared';
 }
 
 interface CommonRow { wanted: boolean; present: boolean; store: SkillStore; reason: SkillReason; offOverride?: boolean }
@@ -30,14 +34,14 @@ const action = (kind: SkillActionKind, label: string, extra: Partial<SkillAction
 
 /** 归一化来源原因：项目行的 tag/index 归并为 manual（其对操作/展示无差异化影响），其余保留 */
 function normReason(r: string): SkillReason {
-  if (r === 'preset' || r === 'manual' || r === 'own' || r === 'external') return r;
+  if (r === 'preset' || r === 'manual' || r === 'own' || r === 'external' || r === 'shared') return r;
   return 'manual';
 }
 
 /** 由「是否纳管」×「是否在分发名单」推导 state */
 function stateOf(r: CommonRow): SkillState {
-  // 本地自有目录与外部软链都不由本工具管理，开关对它们没有意义
-  if (r.reason === 'own' || r.reason === 'external') return 'unmanaged';
+  // 本地自有目录、外部软链、共享标准目录读取都不由本 Agent 管理，开关对它们没有意义
+  if (r.reason === 'own' || r.reason === 'external' || r.reason === 'shared') return 'unmanaged';
   return r.wanted ? 'on' : 'off';
 }
 
@@ -50,6 +54,8 @@ function acts(r: CommonRow): SkillAction[] {
       action('delete', '删除', { title: '移除本地技能目录' }),
     ];
   }
+  // 共享标准目录里的技能由该目录自己的策略管理，本 Agent 无权开关/删除，这里不给操作
+  if (r.reason === 'shared') return [];
   return [action('toggle', r.wanted ? '停用' : '启用', { title: r.wanted ? '停用此技能（取消分发）' : '启用此技能' })];
 }
 
@@ -62,10 +68,11 @@ export function agentCard(row: AgentSkillRow): SkillCardView {
     name: row.name, title: row.title, description: row.description,
     source: row.repo ?? '', dir: row.dir, tags: [],
     reason,
-    // 外部软链的链接不指向本仓库，沿用 symlink 徽标会误导，退化为不展示
-    store: reason === 'external' ? 'own' : row.store,
+    // 外部软链的链接不指向本仓库、共享目录的链接也不由本工具部署，沿用 symlink 徽标会误导，退化为不展示
+    store: (reason === 'external' || reason === 'shared') ? 'own' : row.store,
     state: stateOf(r),
     offOverride: row.offOverride, linkTarget: row.linkTarget, preset: row.preset,
+    fromDir: row.fromDir, readVia: row.readVia,
     actions: acts(r),
   };
 }
