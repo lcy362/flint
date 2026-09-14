@@ -27,11 +27,12 @@ interface FixDeps { lib: { skills: Skill[] } }
 export function applyFix(cfg: ConfigStore, deps: FixDeps, key: string): FixResult {
   try {
     if (key.startsWith('sync:')) {
-      syncActive(cfg, deps.lib.skills, [key.slice(5)]);
+      // 用户在体检中心显式点修复：允许回收该 agent 上本工具多部署的软链
+      syncActive(cfg, deps.lib.skills, [key.slice(5)], 'fix', { prune: true });
       return { key, applied: true, fix: 'sync', message: `已重同步 ${key.slice(5)}` };
     }
     if (key.startsWith('broken:')) {
-      syncActive(cfg, deps.lib.skills, cfg.data.activeAgents);
+      syncActive(cfg, deps.lib.skills, cfg.data.activeAgents, 'fix', { prune: true });
       return { key, applied: true, fix: 'sync', message: '已重同步活跃 agent，消除失效软链' };
     }
     if (key.startsWith('project:')) {

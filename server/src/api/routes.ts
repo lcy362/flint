@@ -398,20 +398,18 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const cleared = pruneAliasStrategies(cfg.data, target);
     if (cleared.length > 0) log.info('http', '清理别名无效策略', { primary: target, aliases: cleared });
     cfg.save();
-    if (cfg.data.activeAgents.includes(key)) {
-      // 活跃 Agent：走全局同步，顺带修正其它活跃 Agent 的漂移
-      touch();
-    } else {
-      // 非活跃 Agent：不跟随预设 / 仓库等间接变更自动同步，但用户在这里的任何手动操作都立即落盘。
-      // 「活跃」只决定是否自动跟随，不该拦住手动操作；目录不存在由部署流程按需创建。
-      if (findAgentDef(cfg.data, key)) {
-        const result = syncActive(cfg, library().skills, [key], 'route:agent-op')[0];
-        log.info('http', '非活跃 Agent 手动同步', {
-          agent: key,
-          created: result?.created.length ?? 0,
-          removed: result?.removed.length ?? 0,
-        });
-      }
+    if (findAgentDef(cfg.data, key)) {
+      // 用户显式改了这个 Agent 的分发策略：只对「它自己」允许回收多余的软链（prune）。
+      // 非活跃 Agent 不跟随预设 / 仓库等间接变更自动同步，但用户在这里的手动操作立即落盘。
+      const result = syncActive(cfg, library().skills, [key], 'route:agent-op', { prune: true })[0];
+      log.info('http', 'Agent 策略变更后同步', {
+        agent: key,
+        active: cfg.data.activeAgents.includes(key),
+        created: result?.created.length ?? 0,
+        removed: result?.removed.length ?? 0,
+      });
+      // 其它活跃 Agent 顺带补齐漂移，但只补齐、不删除
+      if (cfg.data.activeAgents.includes(key)) touch();
     }
     res.json(cfg.data.agents[target] ?? {});
   });
@@ -431,7 +429,8 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   });
   r.post('/agents/:key/sync', (req, res) => {
     const key = req.params.key;
-    const r_ = syncActive(cfg, library().skills, [key]);
+    // 用户显式点「同步」：允许回收该 Agent 上本工具多部署的软链
+    const r_ = syncActive(cfg, library().skills, [key], 'route:agent-sync', { prune: true });
     res.json(r_[0] ?? { agent: key, created: [], removed: [], failed: [] });
   });
   r.delete('/agents/:key/skills/:skillName', (req, res) => {
@@ -504,11 +503,12 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     }
   });
   // 改预设立即同步活跃 Agent；非活跃 Agent 不自动跟随，等其详情页手动操作时即时生效。
+  // 预设变更会改变「应装什么」，因此这里是允许回收多余软链的显式场景（prune: true）。
   r.put('/presets/:name', (req, res) => {
     try {
       const p = presets.update(cfg, req.params.name, req.body ?? {});
       const lib = library();
-      const results = syncActive(cfg, lib.skills, undefined, 'route');
+      const results = syncActive(cfg, lib.skills, undefined, 'route', { prune: true });
       const created = results.reduce((n, r) => n + r.created.length, 0);
       const removed = results.reduce((n, r) => n + r.removed.length, 0);
       log.info('http', '更新预设', { name: req.params.name, skills: p.skills.length, tags: p.tags.length, created, removed });
@@ -681,7 +681,8 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     try {
       const lib = library();
       const only = Array.isArray(req.body?.agents) ? req.body.agents : undefined;
-      const results = syncActive(cfg, lib.skills, only, 'route');
+      // 用户显式触发的同步：允许回收本工具多部署的软链
+      const results = syncActive(cfg, lib.skills, only, 'route:manual', { prune: true });
       const created = results.reduce((n, r) => n + r.created.length, 0);
       const removed = results.reduce((n, r) => n + r.removed.length, 0);
       log.info('http', '手动同步', { agents: results.length, created, removed });

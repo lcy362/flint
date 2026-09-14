@@ -437,7 +437,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
           <Button size="sm" variant="ghost" onClick={() => setDirOpen(true)} title="覆盖该 Agent 的全局/项目 skill 目录">
             目录
           </Button>
-          <Button size="sm" variant="primary" loading={syncing} onClick={() => void runSync()} title="重新部署该 Agent 的技能">同步</Button>
+          <Button size="sm" variant="primary" loading={syncing} onClick={() => void runSync()} title="按当前策略补齐缺失技能，并回收本工具自己多部署的软链（不动你的自有内容）">同步</Button>
           {agent.custom && (
             <Button size="sm" variant="danger" onClick={() => void deleteAgent()} title="删除这个自定义 Agent（内置 Agent 不可删除）">
               删除

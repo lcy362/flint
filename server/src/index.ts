@@ -11,11 +11,13 @@ const PORT = Number(process.env.PORT ?? 8787);
 const app = express();
 const cfg = new ConfigStore();
 
-// 定时/自动同步入口（reason 标识触发来源，便于日志排查）
+// 自动同步入口（reason 标识触发来源，便于日志排查）。
+// 只补齐缺失 / 修复失效链接，绝不删除：回收多余项只在「预设变更 / 该 Agent 策略变更 /
+// 手动同步 / 用户点修复」这类显式操作里发生（那些路径各自带 prune: true）。
 function resync(reason: string = 'manual') {
   const lib = scanAll(cfg.data.repos, cfg.data.foreignSources);
   try {
-    return syncActive(cfg, lib.skills, undefined, reason);
+    return syncActive(cfg, lib.skills, undefined, reason, { prune: false });
   } catch (e) {
     log.error('sync', `同步异常: ${(e as Error).message}`, { reason });
     return [];

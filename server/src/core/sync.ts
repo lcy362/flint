@@ -138,7 +138,57 @@ export function copySkill(linkPath: string, targetDir: string): void {
   fs.cpSync(targetDir, linkPath, { recursive: true });
 }
 
-export function deployAgent(cfg: ConfigStore, agentKey: string, desired: Map<string, Skill>, allSkills: Skill[]): SyncResult {
+/** 目录读取失败时返回空，供比较用 */
+function readDir(dir: string): fs.Dirent[] {
+  try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+}
+
+/**
+ * 两个目录内容是否完全一致（递归比较文件名与文件内容）。
+ * 用于判断「goal 位置已有的实体目录」是否就是本工具部署的副本：
+ * 只有内容一致时才允许把它重建为软链/副本——否则那是用户自己的内容，绝不删除。
+ */
+function dirsEqual(a: string, b: string): boolean {
+  const ae = readDir(a);
+  const be = readDir(b);
+  if (ae.length === 0 && be.length === 0) return false;
+  if (ae.length !== be.length) return false;
+  const names = new Set(be.map((e) => e.name));
+  for (const e of ae) {
+    if (!names.has(e.name)) return false;
+    const pa = path.join(a, e.name);
+    const pb = path.join(b, e.name);
+    let la: fs.Stats;
+    let lb: fs.Stats;
+    try { la = fs.lstatSync(pa); lb = fs.lstatSync(pb); } catch { return false; }
+    const isDirA = la.isDirectory() && !la.isSymbolicLink();
+    const isDirB = lb.isDirectory() && !lb.isSymbolicLink();
+    if (isDirA !== isDirB) return false;
+    if (isDirA) { if (!dirsEqual(pa, pb)) return false; continue; }
+    if (la.isSymbolicLink() || lb.isSymbolicLink()) return false;
+    try { if (!fs.readFileSync(pa).equals(fs.readFileSync(pb))) return false; } catch { return false; }
+  }
+  return true;
+}
+
+/**
+ * 部署某 agent 的期望技能集。
+ *
+ * `opts.prune`（默认 false）决定是否回收「已不再需要」的项：
+ * - false：只补齐缺失 / 修复失效链接（自动同步走的路径）——绝不对用户环境做删除；
+ * - true：额外回收本工具自己部署、且已不在期望集里的软链（仅由「预设变更 / 该 Agent 策略变更 /
+ *   手动同步 / 用户点修复」这类显式操作触发）。
+ *
+ * 无论哪种情况，都只处理「本工具自己部署的」产物：真实目录与外部软链一律不动。
+ */
+export function deployAgent(
+  cfg: ConfigStore,
+  agentKey: string,
+  desired: Map<string, Skill>,
+  allSkills: Skill[],
+  opts: { prune?: boolean } = {},
+): SyncResult {
+  const prune = opts.prune === true;
   const def = findAgentDef(cfg.data, agentKey);
   const result: SyncResult = { agent: agentKey, created: [], removed: [], failed: [] };
   if (!def) {
@@ -158,12 +208,33 @@ export function deployAgent(cfg: ConfigStore, agentKey: string, desired: Map<str
     const target = sk.dir;
     const linkDir = path.join(agentsDir, sk.name);
     seen.add(sk.name);
-    if (fs.existsSync(linkDir) && fs.lstatSync(linkDir).isSymbolicLink()) {
-      // 已软链且指向正确则跳过
-      try {
-        if (fs.realpathSync(linkDir) === fs.realpathSync(target)) continue;
-      } catch { /* 目标失效，继续重建 */ }
+
+    // 落盘位置已有东西时：只有「本工具自己部署的」才允许覆盖，用户自己的内容绝不删除。
+    let existing: fs.Stats | undefined;
+    try { existing = fs.lstatSync(linkDir); } catch { /* 不存在，正常新建 */ }
+    if (existing) {
+      if (existing.isSymbolicLink()) {
+        // 已软链且指向正确则跳过
+        try { if (fs.realpathSync(linkDir) === fs.realpathSync(target)) continue; } catch { /* 目标失效，继续重建 */ }
+        let linkTarget: string | undefined;
+        try { linkTarget = fs.readlinkSync(linkDir); } catch { /* 读不到就按外部处理 */ }
+        if (!isManagedLinkTarget(cfg.data, linkTarget, agentsDir)) {
+          // 外部工具 / 手工创建的软链，不归本工具管，误删会破坏用户环境
+          result.failed.push({ skill: sk.id, reason: `已存在外部软链，未自动替换：${linkDir}` });
+          continue;
+        }
+      } else if (existing.isDirectory()) {
+        // 实体目录：内容与目标技能一致才视为本工具部署的副本（可安全重建）；否则是用户自有内容
+        if (!dirsEqual(linkDir, target)) {
+          result.failed.push({ skill: sk.id, reason: `同名实体目录不是本工具部署的副本，未自动覆盖：${linkDir}` });
+          continue;
+        }
+      } else {
+        result.failed.push({ skill: sk.id, reason: `同名文件已存在，未自动覆盖：${linkDir}` });
+        continue;
+      }
     }
+
     try {
       if (resolveSyncMode(cfg, agentKey, sk.name) === 'copy') {
         copySkill(linkDir, target);
@@ -183,22 +254,25 @@ export function deployAgent(cfg: ConfigStore, agentKey: string, desired: Map<str
     }
   }
 
-  // 清理不再需要的项：只回收「本工具自己部署的」软链。
-  // 真实目录（agent 自带 skill）与外部工具创建的软链都不归本工具管，误删会直接破坏用户环境。
-  for (const entry of fs.readdirSync(agentsDir)) {
-    if (seen.has(entry)) continue;
-    const p = path.join(agentsDir, entry);
-    try {
-      const st = fs.lstatSync(p);
-      if (!st.isSymbolicLink()) continue;
-      if (!isManagedLinkTarget(cfg.data, fs.readlinkSync(p), agentsDir)) continue;
-      fs.unlinkSync(p);
-      result.removed.push(entry);
-    } catch { /* skip */ }
+  // 回收不再需要的项：只在显式同步（prune）时进行，且只回收「本工具自己部署的」软链。
+  // 真实目录（agent 自带 skill / 副本）与外部工具创建的软链都不归本工具管，误删会直接破坏用户环境。
+  if (prune) {
+    for (const entry of fs.readdirSync(agentsDir)) {
+      if (seen.has(entry)) continue;
+      const p = path.join(agentsDir, entry);
+      try {
+        const st = fs.lstatSync(p);
+        if (!st.isSymbolicLink()) continue;
+        if (!isManagedLinkTarget(cfg.data, fs.readlinkSync(p), agentsDir)) continue;
+        fs.unlinkSync(p);
+        result.removed.push(entry);
+      } catch { /* skip */ }
+    }
   }
   if (result.created.length || result.removed.length || result.failed.length) {
     log.info('sync', `agent 同步完成`, {
       agent: agentKey,
+      prune,
       created: result.created.length,
       removed: result.removed.length,
       failed: result.failed.length,
@@ -213,20 +287,30 @@ export function deployAgent(cfg: ConfigStore, agentKey: string, desired: Map<str
  * 同一目录只部署一次：目标先折算到该目录的主 Agent 再去重。别名与主 Agent 共用同一
  * 个目录，若各自部署，两套期望集会在同一个目录里互相删除（后同步者获胜），
  * 因此别名不参与部署，只共享主 Agent 的策略与结果。
+ *
+ * `opts.prune` 决定是否回收多余项，语义见 deployAgent：
+ * 自动触发的同步一律不传（只补齐、不删除）；只有显式操作才传 true。
  */
-export function syncActive(cfg: ConfigStore, allSkills: Skill[], only?: string[], reason: string = 'manual'): SyncResult[] {
+export function syncActive(
+  cfg: ConfigStore,
+  allSkills: Skill[],
+  only?: string[],
+  reason: string = 'manual',
+  opts: { prune?: boolean } = {},
+): SyncResult[] {
   const requested = only ?? cfg.data.activeAgents;
   const targets = [
     ...new Set(requested.map((k) => (findAgentDef(cfg.data, k) ? effectiveAgentKey(cfg.data, k) : k))),
   ];
-  const results = targets.map((k) => deployAgent(cfg, k, computeDesired(cfg, allSkills, k), allSkills));
+  const results = targets.map((k) => deployAgent(cfg, k, computeDesired(cfg, allSkills, k), allSkills, opts));
   const created = results.reduce((n, r) => n + r.created.length, 0);
   const removed = results.reduce((n, r) => n + r.removed.length, 0);
   const failed = results.flatMap((r) => r.failed);
   const warnings = results.flatMap((r) => r.warnings ?? []);
   if (targets.length > 0) {
     log.info('sync', `同步完成（触发：${reason}）`, {
-      agents: targets.length, aliasesMerged: requested.length - targets.length, created, removed,
+      agents: targets.length, aliasesMerged: requested.length - targets.length, prune: opts.prune === true,
+      created, removed,
       failed: failed.length, warnings: warnings.length,
       failedDetail: failed.length ? failed : undefined,
     });
@@ -239,7 +323,7 @@ export interface SyncDiff {
   desiredNames: string[];
   /** 期望有、实际未部署 */
   missing: string[];
-  /** 实际有、期望无（注意：/sync 只会删除“软链”分歧项） */
+  /** 实际有、期望无（注意：只有显式同步 / 一键清理才会回收，且仅限本工具部署的软链） */
   extra: string[];
   /** 期望中应部署但软链失效 */
   brokenLink: string[];
@@ -247,7 +331,7 @@ export interface SyncDiff {
 
 /**
  * 只读比对：期望 skill 集合（activate preset 成员） vs 每个活跃 agent 实际部署集合。
- * 绝不写盘，仅供诊断。extra 口径与 deployAgent 一致：仅软链分歧项可被一键同步清除，真实目录仅提示。
+ * 绝不写盘，仅供诊断。extra 口径与 deployAgent 一致：仅本工具部署的软链可被一键清理，真实目录与外部软链仅提示。
  */
 export function diffSync(cfg: ConfigStore, allSkills: Skill[]): SyncDiff[] {
   const out: SyncDiff[] = [];
