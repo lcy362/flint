@@ -9,6 +9,7 @@ import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
+import { notInstalledBadge } from '../components/agent/agentBadges';
 import Chip from '../components/ui/Chip';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingBoundary from '../components/ui/LoadingBoundary';
@@ -417,7 +418,7 @@ function PresetDetail({
         ) : (
           <Badge tone="neutral" dot="neutral" title="未加入活跃集合，技能暂不会实际分发">未分发</Badge>
         )}
-        {!a.installed && <Badge tone="neutral" title="本地尚未创建该 Agent 的技能目录">未安装</Badge>}
+        {!a.installed && notInstalledBadge()}
       </>
     ),
     onClick: () => navigate({ tab: 'agents', sub: a.key, query: new URLSearchParams() }),

@@ -5,6 +5,7 @@ import FilterBar from '../components/common/FilterBar';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
+import { familyBadge, installBadge } from '../components/agent/agentBadges';
 import Switch from '../components/ui/Switch';
 import SwitchLabel from '../components/ui/SwitchLabel';
 import EmptyState from '../components/ui/EmptyState';
@@ -144,8 +145,8 @@ export default function Settings() {
                   status: busyKey === a.key ? <Badge tone="accent">同步中…</Badge> : undefined,
                   badges: (
                     <>
-                      {a.installed ? <Badge tone="good">已安装</Badge> : <Badge tone="neutral">未安装</Badge>}
-                      {a.family && <Badge tone="accent">{a.family}</Badge>}
+                      {installBadge(a)}
+                      {familyBadge(a)}
                     </>
                   ),
                   toggle: (

@@ -597,6 +597,37 @@ select.field {
   }
 }
 
+/* ============ 标签说明（徽标图例） ============ */
+.badge-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.badge-legend__row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: start;
+  gap: var(--sp-3);
+}
+.badge-legend__tag {
+  display: flex;
+  justify-content: flex-start;
+}
+.badge-legend__tag .badge {
+  white-space: normal;
+}
+.badge-legend__desc {
+  font-size: var(--fs-13);
+  color: var(--c-ink-2);
+  line-height: 1.6;
+}
+@media (max-width: 560px) {
+  .badge-legend__row {
+    grid-template-columns: 1fr;
+    gap: var(--sp-1);
+  }
+}
+
 /* ============ Toast ============ */
 .toast-wrap {
   position: fixed;

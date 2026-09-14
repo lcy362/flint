@@ -13,6 +13,15 @@ import LoadingBoundary from '../components/ui/LoadingBoundary';
 import Modal from '../components/ui/Modal';
 import { FieldInput, FieldSelect } from '../components/ui/Field';
 import { PathField } from '../components/ui/PathField';
+import BadgeLegend from '../components/agent/BadgeLegend';
+import {
+  activeBadge,
+  familyBadge,
+  notInstalledBadge,
+  presetBadge,
+  sharedDirBadge,
+  syncBadge,
+} from '../components/agent/agentBadges';
 import { useToast } from '../components/ui/Toast';
 import { useAsync } from '../state/useAsync';
 import { useViewMode } from '../state/viewMode';
@@ -46,20 +55,14 @@ export default function Agents() {
     title: a.name,
     sub: <span className="mono">{a.key}</span>,
     desc: <span className="mono">{a.globalDir}</span>,
-    status: a.active ? <Badge tone="good" dot="good">活跃</Badge> : <Badge tone="neutral" dot="neutral">非活跃</Badge>,
+    status: activeBadge(a),
     badges: (
       <>
-        <Badge tone="info" title={a.sync === 'symlink' ? '以软链方式分发' : '以副本方式分发'}>
-          {a.sync === 'symlink' ? '软链' : '副本'}
-        </Badge>
-        {a.preset
-          ? <Badge tone="accent" title={`以预设「${a.preset}」为分发基准`}>预设 {a.preset}</Badge>
-          : <Badge tone="neutral" title="未关联预设，只分发单独开启的技能">未关联预设</Badge>}
-        {a.family && <Badge tone="accent">{a.family}</Badge>}
-        {a.sharedWith.length > 0 && (
-          <Badge tone="warn" title={`与 ${a.sharedWith.join('、')} 共用同一目录`}>共享目录</Badge>
-        )}
-        {!a.installed && <Badge tone="neutral">未安装</Badge>}
+        {syncBadge(a)}
+        {presetBadge(a)}
+        {familyBadge(a)}
+        {sharedDirBadge(a)}
+        {!a.installed && notInstalledBadge()}
       </>
     ),
     onClick: () => openAgent(a.key),
@@ -88,6 +91,7 @@ export default function Agents() {
               controls={<SwitchLabel checked={onlyInstalled} onChange={setOnlyInstalled}>只看已安装</SwitchLabel>}
               hasFilters={filtered}
               onReset={() => { setQ(''); setOnlyInstalled(false); }}
+              actions={<BadgeLegend />}
               view={{ value: viewMode, onChange: setViewMode }}
             />
           </div>
@@ -206,8 +210,8 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
         value={agent.skillSync?.[s.name] ?? agent.sync}
         onChange={(e) => setSkillSync(s.name, e.target.value as 'symlink' | 'copy')}
       >
-        <option value="symlink">软链</option>
-        <option value="copy">复制</option>
+        <option value="symlink">软链安装（不复制文件，即时生效）</option>
+        <option value="copy">复制安装（独立副本，需重新同步）</option>
       </FieldSelect>
     ),
   }));
@@ -217,10 +221,8 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
       <div className="detail-head">
         <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>← 返回</Button>
         <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{agent.name}</h2>
-        <Badge tone={agent.active ? 'good' : 'neutral'} dot={agent.active ? 'good' : 'neutral'}>
-          {agent.active ? '活跃' : '非活跃'}
-        </Badge>
-        {agent.family && <Badge tone="accent">{agent.family} 家族</Badge>}
+        {activeBadge(agent)}
+        {familyBadge(agent)}
         <div className="detail-actions">
           <Button size="sm" variant={agent.active ? 'ghost' : 'primary'} onClick={toggleActive} title="加入/移出活跃集合（加入即刻就位）">
             {agent.active ? '移出活跃' : '设为活跃'}
@@ -268,8 +270,8 @@ function AgentDetail({ agent, onBack, onChanged }: { agent: AgentView; onBack: (
         <div style={{ marginTop: 'var(--sp-3)', display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
           <span className="mono">全局 {agent.globalDir}</span>
           {agent.project && <span className="mono">项目 {agent.project}</span>}
-          {agent.sharedWith.length > 0 && <span>与 {agent.sharedWith.join('、')} 共用同一目录，分发一次即同时生效</span>}
-          {agent.alsoUsedBy?.length ? <span>该目录亦被 {agent.alsoUsedBy.join('、')} 读取</span> : null}
+          {agent.sharedWith.length > 0 && <span>与 {agent.sharedWith.join('、')} 指向同一个技能目录：分发一次，它们同时生效</span>}
+          {agent.alsoUsedBy?.length ? <span>该目录也被 {agent.alsoUsedBy.join('、')} 直接读取，无需单独安装</span> : null}
         </div>
       </div>
 
