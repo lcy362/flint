@@ -6,6 +6,7 @@ import { readSkill } from './skill.js';
 import { effectiveTags } from './tags.js';
 import { listAgents, resolveProjectDir, findAgentDef, isManagedLinkTarget } from './agents.js';
 import { expandTilde, repoSkillRoot } from './agents.js';
+import { dirsEqual } from './sync.js';
 import { ProjectLink } from '../config/types.js';
 
 /** 项目技能目录的清单文件名（目录 = INDEX.md，被管理/已安装的 skill 登记于此） */
@@ -302,6 +303,72 @@ export function syncProject(cfg: ConfigStore, projectPath: string, allSkills: Sk
     .map((s) => ({ name: s.name, title: s.name, description: s.description }));
   writeIndex(agentsRoot, managed);
   return res;
+}
+
+export interface ProjectTakeoverResult {
+  name: string;
+  /** 已接管：项目里这条已是「仓库那一版」的真实副本，并登记为项目受管技能 */
+  taken: boolean;
+  reason?: string;
+  /** true=需要用户显式 confirm 后才能执行 */
+  needConfirm?: boolean;
+}
+
+/**
+ * 项目技能「接管」——以**副本**形式，而非软链。
+ *
+ * 与 Agent 接管刻意不同：Agent 的技能目录是本机私有、不进 git，所以接管建一条指向仓库的软链
+ * 即可省掉一份副本、只留一份本体；而项目的 .agents/skills 是**要提交、要跨机器共享**的本体
+ * （PRD 流程四 PJ-02），里面若放一条指向 /Users/xxx 的绝对软链，队友拉下来必然是断链。
+ *
+ * 所以项目侧的「接管」= 把这条替换为「仓库同名副本的拷贝」并登记为项目受管技能：
+ * 项目仍然自包含、可直接提交，同时从此由本工具按仓库维护它（仓库更新会同步进来）。
+ *
+ * 幂等：内容已与仓库副本一致时只补登记，不重写文件。
+ */
+export function takeoverProjectSkill(
+  cfg: ConfigStore,
+  proj: ProjectLink,
+  repoId: string | undefined,
+  name: string,
+  confirm?: boolean,
+): ProjectTakeoverResult {
+  // 指定了仓库就用它；未指定则在所有已登记仓库里找同名副本
+  const repos = repoId ? cfg.data.repos.filter((r) => r.id === repoId) : cfg.data.repos;
+  if (repoId && repos.length === 0) return { name, taken: false, reason: `repo 不存在: ${repoId}` };
+  const src = repos.map((r) => path.join(repoSkillRoot(r), name)).find((p) => fs.existsSync(path.join(p, 'SKILL.md')));
+  if (!src) return { name, taken: false, reason: `仓库副本 ${name} 不存在，请先归集入库` };
+
+  const agentsRoot = path.join(proj.path, '.agents', 'skills');
+  const dest = path.join(agentsRoot, name);
+  const st = fs.lstatSync(dest, { throwIfNoEntry: false });
+
+  /** 登记为项目期望集成员：之后由本工具按仓库维护它 */
+  const register = () => {
+    const onSet = new Set(proj.explicitOn ?? []);
+    const offSet = new Set(proj.explicitOff ?? []);
+    onSet.add(name);
+    offSet.delete(name);
+    proj.explicitOn = onSet.size ? [...onSet] : undefined;
+    proj.explicitOff = offSet.size ? [...offSet] : undefined;
+    cfg.save();
+  };
+
+  // 幂等：项目里已是与仓库一致的真实副本 → 只补登记，不动文件
+  if (st && st.isDirectory() && !st.isSymbolicLink() && dirsEqual(dest, src)) {
+    register();
+    return { name, taken: true };
+  }
+
+  if (!confirm) {
+    return { name, taken: false, needConfirm: true, reason: `接管会用仓库那一版替换项目里的 ${name}，请确认` };
+  }
+
+  fs.mkdirSync(agentsRoot, { recursive: true });
+  if (st) fs.rmSync(dest, { recursive: true, force: true });
+  fs.cpSync(src, dest, { recursive: true });
+  register();
+  return { name, taken: true };
 }
 
 export interface ProjectPushResult {

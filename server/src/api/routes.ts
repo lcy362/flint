@@ -16,11 +16,11 @@ import * as presets from '../core/presets.js';
 import * as active from '../core/active.js';
 import { syncActive, diffSync, computeDesired, desiredContext } from '../core/sync.js';
 import { collectCandidates } from '../core/integrate.js';
-import { addProject, syncProject, projectSkillRows, projectAddable, deployedAgents, pushProjectToRepo } from '../core/projects.js';
+import { addProject, syncProject, projectSkillRows, projectAddable, deployedAgents, pushProjectToRepo, takeoverProjectSkill } from '../core/projects.js';
 import { importDirs, previewImportDirs } from '../core/import.js';
 import { previewCollect, collectAgentSkill, previewCollectSource, collectFromSource, projectCollectSource } from '../core/collect.js';
 import { migrateTagsToFrontmatter } from '../core/repo-tags.js';
-import { takeover, takeoverInSource } from '../core/takeover.js';
+import { takeover } from '../core/takeover.js';
 import { applyFix } from '../core/fix.js';
 import { diagnose } from '../core/diagnose.js';
 import { mergeSkill } from '../core/merge.js';
@@ -664,6 +664,9 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       res.status(500).json({ error: (e as Error).message });
     }
   });
+  // 项目技能「接管」：与 Agent 接管刻意不同 —— 项目里落**真实副本**而非软链。
+  // 语义 = 用仓库那一版替换项目里的这条 + 登记为项目受管技能（.agents/skills 要提交 git，
+  // 放绝对软链会让队友断链；细则见 takeoverProjectSkill 的注释）。
   r.post('/projects/:id/takeover', (req, res) => {
     const id = Number(req.params.id);
     const proj = cfg.data.projects[id];
@@ -671,22 +674,9 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const { name, repoId, confirm } = req.body ?? {};
     if (!name) return res.status(400).json({ error: 'name required' });
     try {
-      const result = takeoverInSource(
-        cfg, projectCollectSource(proj.path, id), String(name),
-        repoId ? String(repoId) : undefined, confirm === true,
-      );
-      // 接管成功即登记为项目期望项：与 Agent 接管后「登记为启用」对齐，之后由本工具维护它
-      if (result.linked) {
-        const onSet = new Set(proj.explicitOn ?? []);
-        const offSet = new Set(proj.explicitOff ?? []);
-        onSet.add(String(name));
-        offSet.delete(String(name));
-        proj.explicitOn = onSet.size ? [...onSet] : undefined;
-        proj.explicitOff = offSet.size ? [...offSet] : undefined;
-        cfg.save();
-      }
-      log.info('http', '项目技能接管', {
-        project: proj.path, name: String(name), repo: repoId ? String(repoId) : undefined, linked: result.linked,
+      const result = takeoverProjectSkill(cfg, proj, repoId ? String(repoId) : undefined, String(name), confirm === true);
+      log.info('http', '项目技能接管（副本）', {
+        project: proj.path, name: String(name), repo: repoId ? String(repoId) : undefined, taken: result.taken,
       });
       res.json(result);
     } catch (e) {

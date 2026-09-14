@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   api,
   type AgentCollectItem,
@@ -25,8 +25,14 @@ export interface CollectSourceApi {
   preview: (repoId: string, name: string) => Promise<AgentCollectItem | null>;
   /** 把该技能复制进仓库；replaceNames 用于覆盖仓库里已有的同名副本 */
   collect: (repoId: string, name: string, replaceNames?: string[]) => Promise<CollectResult>;
-  /** 接管：把来源目录里的条目换成指向仓库副本的软链（含登记为受管项） */
-  takeover: (repoId: string, name: string) => Promise<{ linked: boolean; reason?: string }>;
+  /** 接管：把来源目录里的条目纳入本工具管理（落地形态由 takeoverKind 决定） */
+  takeover: (repoId: string, name: string) => Promise<{ ok: boolean; reason?: string }>;
+  /**
+   * 接管落地的形态，决定弹窗文案与预期结果：
+   * - symlink：换成指向仓库副本的软链。用于 Agent 目录——本机私有、不进 git，只留一份本体；
+   * - copy：用仓库那一版覆盖为真实副本。用于项目 .agents/skills——要提交、要跨机器自包含。
+   */
+  takeoverKind: 'symlink' | 'copy';
 }
 
 /** Agent 全局技能目录作为归集来源 */
@@ -42,6 +48,7 @@ export function agentCollectSource(agentKey: string, agentName: string): Collect
         method: 'POST',
         body: JSON.stringify({ agentKey, names: [name], replaceNames }),
       }),
+    takeoverKind: 'symlink',
     // 接管成功后登记为该 Agent 的启用项（与技能库/Agent 页原流程一致），之后由本工具维护它
     takeover: async (repoId, name) => {
       const t = await api<{ linked: boolean; reason?: string }>(`/repos/${encodeURIComponent(repoId)}/takeover`, {
@@ -54,12 +61,12 @@ export function agentCollectSource(agentKey: string, agentName: string): Collect
           body: JSON.stringify({ skill: name, on: true }),
         });
       }
-      return t;
+      return { ok: t.linked, reason: t.reason };
     },
   };
 }
 
-/** 项目 .agents/skills 作为归集来源（服务端接管时已同步登记为项目期望项） */
+/** 项目 .agents/skills 作为归集来源（接管落真实副本，服务端同时登记为项目期望项） */
 export function projectCollectSource(projectId: number): CollectSourceApi {
   return {
     preview: async (repoId, name) => {
@@ -71,11 +78,14 @@ export function projectCollectSource(projectId: number): CollectSourceApi {
         method: 'POST',
         body: JSON.stringify({ repoId, name, replaceNames }),
       }),
-    takeover: (repoId, name) =>
-      api<{ linked: boolean; reason?: string }>(`/projects/${projectId}/takeover`, {
+    takeoverKind: 'copy',
+    takeover: async (repoId, name) => {
+      const t = await api<{ taken: boolean; reason?: string }>(`/projects/${projectId}/takeover`, {
         method: 'POST',
         body: JSON.stringify({ repoId, name, confirm: true }),
-      }),
+      });
+      return { ok: t.taken, reason: t.reason };
+    },
   };
 }
 
@@ -142,14 +152,55 @@ export default function CollectSkillModal({
 
       if (takeoverOn) {
         const t = await source.takeover(repo, name);
-        if (!t.linked) toast.push(`接管未完成：${t.reason ?? '未知原因'}`, 'bad');
-        else toast.push('已接管：该目录已改为指向仓库副本的软链', 'good');
+        if (!t.ok) toast.push(`接管未完成：${t.reason ?? '未知原因'}`, 'bad');
+        else toast.push(
+          symlinkMode
+            ? '已接管：该目录已改为指向仓库副本的软链'
+            : '已接管：项目里已换成仓库那一版的真实副本，并纳入项目管理',
+          'good',
+        );
       }
       onDone();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
     } finally { setBusy(false); }
   };
+
+  // 接管形态决定文案：Agent 目录建软链（省一份副本），项目 .agents/skills 落真实副本（要提交、要自包含）
+  const symlinkMode = source.takeoverKind === 'symlink';
+  const takeoverLabel = symlinkMode
+    ? '同时接管：把该目录里的技能换成指向仓库副本的软链'
+    : '同时接管：用仓库那一版替换项目里的这条，并纳入项目管理';
+  const takeoverNotes: ReactNode[] = [];
+  if (takeoverOn) {
+    takeoverNotes.push(<span key="order">接管在归集完成后执行：</span>);
+    if (item?.reason === 'external') {
+      takeoverNotes.push(
+        <span key="ext">
+          · 该目录这条软链会被换成{symlinkMode ? <>指向仓库副本的<strong>软链</strong></> : <>仓库那一版的<strong>真实副本</strong></>}；
+          它指向的外部目录不受影响，原链接不再保留。
+        </span>
+      );
+    } else if (previewExists && !overwrite) {
+      takeoverNotes.push(
+        <span key="keep">
+          · 该目录里的这条技能会被替换为仓库那一版：你选的是「保持仓库现状」，这版内容不会进仓库，接管后读到的是仓库那一版。
+        </span>
+      );
+    } else {
+      takeoverNotes.push(
+        <span key="replace">· 该目录里的这条技能会被<strong>替换为仓库那一版</strong>（内容已在仓库副本里，不会丢失）。</span>
+      );
+    }
+    takeoverNotes.push(
+      symlinkMode ? (
+        <span key="form">· 在原位置建立<strong>指向仓库副本的软链</strong>：以后改仓库里这份技能，使用方立刻生效，不再有第二份副本。</span>
+      ) : (
+        <span key="form">· 项目里保留<strong>真实副本</strong>、不建软链：项目依旧自包含、可直接提交 git，仓库更新会同步进来。</span>
+      )
+    );
+    takeoverNotes.push(<span key="reg">· 该技能<strong>登记为受管项</strong>，之后由本工具维护它。</span>);
+  }
 
   return (
     <Modal
@@ -209,20 +260,11 @@ export default function CollectSkillModal({
         )}
 
         <SwitchLabel checked={takeoverOn} onChange={setTakeoverOn} disabled={!canCollect}>
-          同时接管：把该目录里的技能换成指向仓库副本的软链
+          {takeoverLabel}
         </SwitchLabel>
         {takeoverOn && (
           <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
-            <span>接管在归集完成后执行：</span>
-            {item?.reason === 'external' ? (
-              <span>· 该目录这条软链改为<strong>指向仓库副本</strong>；它指向的外部目录不受影响，原链接不再保留。</span>
-            ) : previewExists && !overwrite ? (
-              <span>· 该目录里的这条技能会被移除：你选的是「保持仓库现状」，这版内容不会进仓库，接管后使用方读到的是仓库那一版。</span>
-            ) : (
-              <span>· 该目录里的这条技能<strong>直接移除</strong>（内容已在仓库副本里，不会丢失）。</span>
-            )}
-            <span>· 在原位置建立<strong>指向仓库副本的软链</strong>：以后改仓库里这份技能，使用方立刻生效，不再有第二份副本。</span>
-            <span>· 该技能<strong>登记为受管项</strong>，之后由本工具维护它。</span>
+            {takeoverNotes}
           </div>
         )}
       </div>
