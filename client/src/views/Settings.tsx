@@ -1,70 +1,35 @@
-import { useMemo, useState } from 'react';
-import { api, type AgentView, type CustomAgentView, type LogView, type SettingsView } from '../api/types';
+import { useState } from 'react';
+import { api, type CustomAgentView, type LogView, type SettingsView } from '../api/types';
 import EntityList from '../components/common/EntityList';
-import FilterBar from '../components/common/FilterBar';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
-import { familyBadge, installBadge } from '../components/agent/agentBadges';
 import Switch from '../components/ui/Switch';
-import SwitchLabel from '../components/ui/SwitchLabel';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingBoundary from '../components/ui/LoadingBoundary';
 import { FieldSelect } from '../components/ui/Field';
 import { useToast } from '../components/ui/Toast';
 import { AddAgentModal } from '../components/agent/AddAgentModal';
 import { useAsync } from '../state/useAsync';
-import { useViewMode } from '../state/viewMode';
-import { useQueryFlag, useQueryParam } from '../state/router';
 
 /**
- * 设置（UI-03）：活跃 Agent 集合、Agent 目录覆盖、仓库路径、默认同步策略、watcher 开关、自定义 Agent。
+ * 设置：默认同步策略、watcher 开关、自定义 Agent、日志。
+ *
+ * 不含「活跃 Agent 集合」——它回答的是「这个目录要不要跟着自动同步」，
+ * 属于 Agent 自身的决策，放在「智能体」页各 Agent 详情页里设置（单 Agent 粒度，就近可改）。
  */
 export default function Settings() {
-  const { data: agents, loading, error, reload } = useAsync<AgentView[]>(() => api('/agents'));
-  const { data: settings, reload: reloadSettings } = useAsync<SettingsView>(() => api('/settings'));
+  const { data: settings, loading: settingsLoading, error: settingsError, reload: reloadSettings } = useAsync<SettingsView>(() => api('/settings'));
   const { data: customs, reload: reloadCustoms } = useAsync<CustomAgentView[]>(() => api('/agents/custom'));
-  const { data: activeRes, reload: reloadActive } = useAsync<string[]>(() => api('/activeAgents'));
   const { data: logs, reload: reloadLogs } = useAsync<LogView>(() => api('/logs?tail=300'));
   const toast = useToast();
-  // 筛选条件随地址持久化，刷新后保持当前页面的查看状态
-  const [q, setQ] = useQueryParam('q');
-  const [onlyInstalled, setOnlyInstalled] = useQueryFlag('installed');
   const [addOpen, setAddOpen] = useState(false);
-  const [busyKey, setBusyKey] = useState<string | null>(null);
-
-  const activeSet = useMemo(() => new Set(activeRes ?? []), [activeRes]);
-  const [viewMode, setViewMode] = useViewMode();
-
-  const shown = useMemo(() => {
-    const kw = q.trim().toLowerCase();
-    return (agents ?? []).filter((a) => {
-      if (onlyInstalled && !a.installed) return false;
-      if (!kw) return true;
-      return `${a.name} ${a.key} ${a.globalDir}`.toLowerCase().includes(kw);
-    });
-  }, [agents, q, onlyInstalled]);
-
-  /** 加入/移出活跃集合即刻触发同步（AA-04） */
-  const setActive = async (key: string, on: boolean) => {
-    const next = on
-      ? [...(activeRes ?? []), key]
-      : (activeRes ?? []).filter((k) => k !== key);
-    setBusyKey(key);
-    try {
-      await api('/activeAgents', { method: 'PUT', body: JSON.stringify(next) });
-      toast.push(on ? `已把 ${key} 加入活跃集合并同步` : `已把 ${key} 移出活跃集合`, 'good');
-      reloadActive(); reload();
-    } catch (e) {
-      toast.push(e instanceof Error ? e.message : String(e), 'bad');
-    } finally { setBusyKey(null); }
-  };
 
   const putSetting = async (patch: Partial<SettingsView>) => {
     try {
       await api('/settings', { method: 'PUT', body: JSON.stringify(patch) });
       toast.push('设置已保存', 'good');
-      reloadSettings(); reload();
+      reloadSettings();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
     }
@@ -114,67 +79,17 @@ export default function Settings() {
 
   return (
     <>
-      <PageHeader title="设置" sub="活跃 Agent、目录与同步策略" actions={<Button variant="ghost" onClick={() => { reload(); reloadActive(); reloadSettings(); reloadCustoms(); }}>刷新</Button>} />
-
-      <div className="panel">
-        <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>
-          活跃 Agent（自动同步的作用域）
-        </div>
-        <p style={{ color: 'var(--c-ink-2)', fontSize: 'var(--fs-13)', marginBottom: 'var(--sp-4)' }}>
-          加入集合后，它会自动跟随预设与技能库的变更（改动立即同步到对应技能目录）；移出则保持现状，不再被自动改动。
-          共用同一个技能目录的 Agent 只需其中一个设为活跃——同步是按目录生效的。
-        </p>
-        <LoadingBoundary state={{ loading, error, data: activeRes }} empty={{ title: '暂无 Agent', icon: '◉' }}>
-          {() => (
-            <>
-              <div style={{ marginBottom: 'var(--sp-3)' }}>
-                <FilterBar
-                  search={{ value: q, onChange: setQ, placeholder: '搜索名称 / key / 目录' }}
-                  controls={<SwitchLabel checked={onlyInstalled} onChange={setOnlyInstalled}>只看已安装</SwitchLabel>}
-                  hasFilters={!!q.trim() || onlyInstalled}
-                  onReset={() => { setQ(''); setOnlyInstalled(false); }}
-                  actions={<Badge tone="accent">已选 {(activeRes ?? []).length}</Badge>}
-                  view={{ value: viewMode, onChange: setViewMode }}
-                />
-              </div>
-              <EntityList
-                items={shown.map((a) => ({
-                  id: a.key,
-                  title: a.name,
-                  sub: <span className="mono">{a.globalDir}</span>,
-                  status: busyKey === a.key ? <Badge tone="accent">同步中…</Badge> : undefined,
-                  badges: (
-                    <>
-                      {installBadge(a)}
-                      {a.primaryKey !== a.key && (
-                        <Badge tone="info" title="它与同目录的其它 Agent 共用一个技能目录：这些 Agent 共用同一套预设 / 安装方式；目录只需其中一个设为活跃即可">
-                          同目录
-                        </Badge>
-                      )}
-                      {familyBadge(a)}
-                    </>
-                  ),
-                  toggle: (
-                    <Switch
-                      aria-label={`活跃 ${a.name}`}
-                      checked={activeSet.has(a.key)}
-                      onChange={(v) => void setActive(a.key, v)}
-                    />
-                  ),
-                  muted: !activeSet.has(a.key),
-                }))}
-                hideToggle
-              />
-            </>
-          )}
-        </LoadingBoundary>
-      </div>
+      <PageHeader
+        title="设置"
+        sub="默认同步策略、自定义 Agent 与日志"
+        actions={<Button variant="ghost" onClick={() => { reloadSettings(); reloadCustoms(); reloadLogs(); }}>刷新</Button>}
+      />
 
       <div className="panel">
         <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>
           同步策略
         </div>
-        <LoadingBoundary state={{ loading, error, data: settings }} empty={{ title: '无设置', icon: '⚙' }}>
+        <LoadingBoundary state={{ loading: settingsLoading, error: settingsError, data: settings }} empty={{ title: '无设置', icon: '⚙' }}>
           {(s) => (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
               <div style={{ maxWidth: 300 }}>
@@ -227,7 +142,7 @@ export default function Settings() {
               status: c.recursive ? <Badge tone="info">递归扫描</Badge> : undefined,
               actions: (
                 <Button size="sm" variant="danger" onClick={async () => {
-                  try { await api(`/agents/custom/${encodeURIComponent(c.key)}`, { method: 'DELETE' }); toast.push('已删除', 'good'); reloadCustoms(); reload(); }
+                  try { await api(`/agents/custom/${encodeURIComponent(c.key)}`, { method: 'DELETE' }); toast.push('已删除', 'good'); reloadCustoms(); }
                   catch (e) { toast.push(e instanceof Error ? e.message : String(e), 'bad'); }
                 }}>删除</Button>
               ),
@@ -272,7 +187,7 @@ export default function Settings() {
         </LoadingBoundary>
       </div>
 
-      <AddAgentModal open={addOpen} onClose={() => setAddOpen(false)} onDone={() => { setAddOpen(false); reloadCustoms(); reload(); }} />
+      <AddAgentModal open={addOpen} onClose={() => setAddOpen(false)} onDone={() => { setAddOpen(false); reloadCustoms(); }} />
     </>
   );
 }
