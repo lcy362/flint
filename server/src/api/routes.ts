@@ -260,7 +260,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     }
   });
 
-  // 接管：把 agent 源 skill 替换为指向仓库副本的软链（源改名备份，需显式 confirm）
+  // 接管：把 agent 目录里的技能条目替换为指向仓库副本的软链（内容已在仓库，故直接替换、不另做备份；需显式 confirm）
   r.post('/repos/:id/takeover', (req, res) => {
     const { agentKey, name, confirm } = req.body ?? {};
     if (!agentKey || !name) return res.status(400).json({ error: 'agentKey/name required' });

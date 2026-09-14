@@ -247,15 +247,15 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
       else toast.push(`未复制到仓库：${res.skipped.join('；') || '无变化'}`, 'bad');
 
       if (collectTakeover) {
-        const t = await api<{ linked: boolean; reason?: string; backupDir?: string }>(
+        const t = await api<{ linked: boolean; reason?: string }>(
           `/repos/${encodeURIComponent(collectRepo)}/takeover`,
           { method: 'POST', body: JSON.stringify({ agentKey: agent.key, name, confirm: true }) }
         );
         if (!t.linked) {
           toast.push(`接管未完成：${t.reason ?? '未知原因'}`, 'bad');
         } else {
-          toast.push(t.backupDir ? '已接管：原技能目录已备份，本目录改为指向仓库副本的软链' : '已接管：本目录改为指向仓库副本的软链', 'good');
-          // 登记为该 Agent 的启用项：否则它不在期望集里，下次「同步」会把这颗软链当多余项回收
+          toast.push('已接管：本目录已改为指向仓库副本的软链', 'good');
+          // 登记为该 Agent 的启用项，之后由本工具维护它
           await api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ skill: name, on: true }) });
         }
       }
@@ -733,13 +733,14 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
           </SwitchLabel>
           {collectTakeover && (
             <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
-              <span>接管会在归集完成后执行，具体做这三件事：</span>
-              <span>1. 本目录里的技能先<strong>改名备份</strong>为 <span className="mono">.original-{collectItem?.name}</span>（内容不删除，随时可找回）。</span>
-              <span>2. 在原位置建立<strong>指向仓库副本的软链</strong>：以后改仓库里这份技能，该 Agent 立刻生效，不再有第二份副本。</span>
-              <span>3. 把该技能<strong>登记为这个 Agent 的启用项</strong>——否则它不在分发名单里，下次点「同步」会把这条软链当多余项回收。</span>
-              {collectItem?.reason === 'external' && (
-                <span>其中第 1 步不适用：原本就是软链，会被直接改为指向仓库副本（外部原目录不受影响，原软链不保留、也不另做备份）。</span>
+              <span>接管在归集完成后执行：</span>
+              {collectItem?.reason === 'external' ? (
+                <span>· 本目录这条软链改为<strong>指向仓库副本</strong>；它指向的外部目录不受影响，原链接不再保留。</span>
+              ) : (
+                <span>· 本目录里的这条技能<strong>直接移除</strong>（内容已在仓库副本里，不会丢失）。</span>
               )}
+              <span>· 在原位置建立<strong>指向仓库副本的软链</strong>：以后改仓库里这份技能，该 Agent 立刻生效，不再有第二份副本。</span>
+              <span>· 该技能<strong>登记为这个 Agent 的启用项</strong>，之后由本工具维护它。</span>
             </div>
           )}
         </div>

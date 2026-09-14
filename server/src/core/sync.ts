@@ -121,20 +121,23 @@ export function resolveSyncMode(cfg: ConfigStore, agentKey: string, skillName: s
   return ov?.skillSync?.[skillName] ?? ov?.sync ?? cfg.data.defaultSync;
 }
 
+/** 删除已存在的落点（含悬空软链），供重建前清理 */
+function removeExisting(p: string): void {
+  try {
+    // 用 lstat 而不是 existsSync：悬空软链 existsSync 为 false，但仍占位，直接 symlink 会 EEXIST
+    if (fs.lstatSync(p, { throwIfNoEntry: false })) fs.rmSync(p, { recursive: true, force: true });
+  } catch { /* ignore */ }
+}
+
 export function symlinkSkill(linkPath: string, targetDir: string): void {
   fs.mkdirSync(path.dirname(linkPath), { recursive: true });
-  // 清理旧的半成品链接/目录
-  if (fs.existsSync(linkPath)) {
-    fs.rmSync(linkPath, { recursive: true, force: true });
-  }
+  removeExisting(linkPath);
   fs.symlinkSync(targetDir, linkPath, 'dir');
 }
 
 export function copySkill(linkPath: string, targetDir: string): void {
   fs.mkdirSync(path.dirname(linkPath), { recursive: true });
-  if (fs.existsSync(linkPath)) {
-    fs.rmSync(linkPath, { recursive: true, force: true });
-  }
+  removeExisting(linkPath);
   fs.cpSync(targetDir, linkPath, { recursive: true });
 }
 
@@ -148,7 +151,7 @@ function readDir(dir: string): fs.Dirent[] {
  * 用于判断「goal 位置已有的实体目录」是否就是本工具部署的副本：
  * 只有内容一致时才允许把它重建为软链/副本——否则那是用户自己的内容，绝不删除。
  */
-function dirsEqual(a: string, b: string): boolean {
+export function dirsEqual(a: string, b: string): boolean {
   const ae = readDir(a);
   const be = readDir(b);
   if (ae.length === 0 && be.length === 0) return false;

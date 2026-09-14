@@ -15,7 +15,7 @@ export function scanDir(root: string, source: string, layout: Layout): Skill[] {
   const children = fs.existsSync(root) ? fs.readdirSync(root, { withFileTypes: true }).map((d) => d.name) : [];
   const out: Skill[] = [];
   for (const name of children) {
-    // 跳过隐藏目录/文件：接管留下的 `.original-<name>` 备份、`.git` 等都不该被当成技能
+    // 跳过隐藏目录/文件：`.git`、编辑器临时目录、历史接管备份等都不该被当成技能
     if (name.startsWith('.')) continue;
     const child = path.join(root, name);
     let isDir: boolean;

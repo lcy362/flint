@@ -419,8 +419,7 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
   const linkTo = (p: string) => { try { return fs.readlinkSync(p); } catch { return undefined; } };
   const metaOf = (name: string) => allSkills.find((s) => s.name === name);
 
-  // 1) 扫描自身目录，记录是否存在及各目录项类型
-  //    跳过隐藏项：接管留下的 `.original-<name>` 备份不算技能
+  // 1) 扫描自身目录，记录是否存在及各目录项类型（隐藏项不算技能）
   if (fs.existsSync(ownDir)) {
     for (const ent of fs.readdirSync(ownDir, { withFileTypes: true })) {
       if (ent.name.startsWith('.')) continue;
