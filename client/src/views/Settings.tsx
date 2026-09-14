@@ -86,8 +86,8 @@ export default function Settings() {
       />
 
       <div className="panel">
-        <div className="page-head__title" style={{ fontSize: 'var(--fs-16)', marginBottom: 'var(--sp-3)' }}>
-          同步策略
+        <div className="panel__head">
+          <span className="panel__title">同步策略</span>
         </div>
         <LoadingBoundary state={{ loading: settingsLoading, error: settingsError, data: settings }} empty={{ title: '无设置', icon: '⚙' }}>
           {(s) => (
@@ -121,40 +121,31 @@ export default function Settings() {
       </div>
 
       <div className="panel">
-        {(customs ?? []).length === 0 ? (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--sp-3)' }}>
-              <span className="page-head__title" style={{ fontSize: 'var(--fs-16)' }}>自定义 Agent</span>
-              <Button size="sm" onClick={() => setAddOpen(true)}>新增</Button>
-            </div>
-            <EmptyState title="暂无自定义 Agent" hint="内置清单之外的工具可在此登记，填写其全局 skill 目录。" />
-          </>
-        ) : (
-          <EntityList
-            title="自定义 Agent"
-            toolbar={<Button size="sm" onClick={() => setAddOpen(true)}>新增</Button>}
-            hideToggle
-            items={(customs ?? []).map((c) => ({
-              id: c.key,
-              title: c.name,
-              sub: <span className="mono">{c.key}</span>,
-              desc: <span className="mono">{c.globalDir}{c.projectDir ? ` · ${c.projectDir}` : ''}</span>,
-              status: c.recursive ? <Badge tone="info">递归扫描</Badge> : undefined,
-              actions: (
-                <Button size="sm" variant="danger" onClick={async () => {
-                  try { await api(`/agents/custom/${encodeURIComponent(c.key)}`, { method: 'DELETE' }); toast.push('已删除', 'good'); reloadCustoms(); }
-                  catch (e) { toast.push(e instanceof Error ? e.message : String(e), 'bad'); }
-                }}>删除</Button>
-              ),
-            }))}
-          />
-        )}
+        <EntityList
+          title="自定义 Agent"
+          toolbar={<Button size="sm" onClick={() => setAddOpen(true)}>新增</Button>}
+          hideToggle
+          empty={<EmptyState title="暂无自定义 Agent" hint="内置清单之外的工具可在此登记，填写其全局 skill 目录。" />}
+          items={(customs ?? []).map((c) => ({
+            id: c.key,
+            title: c.name,
+            sub: <span className="mono">{c.key}</span>,
+            desc: <span className="mono">{c.globalDir}{c.projectDir ? ` · ${c.projectDir}` : ''}</span>,
+            status: c.recursive ? <Badge tone="info">递归扫描</Badge> : undefined,
+            actions: (
+              <Button size="sm" variant="danger" onClick={async () => {
+                try { await api(`/agents/custom/${encodeURIComponent(c.key)}`, { method: 'DELETE' }); toast.push('已删除', 'good'); reloadCustoms(); }
+                catch (e) { toast.push(e instanceof Error ? e.message : String(e), 'bad'); }
+              }}>删除</Button>
+            ),
+          }))}
+        />
       </div>
 
       <div className="panel">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--sp-3)' }}>
-          <span className="page-head__title" style={{ fontSize: 'var(--fs-16)' }}>日志</span>
-          <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+        <div className="panel__head">
+          <span className="panel__title">日志</span>
+          <div style={{ display: 'flex', gap: 'var(--sp-2)', marginLeft: 'auto' }}>
             <Button size="sm" variant="ghost" onClick={() => reloadLogs()}>刷新</Button>
             <Button size="sm" variant="ghost" onClick={() => void downloadLogs()}>下载日志</Button>
             <Button size="sm" onClick={() => void copyDiag()}>复制诊断信息</Button>
