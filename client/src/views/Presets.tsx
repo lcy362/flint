@@ -2,14 +2,18 @@ import { useMemo, useRef, useState } from 'react';
 import { api, type AgentView, type PresetView, type StateView, type SkillCardView, type SkillView } from '../api/types';
 import SkillList from '../components/skill/SkillList';
 import { skillViewToCard } from '../components/skill/adapters';
+import { SKILL_BADGE_LEGEND } from '../components/skill/SkillBadges';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
+import BadgeLegend from '../components/common/BadgeLegend';
 import FilterBar from '../components/common/FilterBar';
 import MultiSelect from '../components/ui/MultiSelect';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
-import { notInstalledBadge } from '../components/agent/agentBadges';
+import { notInstalledBadge, sharedStrategyBadge } from '../components/agent/agentBadges';
+import AgentNamesTitle from '../components/agent/AgentNamesTitle';
+import { groupAgentsByDir } from '../components/agent/agentGroups';
 import Chip from '../components/ui/Chip';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingBoundary from '../components/ui/LoadingBoundary';
@@ -398,30 +402,37 @@ function PresetDetail({
   /**
    * 应用本预设的 Agent = 显式关联了本预设的 Agent。
    * 不关联就不参与——不存在「未绑定即跟随全部预设」的兜底，故这里没有其它来源。
-   * 只有加入活跃集合的 Agent 才会把技能写入本地目录，故单独标注分发状态。
+   *
+   * 与智能体页一致：同一技能目录只出一行，标题罗列使用该目录的全部 Agent。
+   * 「是否分发」也按目录判断——同步目标按目录归并，同目录里任一 Agent 活跃就会覆盖该目录。
    */
   const appliedAgents = useMemo(
-    () => (agents ?? [])
-      .filter((a) => a.preset === preset.name)
-      .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)),
+    () => (agents ?? []).filter((a) => a.preset === preset.name),
     [agents, preset.name]
   );
+  const appliedGroups = useMemo(() => groupAgentsByDir(appliedAgents), [appliedAgents]);
+  const activeDirs = useMemo(
+    () => new Set((agents ?? []).filter((a) => a.active).map((a) => a.globalDir)),
+    [agents]
+  );
+  const openAgent = (key: string) => navigate({ tab: 'agents', sub: key, query: new URLSearchParams() });
 
-  const agentItems: EntityItem[] = appliedAgents.map((a) => ({
-    id: a.key,
-    title: a.name,
-    sub: <span className="mono">{a.globalDir}</span>,
+  const agentItems: EntityItem[] = appliedGroups.map((g) => ({
+    id: g.dir,
+    title: <AgentNamesTitle agents={g.agents} onOpen={openAgent} />,
+    sub: <span className="mono">{g.dir}</span>,
     badges: (
       <>
-        {a.active ? (
-          <Badge tone="good" dot="good" title="已加入活跃集合，技能已实际分发到本地目录">已分发</Badge>
+        {activeDirs.has(g.dir) ? (
+          <Badge tone="good" dot="good" title="这个技能目录有 Agent 在活跃集合里：本预设的变更会自动同步进去">已分发</Badge>
         ) : (
-          <Badge tone="neutral" dot="neutral" title="未加入活跃集合，技能暂不会实际分发">未分发</Badge>
+          <Badge tone="neutral" dot="neutral" title="这个技能目录没有 Agent 在活跃集合里：本预设的变更不会自动同步，需到 Agent 详情页手动同步">未分发</Badge>
         )}
-        {!a.installed && notInstalledBadge()}
+        {g.agents.length > 1 && sharedStrategyBadge(g.primary.name, g.others.map((a) => a.name))}
+        {!g.installed && notInstalledBadge()}
       </>
     ),
-    onClick: () => navigate({ tab: 'agents', sub: a.key, query: new URLSearchParams() }),
+    onClick: () => openAgent(g.primary.key),
   }));
 
   return (
@@ -475,12 +486,12 @@ function PresetDetail({
           <div className="panel panel--quiet">
             <div className="panel__head">
               <span className="panel__title">已应用的 Agent</span>
-              <Badge tone={agentItems.length ? 'good' : 'neutral'}>{agentItems.length}</Badge>
+              <Badge tone={appliedAgents.length ? 'good' : 'neutral'}>{appliedAgents.length}</Badge>
             </div>
             <p className="panel__hint">
-              以本预设为分发基准的 Agent：在其详情页把「关联预设」选为本预设即会接收；
-              标注「已分发」表示技能已实际写入该 Agent 的本地目录。
-              未加入活跃集合的 Agent 不会自动跟随本预设的变更，可在「设置」页把它加入活跃集合，或在其详情页手动同步。
+              在 Agent 详情页把「关联预设」选为本预设，它就会接收这些技能；共用同一个技能目录的 Agent 合为一行（它们共用同一套策略）。
+              「已分发」表示这个目录会跟随本预设的变更自动同步；没有 Agent 活跃的目录不会自动跟随，
+              可在「设置」页把它加入活跃集合，或在其详情页手动同步。
             </p>
             <EntityList
               mode="list"
@@ -564,6 +575,16 @@ function PresetDetail({
                 }
                 hasFilters={hasFilter}
                 onReset={clearFilters}
+                actions={
+                  <BadgeLegend
+                    title="技能上的标签是什么意思？"
+                    items={[
+                      { label: '按标签纳入', tone: 'accent', desc: '该技能因打有本预设的关联标签而自动纳入，开关已锁定；去掉对应标签即可停用。' },
+                      ...SKILL_BADGE_LEGEND,
+                    ]}
+                    intro={<>开关控制该技能是否显式纳入本预设；徽标说明它的来源与装入目录的形态。</>}
+                  />
+                }
                 view={{ value: viewMode, onChange: setViewMode }}
               />
               <div style={{ marginTop: 'var(--sp-4)' }}>

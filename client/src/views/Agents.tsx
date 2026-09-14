@@ -15,6 +15,7 @@ import { FieldInput, FieldSelect } from '../components/ui/Field';
 import { PathField } from '../components/ui/PathField';
 import Tag from '../components/ui/Tag';
 import BadgeLegend from '../components/common/BadgeLegend';
+import AgentNamesTitle from '../components/agent/AgentNamesTitle';
 import { groupAgentsByDir } from '../components/agent/agentGroups';
 import {
   AGENT_BADGE_LEGEND,
@@ -67,24 +68,7 @@ export default function Agents() {
       id: g.dir,
       // 标题罗列使用该目录的全部 Agent —— 它们都是真实的 Agent，不把谁叫「别名」；
       // 每个名字可单独点开自己的详情，卡片空白处仍进主 Agent
-      title: multi ? (
-        // 外层包一个元素：列表视图的标题是 inline-flex，多个兄弟节点会被拉开间距
-        <span>
-          {g.agents.map((a, i) => (
-            <span key={a.key}>
-              {i > 0 && <span className="entity-title__sep"> / </span>}
-              <button
-                type="button"
-                className="entity-title__link"
-                title={`打开 ${a.name} 的详情`}
-                onClick={(e) => { e.stopPropagation(); openAgent(a.key); }}
-              >
-                {a.name}
-              </button>
-            </span>
-          ))}
-        </span>
-      ) : primary.name,
+      title: <AgentNamesTitle agents={g.agents} onOpen={openAgent} />,
       sub: <span className="mono">{g.keys.join(' / ')}</span>,
       desc: <span className="mono">{g.dir}</span>,
       status: activeBadge({ active: g.anyActive }),
