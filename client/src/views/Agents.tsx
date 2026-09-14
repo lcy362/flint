@@ -175,11 +175,11 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   // 直接添加技能：本地草稿（乐观更新）+ 串行提交，连点开关时不丢操作、不后发先至
   const [draftOn, setDraftOn] = useState<Record<string, boolean>>({});
   const [q, setQ] = useState('');
-  const [srcs, setSrcs] = useState<string[]>([]);
+  /** 来源筛选：null = 用默认值（只选自有仓库），[] = 不按来源筛，[...] = 只留这些来源 */
+  const [srcs, setSrcs] = useState<string[] | null>(null);
   const [facets, setFacets] = useState<string[]>([]);
   const [viewMode, setViewMode] = useViewMode();
   const [presetCollapsed, togglePresetCollapsed] = useCollapsed('lsh.collapsed.agent.preset');
-  const [directCollapsed, toggleDirectCollapsed] = useCollapsed('lsh.collapsed.agent.direct');
   const [installCollapsed, toggleInstallCollapsed] = useCollapsed('lsh.collapsed.agent.install', true);
   const directQueue = useRef<Promise<void>>(Promise.resolve());
 
@@ -333,11 +333,14 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
     return m;
   }, [library]);
 
-  const directFiltered = !!(q.trim() || srcs.length || facets.length);
+  // 来源筛选默认只选中自有仓库（与技能库 / 预设详情一致）；用户没动过就不算「筛选条件」
+  const defaultSrcs = useMemo(() => (state?.repos ?? []).map((r) => r.id), [state]);
+  const activeSrcs = srcs ?? defaultSrcs;
+  const directFiltered = !!(q.trim() || facets.length || (srcs !== null && srcs.length > 0));
   const shownDirect = useMemo(() => {
     const kw = q.trim().toLowerCase();
     return directCards.filter((c) => {
-      if (srcs.length > 0 && !srcs.includes(c.source)) return false;
+      if (activeSrcs.length > 0 && !activeSrcs.includes(c.source)) return false;
       if (facets.length > 0 && !facets.some((t) => c.tags.includes(t))) return false;
       if (kw) {
         const hay = `${c.name} ${c.title ?? ''} ${c.description ?? ''}`.toLowerCase();
@@ -345,7 +348,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
       }
       return true;
     });
-  }, [directCards, q, srcs, facets]);
+  }, [directCards, q, activeSrcs, facets]);
 
   // 关联预设当前会带入的技能名（显式名单 ∪ 关联标签命中）
   const activePreset = (presets ?? []).find((p) => p.name === agent.preset);
@@ -559,56 +562,53 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
           <div className="panel__head">
             <span className="panel__title">直接添加技能</span>
             <Badge tone={enabledDirect ? 'accent' : 'neutral'} title="直接开启（不经预设）的技能数">{enabledDirect} 个技能</Badge>
-            <FoldButton expanded={!directCollapsed} label="直接添加技能" onClick={toggleDirectCollapsed} />
           </div>
-          {!directCollapsed && (
-            <>
-              <p className="panel__hint">
-                从技能库整体勾选：打开即单独装到这个 Agent（不受上方预设影响），关闭即移除。
-                打「预设引入」标记的技能来自关联预设，在这里关掉只对它单独生效。
-              </p>
-              <FilterBar
-                search={{ value: q, onChange: setQ, placeholder: '搜索技能名称 / 描述' }}
-                controls={
-                  <>
-                    <MultiSelect
-                      label="来源"
-                      options={allSources.map((s) => ({ label: s, value: s, count: sourceCounts[s] }))}
-                      selected={srcs}
-                      onChange={setSrcs}
-                      emptyHint="技能库还没有来源。"
-                    />
-                    <MultiSelect
-                      label="标签"
-                      options={allTags.map((t) => ({ label: t, value: t, count: tagCounts[t] }))}
-                      selected={facets}
-                      onChange={setFacets}
-                      emptyHint="技能都还没有标签。"
-                    />
-                  </>
-                }
-                hasFilters={directFiltered}
-                onReset={() => { setQ(''); setSrcs([]); setFacets([]); }}
-                actions={
-                  <BadgeLegend
-                    title="技能上的标签是什么意思？"
-                    items={SKILL_BADGE_LEGEND}
-                    intro={<>开关控制该技能是否装到这个 Agent；徽标说明它的来源与装入目录的形态。</>}
-                  />
-                }
-                view={{ value: viewMode, onChange: setViewMode }}
-              />
-              <div style={{ marginTop: 'var(--sp-4)' }}>
-                <SkillList
-                  title={`${directFiltered ? '筛选结果' : '技能库'} · ${shownDirect.length}${directFiltered ? ` / ${directCards.length}` : ''}`}
-                  items={shownDirect}
-                  onToggle={(item) => toggleDirect(item.name, !(item.toggleOn ?? item.state === 'on'))}
-                  hideToggle
-                  empty={directFiltered ? <EmptyState title="没有匹配的技能" /> : <EmptyState title="技能库为空" hint="先在技能库登记并导入技能。" />}
+          <p className="panel__hint">
+            从技能库整体勾选：打开即单独装到这个 Agent（不受上方预设影响），关闭即移除。
+            打「预设引入」标记的技能来自关联预设，在这里关掉只对它单独生效。
+          </p>
+          <FilterBar
+            search={{ value: q, onChange: setQ, placeholder: '搜索技能名称 / 描述' }}
+            controls={
+              <>
+                <MultiSelect
+                  label="来源"
+                  options={allSources.map((s) => ({ label: s, value: s, count: sourceCounts[s] }))}
+                  selected={activeSrcs}
+                  onChange={setSrcs}
+                  emptyHint="技能库还没有来源。"
                 />
-              </div>
-            </>
-          )}
+                <MultiSelect
+                  label="标签"
+                  options={allTags.map((t) => ({ label: t, value: t, count: tagCounts[t] }))}
+                  selected={facets}
+                  onChange={setFacets}
+                  emptyHint="技能都还没有标签。"
+                />
+              </>
+            }
+            hasFilters={directFiltered}
+            onReset={() => { setQ(''); setSrcs(null); setFacets([]); }}
+            actions={
+              <BadgeLegend
+                title="技能上的标签是什么意思？"
+                items={SKILL_BADGE_LEGEND}
+                intro={<>开关控制该技能是否装到这个 Agent；徽标说明它的来源与装入目录的形态。</>}
+              />
+            }
+            view={{ value: viewMode, onChange: setViewMode }}
+          />
+          <div style={{ marginTop: 'var(--sp-4)' }}>
+            <SkillList
+              title={`${directFiltered ? '筛选结果' : '技能库'} · ${shownDirect.length}${directFiltered ? ` / ${directCards.length}` : ''}`}
+              items={shownDirect}
+              onToggle={(item) => toggleDirect(item.name, !(item.toggleOn ?? item.state === 'on'))}
+              hideToggle
+              collapsible
+              storageKey="lsh.collapsed.agent.direct"
+              empty={directFiltered ? <EmptyState title="没有匹配的技能" /> : <EmptyState title="技能库为空" hint="先在技能库登记并导入技能。" />}
+            />
+          </div>
         </div>
 
         <div className="panel">
