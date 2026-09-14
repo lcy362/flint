@@ -1,7 +1,7 @@
 # Skills Hub 技术架构（TECH）
 
 > 本文描述 Skills Hub 的**当前实现**：技术栈、分层、数据模型、核心引擎、HTTP API、前端架构与关键设计约定。
-> 产品需求见 `PRD.md`，快速上手见 `README.md`。
+> 产品需求见 [`PRD.md`](./PRD.md)，快速上手见 [`../README.md`](../README.md)，开发约定见 [`../AGENTS.md`](../AGENTS.md)。
 
 ---
 
@@ -29,7 +29,10 @@
 local-skills-hub/
 ├─ package.json            # workspaces + 顶层脚本
 ├─ start.sh                # 一键启动脚本
-├─ PRD.md / TECH.md / README.md
+├─ README.md               # 使用说明
+├─ AGENTS.md               # 开发指引（AI 助手 / 贡献者）
+├─ docs/PRD.md             # 产品需求
+├─ docs/TECH.md            # 本文件（技术架构）
 ├─ server/
 │  ├─ src/
 │  │  ├─ index.ts          # 入口：装配 ConfigStore / Router / Watcher，resync

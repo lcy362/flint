@@ -4,7 +4,14 @@
 
 Skills Hub 是一个本地优先的个人 AI Skills 资产管理器——集中管理你所有 Agent 使用的 skill，统一打标签、筛选、去重、投放到各 Agent 与项目目录。
 
-> 文档导航：产品需求见 [`PRD.md`](./PRD.md)，技术架构见 [`TECH.md`](./TECH.md)。
+## 文档导航
+
+| 文档 | 内容 |
+|------|------|
+| `README.md`（本文件） | 快速上手与功能概览 |
+| [`AGENTS.md`](./AGENTS.md) | 面向 AI 编码助手 / 贡献者的开发指引（架构要点、约定、命令） |
+| [`docs/PRD.md`](./docs/PRD.md) | 产品需求（功能、规则、验收标准） |
+| [`docs/TECH.md`](./docs/TECH.md) | 技术架构（数据模型、同步引擎、API、前端） |
 
 ## 核心理念
 
@@ -26,6 +33,17 @@ skill 本体就是磁盘上的普通目录（`SKILL.md`），标签等元数据�
 ### 尽量降低生态碎片化
 
 同名 skill 多来源时自动去重保留一份；重复、分歧、失效引用都集中在诊断页看清并就地处理，避免同一份 skill 在环境中以多个副本反复膨胀。
+
+## 功能一览
+
+| 模块 | 能力 |
+|------|------|
+| **技能库** | 浏览 / 搜索 / 过滤全部 skill；`SKILL.md` 预览、标签编辑、来源追溯；登记 / 编辑自有仓库与第三方仓库；从 Agent 归集、从目录导入 |
+| **智能体** | 一个实际技能目录一张卡片（同目录 Agent 合卡并共用一套策略）；设活跃、覆盖目录、手动同步、关联预设、逐个开关技能、按技能切换软链 / 复制 |
+| **预设** | 一组 skill 套餐（显式成员 ∪ 关联标签命中）；无启用开关，成员 / 标签一变即刻分发到活跃 Agent |
+| **项目** | 登记项目 + 标签 → 期望集自动派生；本体复制到 `.agents/skills`（可提交 git），各 Agent 项目目录软链共享；支持归集 / 接管 / 回写仓库 |
+| **诊断** | 6 维度体检（同步 / 重复 / 失效软链 / 配置 / 仓库 / 项目），支持一键修复（先确认再执行） |
+| **设置** | 默认安装方式（软链 / 复制）、可选复制 watcher、自定义 Agent、日志查看 / 下载 / 复制诊断 |
 
 ## 第一次使用
 
@@ -98,3 +116,34 @@ npm run dev
 - **项目专属 skill**：用「项目」模块登记路径 + 标签，匹配的 skill 进入项目 `.agents/`；改动后可「回写仓库」，也可把项目技能目录投放到各 Agent 的项目级目录。
 - **诊断与修复**：「诊断」页做 6 维度体检（同步 / 重复 / 失效软链 / 配置 / 仓库 / 项目），支持一键修复（先确认再执行）。
 - **同步策略**：默认软链；在 Agent 详情页可按 Agent 或按单个技能切换为复制。复制模式如需增量同步，到「设置」按需开启 watcher（默认关闭）。
+
+## 项目结构
+
+```
+local-skills-hub/
+├─ start.sh          # 一键启动（环境 / 依赖 / 端口检查 → 启动 → 打开浏览器）
+├─ README.md         # 本文件
+├─ AGENTS.md         # 开发指引（面向 AI 助手 / 贡献者）
+├─ docs/
+│  ├─ PRD.md         # 产品需求
+│  └─ TECH.md        # 技术架构
+├─ server/           # 后端（Node + TS + Express）：扫描、同步、配置、诊断
+└─ client/           # 前端（React + TS + Vite）：技能库 / 智能体 / 预设 / 项目 / 诊断 / 设置
+```
+
+## 开发
+
+```bash
+npm install            # 安装依赖（npm workspaces）
+npm run dev            # 并行启动前后端
+npm run dev:server     # 只启动后端（tsx watch）
+npm run dev:client     # 只启动前端（vite）
+npm run build          # 构建：server (tsc) + client (vite build)
+npm start              # 以构建产物启动后端
+```
+
+- 端口：后端 `8787`（`PORT`），前端 `5173`（`CLIENT_PORT`）；Vite 将 `/api` 代理到后端。
+- 端到端 smoke（使用临时目录，不污染本机）：`cd server && npx tsx smoke.ts`。
+- 配置 / 日志位置：`~/.skills-hub/config.json`、`~/.skills-hub/logs/app.log`（可用 `SKILLS_HUB_CONFIG` 覆盖配置路径）。
+
+更多架构与约定见 [`docs/TECH.md`](./docs/TECH.md)，开发约定见 [`AGENTS.md`](./AGENTS.md)。
