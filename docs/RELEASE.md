@@ -219,6 +219,21 @@ git checkout package.json
 
 首版之后，后续发版一律走 OIDC。
 
+> ℹ️ **registry 传播延迟（v0.1.0 实录）**：`release.yml` 在发布后会校验新版本可从 registry 解析。
+> 刚 `publish` 完的几秒到几十秒内查询可能返回 **404** —— v0.1.0 首次发布就踩到了，后果是
+> **包其实发成功了，却因为这一步判死而跳过了建 tag / 建 GitHub Release**。
+> 工作流已改为失败重试 6 次（约 60s）；若重试后仍失败，才说明包名或权限确有问题。
+>
+> 万一还是遇到「已发布但没建 tag/Release」，手工补一条即可：
+>
+> ```bash
+> gh release create vX.Y.Z --target master --title vX.Y.Z \
+>   --notes-file docs/releases/release_notes_vX.Y.Z.md
+> ```
+>
+> 注意：手工建 tag 会以**你的身份**触发 `push: tags v*` 那次 `Release` 运行（正常路径下 tag 由
+> `GITHUB_TOKEN` 创建，不会递归触发）。该运行会在「已发布校验」处正确地拦下，可直接取消。
+
 ---
 
 ## 六、CI 与 Release 的分工

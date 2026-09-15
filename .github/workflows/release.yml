@@ -173,13 +173,24 @@ jobs:
           fi
           npm publish --provenance
 
+      # 刚发布完 registry 存在传播延迟，立刻查询可能拿到 404 —— v0.1.0 首次发布实测踩到过，
+      # 结果是包明明发成功了，却因为这一步判死而跳过了建 tag / 建 Release。
+      # 因此改为重试若干次：只有始终查不到才判失败（那才是包名 / 权限真有问题）。
       - name: Verify the published version resolves
         if: ${{ inputs.dry-run != true }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          npm view "flint-skills-hub@${VERSION}" version
-          npm view "flint-skills-hub@${VERSION}" dist.tarball
+          for attempt in 1 2 3 4 5 6; do
+            if npm view "flint-skills-hub@${VERSION}" version dist.tarball 2>/dev/null; then
+              echo "flint-skills-hub@${VERSION} resolves on the registry."
+              exit 0
+            fi
+            echo "Attempt ${attempt}: not resolvable yet (registry propagation lag); retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::flint-skills-hub@${VERSION} is still not resolvable after ~60s; the publish may not have landed."
+          exit 1
 
       - name: Create GitHub Release
         if: ${{ inputs.dry-run != true }}
