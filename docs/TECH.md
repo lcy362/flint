@@ -249,6 +249,8 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | 批量导入 | `POST /import` | 复制外部目录进仓库；同名去重；写入 `origin` 来源追溯。 |
 | 合并仲裁 | `POST /skills/merge` | 同名多来源时保留指定来源；未在仓库的候选被收编进主仓库；记录 `mergeSource`。 |
 
+**行内入口的可见性**：Agent 技能表上的「归集到仓库」只在技能**尚无归属**时出现——本体是自带真实目录，或软链指向任何「已登记库」（自有仓库 / 第三方来源 / 共享标准目录 `~/.agents/skills`、`~/.config/agents/skills`）**之外**。软链已指向已登记库时技能已有归属（`isLinkInRegisteredLibrary`），再归集只会复制出重复本体，因此只保留「从本目录移除」；这类技能要收进仓库请走技能库「添加技能 → 从 Agent 归集」。
+
 前端 `CollectSkillModal` 通过 `CollectSourceApi` 适配器（Agent 目录 / 项目目录）复用同一弹窗与流程。
 
 ---

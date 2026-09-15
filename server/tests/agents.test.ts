@@ -6,6 +6,7 @@ import {
   effectiveAgentKey,
   expandTilde,
   findAgentDef,
+  isLinkInRegisteredLibrary,
   isLinkInRepo,
   isManagedLinkTarget,
   primaryOf,
@@ -14,6 +15,7 @@ import {
   resolveGlobalDir,
   resolveProjectDir,
   setPrimary,
+  sharedStandardDir,
 } from '../src/core/agents.js';
 import { emptyConfig, HubConfig, Repo } from '../src/config/types.js';
 import { makeStore, tmpDir } from './helpers.js';
@@ -233,5 +235,53 @@ describe('isManagedLinkTarget / isLinkInRepo（软链归属判断）', () => {
     const { repo, base, alphaDir, agentDir } = fixture();
     expect(isLinkInRepo(repo, alphaDir, agentDir)).toBe(true);
     expect(isLinkInRepo(repo, path.join(base, 'outside'), agentDir)).toBe(false);
+  });
+});
+
+describe('isLinkInRegisteredLibrary（软链是否已指向某个「已登记库」）', () => {
+  /** 自有仓库 + 第三方来源 + 一个未登记目录，用于区分「已有归属」与「库外」 */
+  function fixture() {
+    const base = tmpDir('flint-registered-');
+    const repoDir = path.join(base, 'repo');
+    const repoSkill = path.join(repoDir, 'skills', 'alpha');
+    fs.mkdirSync(repoSkill, { recursive: true });
+    const foreignDir = path.join(base, 'foreign');
+    const foreignSkill = path.join(foreignDir, 'nested', 'beta');
+    fs.mkdirSync(foreignSkill, { recursive: true });
+    const agentDir = path.join(base, 'agent');
+    fs.mkdirSync(agentDir, { recursive: true });
+    const cfg: HubConfig = {
+      ...emptyConfig(),
+      repos: [{ id: 'default', path: repoDir }],
+      foreignSources: [{ id: 'foreign', name: 'foreign', path: foreignDir, layout: 'nested', linked: true }],
+    };
+    return { base, repoSkill, foreignSkill, agentDir, cfg };
+  }
+
+  it('指向自有仓库内的技能 → 已有归属', () => {
+    const { cfg, repoSkill, agentDir } = fixture();
+    expect(isLinkInRegisteredLibrary(cfg, repoSkill, agentDir)).toBe(true);
+  });
+
+  it('指向第三方来源内的技能（含分类子目录）→ 已有归属', () => {
+    const { cfg, foreignSkill, agentDir } = fixture();
+    expect(isLinkInRegisteredLibrary(cfg, foreignSkill, agentDir)).toBe(true);
+  });
+
+  it('指向共享标准目录 → 已有归属（目标目录不存在也算）', () => {
+    const { cfg, agentDir } = fixture();
+    expect(isLinkInRegisteredLibrary(cfg, path.join(sharedStandardDir('agents'), 'ghost'), agentDir)).toBe(true);
+    expect(isLinkInRegisteredLibrary(cfg, path.join(sharedStandardDir('config-agents'), 'ghost'), agentDir)).toBe(true);
+  });
+
+  it('相对软链目标按软链所在目录解析', () => {
+    const { cfg, repoSkill, agentDir } = fixture();
+    expect(isLinkInRegisteredLibrary(cfg, path.relative(agentDir, repoSkill), agentDir)).toBe(true);
+  });
+
+  it('指向未登记的目录 → 无归属（可归集）', () => {
+    const { cfg, base, agentDir } = fixture();
+    expect(isLinkInRegisteredLibrary(cfg, path.join(base, 'outside', 'gamma'), agentDir)).toBe(false);
+    expect(isLinkInRegisteredLibrary(cfg, undefined, agentDir)).toBe(false);
   });
 });

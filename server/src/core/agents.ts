@@ -145,6 +145,32 @@ function repoSkillRoots(cfg: HubConfig): string[] {
   return cfg.repos.map(repoSkillRoot);
 }
 
+/**
+ * 共享标准目录的绝对路径：内置 Agent 的「额外读取」只落在这两个目录上
+ * （`shared: 'agents'` → `~/.agents/skills`，`shared: 'config-agents'` → `~/.config/agents/skills`）。
+ */
+export function sharedStandardDir(kind: 'agents' | 'config-agents'): string {
+  return path.join(os.homedir(), kind === 'config-agents' ? '.config/agents/skills' : '.agents/skills');
+}
+
+/** 两个共享标准目录（判定「软链是否指向共享目录」时两个都要看，与具体 Agent 无关） */
+export function sharedStandardDirs(): string[] {
+  return [sharedStandardDir('agents'), sharedStandardDir('config-agents')];
+}
+
+/**
+ * 「已登记库」的根目录集合：自有仓库 skill 根 ∪ 第三方来源目录 ∪ 共享标准目录。
+ * 软链目标落在其中任一之下 ⇒ 技能已经有归属（自己的仓库 / 已关联的只读来源 / 共享标准目录），
+ * 不需要再从 Agent 目录把它「归集」进仓库。
+ */
+function registeredLibraryRoots(cfg: HubConfig): string[] {
+  return [
+    ...repoSkillRoots(cfg),
+    ...cfg.foreignSources.map((s) => expandTilde(s.path)),
+    ...sharedStandardDirs(),
+  ];
+}
+
 /** 解析真实路径；目标不存在时退回字面绝对路径 */
 function realOrResolve(p: string): string {
   try {
@@ -179,6 +205,17 @@ export function isManagedLinkTarget(cfg: HubConfig, target: string | undefined, 
 /** 仓库角度：该软链是否指向「指定仓库」内的技能（只有自己仓库过去的软链才算被它接管） */
 export function isLinkInRepo(repo: Repo, target: string | undefined, baseDir?: string): boolean {
   return underRoot(repoSkillRoot(repo), target, baseDir);
+}
+
+/**
+ * 该软链是否指向某个「已登记库」内的技能（自有仓库 / 第三方来源 / 共享标准目录）。
+ *
+ * 与 `isManagedLinkTarget` 刻意区分：那个只回答「是不是本工具部署/该由本工具回收的软链」
+ * （口径限自有仓库，服务同步与清理的安全边界）；这里回答的是「这个技能是否已经有归属」，
+ * 服务展示——已有归属的软链不再提供「归集到仓库」（归集只会多复制一份重复本体）。
+ */
+export function isLinkInRegisteredLibrary(cfg: HubConfig, target: string | undefined, baseDir?: string): boolean {
+  return registeredLibraryRoots(cfg).some((root) => underRoot(root, target, baseDir));
 }
 
 export interface AgentView extends AgentDef {
@@ -385,6 +422,8 @@ export interface AgentSkillRow {
   reason: 'preset' | 'manual' | 'own' | 'external' | 'shared';
   /** 软链目标不在任何自有仓库内：由本工具之外的来源创建，本工具既不分发它也不清理它 */
   externalLink?: boolean;
+  /** 软链目标落在某个「已登记库」内（自有仓库 / 第三方来源 / 共享标准目录）：已有归属，不再提供「归集」 */
+  linkInLibrary?: boolean;
   /** 该技能物理所在的可读目录（自身目录，或额外读取的共享标准目录） */
   fromDir?: string;
   /**
@@ -414,7 +453,7 @@ export interface AgentSkillRow {
  */
 function sharedReadDirs(def: AgentDef, ownDir: string): string[] {
   if (!def.shared) return [];
-  const dir = path.join(os.homedir(), def.shared === 'config-agents' ? '.config/agents/skills' : '.agents/skills');
+  const dir = sharedStandardDir(def.shared);
   return dir === ownDir ? [] : [dir];
 }
 
@@ -484,6 +523,7 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
       const p = path.join(ownDir, name);
       const target = linkTo(p);
       const externalLink = !isManagedLinkTarget(cfg, target, ownDir);
+      const linkInLibrary = isLinkInRegisteredLibrary(cfg, target, ownDir);
       const offOverride = !externalLink && ctx.baselineNames.has(name) && isOff(name);
       const src = metaOf(name);
       rows.push({
@@ -494,7 +534,7 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
         // 残留的来源按基准归属判断：来自预设的记 preset，其余（如接管后停用）记 manual，
         // 不再一律记成「预设引入」——那会让已接管的技能被误标成预设带来的。
         reason: externalLink ? 'external' : (ctx.baselineNames.has(name) ? 'preset' : 'manual'),
-        offOverride, externalLink,
+        offOverride, externalLink, linkInLibrary,
         preset: ctx.presetOf.get(name),
         skillId: src?.id, repo: src?.source,
         dir: p, link: true, fromDir: ownDir, readVia: 'own',
