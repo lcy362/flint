@@ -3,7 +3,7 @@
  * 仅承载用户可见文案（API 错误、同步结果、诊断消息……）；
  * 日志永远是纯英文字面量，不走 i18n。
  */
-import type { MsgKey } from './en';
+import type { MsgKey } from './en.js';
 
 export const zh: Record<MsgKey, string> = {
   /* ---------- sync ---------- */

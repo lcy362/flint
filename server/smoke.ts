@@ -160,7 +160,10 @@ let projBase = '';
   const views = listAgents(store.data);
   const cline = views.find((a) => a.key === 'cline');
   const warp = views.find((a) => a.key === 'warp');
-  const ran = syncActive(store, lib7.skills, undefined, 'smoke');
+  // 显式指定主 Agent 属于 AGENTS.md 所列的「Agent 策略变更」＝显式操作，
+  // 语义上要带 prune 回收旧策略留下的部署；否则上一轮 demo 的 alpha/echarts 会残留，
+  // 断言里的 !deployed.includes('alpha') 永远不成立（prune:false 只补不删）。
+  const ran = syncActive(store, lib7.skills, undefined, 'smoke', { prune: true });
   const deployed = fs.existsSync(sharedDir) ? fs.readdirSync(sharedDir).sort() : [];
   const aliasPreset = desiredContext(store, lib7.skills, 'cline').preset;
   console.log('\n[primary] after designation warp.primaryKey =', warp?.primaryKey, '| warp.primaryExplicit =', warp?.primaryExplicit, '| cline.primaryKey =', cline?.primaryKey);

@@ -1,0 +1,197 @@
+# 发版流程规范
+
+> 面向在本仓库发版的人与 AI 助手。关联：`.github/workflows/ci.yml`（提交即跑单测）、
+> `.github/workflows/release.yml`（发 npm 包 + 建 GitHub Release）、`docs/releases/`（历史 release notes）。
+
+---
+
+## 一、总览
+
+```
+提交代码 ──▶ CI 跑构建 + 单测 + smoke（每次 push / PR）
+                  │
+用户说「发版」 ──▶ AI 定版本号 + 写 release notes 草稿
+                  │
+              🔴 人工审核通过 ◀── 未经确认不得进入下一步
+                  │
+              git push 分支 / 合并
+                  │
+用户点 Actions ▸ Release ▸ Run workflow（填版本号）
+                  │
+       ┌──────────┴──────────┐
+   校验：构建 + 单测 + smoke   release notes 文档必须存在
+       └──────────┬──────────┘
+                  ▼
+       发 npm 包（OIDC）→ 建 tag → 建 GitHub Release
+```
+
+**关键点：发版由人触发。** AI 只负责写 release notes 与改版本号，点下发布按钮的永远是人；
+CI 里没有「push 即发布」的路径。
+
+---
+
+## 二、版本号规则
+
+三位 `X.Y.Z`：
+
+| 类型 | 号段 | 典型内容 |
+|---|---|---|
+| 大版本 | `X.0.0` | 架构级重构、破坏性变更、重大能力 |
+| 中版本 | `X.Y.0` | 新功能、功能增强、较大的代码层重构 |
+| 小版本 | `X.Y.Z` | Bug 修复、体验微调 |
+
+升位：中版本 `Y+1` 且 `Z` 清零；大版本 `X+1` 且 `Y/Z` 清零；小版本仅 `Z+1`。
+
+> 版本号只由用户要求触发（「发个小版本」「升到 vX.Y.Z」）。AI 不得自行升版，
+> 也不得在功能未完成时提前占号。
+
+### 用户说法与动作映射
+
+| 用户说法 | 动作 |
+|---|---|
+| 「发个小版本」 | `Z+1`，以修复为主 |
+| 「发布中版本」/「新功能发版」 | `Y+1`，`Z` 清零 |
+| 「发大版本」 | `X+1`，`Y/Z` 清零 |
+| 「升到 vX.Y.Z」 | 直接采用 |
+
+---
+
+## 三、release notes 规范
+
+产出一份文件：`docs/releases/release_notes_vX.Y.Z.md`，它同时是
+**GitHub Release 的正文**（release.yml 用 `body_path` 直接读取）。
+
+### 3.1 结构与语言
+
+**全文英文。** 这是对外产物，会出现在 npm 页面与 GitHub Release 上，
+中英混杂会显得不专业；`README.md` 本身就是英文为主，保持一致。
+
+```markdown
+# Release vX.Y.Z — <一句话副标题>
+
+> Release date: YYYY-MM-DD
+
+## Overview
+
+<1-3 句：本版类型（大/中/小版本）+ 核心变化 + 覆盖本版关键词>
+
+## Usage
+
+<本版怎么装、怎么跑；有 breaking change 或迁移事项写在这里>
+
+## What's New
+
+### Features & Improvements
+- <大的功能更新，逐条列出：能力是什么、怎么用、影响谁>
+
+### Refactoring & Optimizations
+- <面向开源社区的大型代码层优化 / 架构演进；只有「大」的才写>
+
+### Bug Fixes
+- <按类归纳成几条，不展开到单个 issue 细节>
+
+---
+<可选>升级注意事项（仅当影响用户时）
+```
+
+### 3.2 红线（不写进 release notes）
+
+对用户无实际价值的内部工作一律不提，哪怕数量很大：
+
+- 文档整理 / 重命名 / 措辞调整
+- 纯渠道推广、关键词堆砌
+- 内部代码风格、静态分析（ruff / eslint）、测试基建本身
+- 小型重构、类名与模块迁移（对使用者和架构无实质影响时）
+
+小版本可适当细列 Bug 修复，但仍保持简短。
+
+### 3.3 写作要求
+
+- **自包含**：每份文档不依赖其它文档即可读懂（版本、日期、能力、用法都在本页）。
+- **标题含关键词**：副标题用用户会搜索的功能词。
+- 只做内容型表达，不做无意义关键词堆砌。
+
+---
+
+## 四、发布流程
+
+1. **用户触发发版**（含版本类型或明确版本号）。
+2. 按「二、版本号规则」确定 `vX.Y.Z`。
+3. 汇总本版变化，按「三、release notes 规范」筛选内容（过滤红线）。
+4. 写 `docs/releases/release_notes_vX.Y.Z.md`（按 3.1 模板，**全文英文**）。
+5. 🔴 **人工审核**：把 release notes 草稿展示给用户审阅，确认通过才可继续。
+   用户可要求增删或改措辞，AI 改完再次确认，直到明确批准。
+6. 本地自验：`npm run build`、`npm test`、`npm run smoke -w server`。
+7. 提交并推送分支 → 合并到 `master`。
+8. 用户在 GitHub 上触发发布：**Actions ▸ Release ▸ Run workflow**，填版本号。
+   需要先演练时勾选 `dry-run`（只校验与打包，不发布、不建 Release）。
+9. 工作流自动完成：校验（构建 + 单测 + smoke）→ 检查 release notes 存在 →
+   确认 `flint-skills-hub@X.Y.Z` 尚未发布 → 改写发布用 manifest →
+   `npm publish --provenance`（OIDC）→ 创建 tag `vX.Y.Z` → 创建 GitHub Release。
+
+> 也支持 `git push origin vX.Y.Z` 触发，行为与第 8 步等价。
+
+### 与开发无关的注意事项
+
+- **发布用的 `package.json` 与仓库里的不是同一份**。工作流在工作区里执行
+  `npm pkg delete private workspaces devDependencies` 并写入 tag 版本号后才发布；
+  仓库里的 `package.json` 始终是开发形态，不要手工把它改成可发布状态。
+- **不要手工改 `package.json` 的 `version`**。版本号由发版时的工作流统一写入，
+  仓库里保持 `0.1.0` 这类占位值即可，避免「仓库版本」与「已发布版本」两套真相。
+- **重复发版会被拦下**：同一版本已存在于 npm 时工作流直接失败。
+
+---
+
+## 五、npm 发布凭证（Trusted Publishing / OIDC）
+
+发布**不使用任何 NPM_TOKEN 密钥**。GitHub Actions 通过 OIDC 向 npm 换取一次性的
+发布凭证，密钥不落任何地方，也不会因为忘记轮换而失效。
+
+需要在 npm 侧做**一次性配置**（仅第一次发版前）：
+
+1. 登录 <https://www.npmjs.com>，进入 `flint-skills-hub` 包的 **Settings ▸ Trusted Publisher**。
+2. 若包尚未创建，先手工发布一次首版（见下），或先在 npm 上创建占位包。
+3. 填写：
+   - Publisher: **GitHub Actions**
+   - Repository owner: `lcy362`
+   - Repository name: `flint`
+   - Workflow filename: `release.yml` ← **必须与 `.github/workflows/release.yml` 完全一致**
+   - Environment name: 留空（工作流未使用 GitHub Environment）
+4. 保存。之后 `release.yml` 里的 `npm publish` 自动使用 OIDC，无需再配 secret。
+
+### 首版（v0.1.0）的特殊性
+
+包在 npm 上还不存在时无法配置 Trusted Publisher。首版需要二选一：
+
+- **手工首发**：本地 `npm run build` 后，在仓库根执行
+  `npm pkg delete private workspaces devDependencies && npm pkg set version=0.1.0 && npm publish --access public`
+  （本地需已 `npm login`）。发布后再按上面配置 Trusted Publisher。
+- **改用临时 token**：先给仓库加 `NPM_TOKEN` secret，本版用 token 发布，
+  配置好 Trusted Publisher 后再删掉该 secret。
+
+首版之后，后续发版一律走 OIDC。
+
+---
+
+## 六、CI 与 Release 的分工
+
+| | `ci.yml` | `release.yml` |
+|---|---|---|
+| 触发 | 每次 push / PR / 手动 | 手动 `workflow_dispatch` / 推 `v*` 标签 |
+| 构建 + 单测 | ✅（Node 20 / 22 矩阵） | ✅（发布前再验一遍） |
+| smoke | ✅ | ✅ |
+| 写权限 | 无（`contents: read`） | `contents: write` + `id-token: write` |
+| 产物 | 无 | npm 包 + tag + GitHub Release |
+
+两者互不依赖：`ci.yml` 挂掉不会阻止发版，但 `release.yml` 内部的校验不过就发不出去。
+
+---
+
+## 七、本地对应命令
+
+```bash
+npm test                      # 单元测试（vitest）
+npm run test:watch -w server  # 单测 watch 模式
+npm run smoke -w server       # 端到端 smoke（临时目录，不碰真实目录）
+npm run build                 # 类型检查 + 前后端构建
+```

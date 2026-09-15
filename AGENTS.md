@@ -31,11 +31,15 @@ npm run dev:client   # 仅前端
 npm run build        # server tsc + client vite build
 npm start            # 以构建产物启动后端
 ./start.sh           # 一键启动（环境/依赖/端口检查 → 打开浏览器）
-cd server && npx tsx smoke.ts   # 端到端 smoke（临时目录，不碰本机真实目录）
+npm test             # 单元测试（vitest，server workspace）
+npm run test:watch -w server    # 单测 watch 模式
+npm run smoke -w server         # 端到端 smoke（临时目录，不碰本机真实目录）
+node bin/flint.mjs --no-open    # 按 npm 包的方式启一次（等价 npx flint-skills-hub）
 ```
 
 - 端口：后端 `8787`（`PORT`），前端 `5173`（`CLIENT_PORT`）；Vite 代理 `/api` → 后端。
 - 配置：`~/.skills-hub/config.json`（`SKILLS_HUB_CONFIG` 可覆盖）；日志：`~/.skills-hub/logs/app.log`。
+- 发布包名 `flint-skills-hub`，注册命令 `flint` 与 `flint-skills-hub`；发布流程见 `docs/RELEASE.md`。
 
 ## 3. 仓库结构
 
@@ -55,6 +59,11 @@ client/src/
 ├─ views/           # Library / Agents / Presets / Projects / Health / Settings
 ├─ components/      # ui / common（EntityList·FilterBar）/ skill / agent / layout
 └─ styles/          # tokens.css（设计 token）/ base.css / app.css
+
+server/tests/       # 单元测试（vitest；vitest.config.ts 把配置指到临时沙箱，不碰真实目录）
+bin/flint.mjs       # npm 包的命令行入口（端口自检 → 拉起 server/dist → 开浏览器）
+.github/workflows/  # ci.yml（提交即跑单测）/ release.yml（发 npm + 建 Release）
+docs/releases/      # 各版本 release notes（GitHub Release 正文来源）
 ```
 
 ## 4. 改代码前必须知道的三件事
@@ -98,9 +107,10 @@ client/src/
                                        └─ 诊断页补对应检查项（core/diagnose.ts）
 ```
 
-改完后请跑 `npm run build` 确认类型与构建通过；涉及同步 / 项目 / 主 Agent 的行为，跑 `cd server && npx tsx smoke.ts`。
+改完后请跑 `npm run build` 确认类型与构建通过、`npm test` 确认单测通过；涉及同步 / 项目 / 主 Agent 的行为，跑 `npm run smoke -w server`。
 
 ## 8. 文档维护
 
-- 文档就两份正式件：`docs/PRD.md`（产品）、`docs/TECH.md`（架构）；`README.md`（使用）、`AGENTS.md`（本文件，开发）。
+- 文档正式件：`docs/PRD.md`（产品）、`docs/TECH.md`（架构）、`docs/RELEASE.md`（发版流程）；`README.md`（使用）、`AGENTS.md`（本文件，开发）。
 - 改动影响功能 / 架构时，**同步更新对应文档**，不要在仓库里新起"过程性草稿"。
+- 发版相关：写 release notes 走 `docs/RELEASE.md` 的规范，落在 `docs/releases/release_notes_vX.Y.Z.md`。

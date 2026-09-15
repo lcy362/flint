@@ -42,7 +42,8 @@ export function parseSkillMeta(md: string): { name?: string; description?: strin
       name: typeof y.name === 'string' ? y.name : undefined,
       description: typeof y.description === 'string' ? y.description : undefined,
       version: typeof y.version === 'string' ? y.version : undefined,
-      tags: [...normalizeTags(y.tags), ...normalizeTags(meta.tags)],
+      // 两处来源合并后统一去重，保持「顶层在前」的顺序
+      tags: normalizeTags([...normalizeTags(y.tags), ...normalizeTags(meta.tags)]),
     };
   } catch {
     return { tags: [] };

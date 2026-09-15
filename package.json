@@ -1,8 +1,19 @@
 {
-  "name": "local-skills-hub",
+  "name": "flint-skills-hub",
   "version": "0.1.0",
-  "private": true,
-  "description": "Flint · local-skills-hub — local-first personal AI skills asset manager",
+  "description": "Flint — a local-first personal AI skills asset manager. Collect, tag, deduplicate and distribute your skill directories across AI agents and projects.",
+  "license": "MIT",
+  "main": "server/dist/index.js",
+  "bin": {
+    "flint": "bin/flint.mjs",
+    "flint-skills-hub": "bin/flint.mjs"
+  },
+  "files": [
+    "bin/",
+    "server/dist/",
+    "client/dist/",
+    "LICENSE"
+  ],
   "workspaces": [
     "server",
     "client"
@@ -12,12 +23,42 @@
     "dev:server": "npm run dev -w server",
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w server && npm run build -w client",
-    "start": "npm run start -w server"
+    "start": "npm run start -w server",
+    "test": "npm run test -w server",
+    "test:watch": "npm run test:watch -w server"
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "express": "^4.19.2",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   },
   "engines": {
     "node": ">=20"
   },
-  "devDependencies": {
-    "concurrently": "^10.0.5"
+  "keywords": [
+    "ai",
+    "agent",
+    "skills",
+    "skill-manager",
+    "claude-code",
+    "cursor",
+    "codex",
+    "local-first",
+    "symlink",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lcy362/flint.git"
+  },
+  "homepage": "https://github.com/lcy362/flint#readme",
+  "bugs": {
+    "url": "https://github.com/lcy362/flint/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

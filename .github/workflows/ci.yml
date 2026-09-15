@@ -1,0 +1,72 @@
+name: CI
+
+# 每次提交都跑单测；PR 与手动触发同样覆盖。
+# 发版链路的验证在 release.yml 里另跑一遍，两者互不依赖。
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# CI 只读仓库，不需要任何写权限
+permissions:
+  contents: read
+
+# 同一分支连续提交时取消上一次未跑完的，避免排队堆积
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit tests (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # package.json 声明 engines.node >= 20：下限必测，另加一个较新的版本
+        node-version: ['20', '22']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # 类型检查 + 构建：tsc 报错与 vite 构建失败都在这里拦住
+      - name: Type-check + build (server + client)
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+  smoke:
+    name: End-to-end smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # smoke.ts 全程在临时目录里跑，不碰本机真实目录。
+      # 脚本只打印 PASS/FAIL、自身不设退出码，所以这里显式断言：
+      # 既不能有 FAIL，PASS 数也不能少于 6——否则脚本中途崩掉会被当成绿。
+      - name: Run smoke (sync / project / primary agent invariants)
+        run: |
+          npm run smoke -w server 2>&1 | tee /tmp/smoke.log
+          ! grep -q 'FAIL' /tmp/smoke.log
+          test "$(grep -c 'PASS' /tmp/smoke.log)" -ge 6

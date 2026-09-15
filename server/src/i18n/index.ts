@@ -8,8 +8,8 @@
  * 只有「返回给用户的文案」走 i18n；日志消息一律是纯英文字面量，绝不本地化。
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { en, type MsgKey } from './en';
-import { zh } from './zh';
+import { en, type MsgKey } from './en.js';
+import { zh } from './zh.js';
 
 export type Locale = 'en' | 'zh';
 

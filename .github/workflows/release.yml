@@ -1,0 +1,182 @@
+name: Release
+
+# 发版由人触发（不自动跟 push 走）：
+#   推荐 workflow_dispatch —— 只需填版本号，工作流负责打 tag、发 npm、建 Release；
+#   也支持推 v* 标签触发，便于习惯打 tag 的场景。
+#
+# 前置条件（由发版流程保证，见 docs/RELEASE.md）：
+#   docs/releases/release_notes_vX.Y.Z.md 必须已存在并经人工审核通过，否则本工作流直接失败。
+#
+# npm 发布走 Trusted Publishing（OIDC），不需要配置任何 NPM_TOKEN。
+# 需在 npmjs.com 的包设置里绑定：本仓库 + 本文件名 release.yml。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（不带 v 前缀，例如 0.1.0）'
+        required: true
+        type: string
+      dry-run:
+        description: '演练：只做校验与打包，不发布、不建 Release'
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+# 同一时刻只允许一次发版，避免并发导致重复发布
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify build & tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Type-check + build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Smoke (sync / project / primary agent invariants)
+        run: |
+          npm run smoke -w server 2>&1 | tee /tmp/smoke.log
+          ! grep -q 'FAIL' /tmp/smoke.log
+          test "$(grep -c 'PASS' /tmp/smoke.log)" -ge 6
+
+  release:
+    name: Publish to npm & create GitHub Release
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 创建 tag / GitHub Release
+      id-token: write   # npm Trusted Publishing（OIDC）所需
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          # 注意：这里不设置 registry-url。
+          # setup-node 会写入 _authToken=${NODE_AUTH_TOKEN}，而我们走 OIDC、没有该变量，
+          # npm 遇到无法替换的变量会直接报错；OIDC 发布本身也不需要 .npmrc 里的 token。
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build publishable artifacts
+        run: npm run build
+
+      # Trusted Publishing 要求 npm >= 11.5.1；Node 22 自带的是 10.x
+      - name: Upgrade npm (required for OIDC trusted publishing)
+        run: npm install -g npm@latest && npm --version
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          RAW="$INPUT_VERSION"
+          if [ -z "$RAW" ]; then RAW="$REF_NAME"; fi
+          VERSION="${RAW#v}"
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Invalid version '$RAW'. Expected semver like 0.1.0 or 0.2.0-rc.1"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION"
+
+      - name: Require reviewed release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          NOTES="docs/releases/release_notes_v${VERSION}.md"
+          if [ ! -f "$NOTES" ]; then
+            echo "::error::Missing $NOTES — release notes must be written and reviewed before releasing (see docs/RELEASE.md)."
+            exit 1
+          fi
+          {
+            echo "## Release notes to be published (v${VERSION})"
+            echo
+            cat "$NOTES"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Reject an already published version
+        if: ${{ inputs.dry-run != true }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if npm view "flint-skills-hub@${VERSION}" version >/dev/null 2>&1; then
+            echo "::error::flint-skills-hub@${VERSION} is already published on npm; bump the version."
+            exit 1
+          fi
+          echo "flint-skills-hub@${VERSION} is not published yet — proceeding."
+
+      # 发布用 manifest 与开发用 manifest 是两套：
+      #   1. private:true 会让 npm 拒绝发布；
+      #   2. tarball 的 files 白名单不含 server/ 与 client/ 的 package.json，
+      #      留着 workspaces 会指向不存在的目录；
+      #   3. 顶层 version 是仓库当前版本，发布时必须与 tag 对齐。
+      # 只在 CI 的工作区里改写，仓库里的 package.json 保持开发形态。
+      - name: Prepare publish manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm pkg delete private workspaces devDependencies
+          npm pkg set version="$VERSION"
+          echo "--- manifest to be published ---"
+          cat package.json
+
+      - name: Show package contents
+        run: npm pack --dry-run
+
+      - name: Publish to npm (Trusted Publishing / OIDC)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "${{ inputs.dry-run }}" = "true" ]; then
+            echo "dry-run: skipping npm publish (version ${VERSION})."
+            exit 0
+          fi
+          npm publish --provenance
+
+      - name: Verify the published version resolves
+        if: ${{ inputs.dry-run != true }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm view "flint-skills-hub@${VERSION}" version
+          npm view "flint-skills-hub@${VERSION}" dist.tarball
+
+      - name: Create GitHub Release
+        if: ${{ inputs.dry-run != true }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body_path: docs/releases/release_notes_v${{ steps.version.outputs.version }}.md
+          draft: false
+          prerelease: false
