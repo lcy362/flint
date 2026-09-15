@@ -84,9 +84,10 @@ export interface SkillCardView {
   store: SkillStore;
   /**
    * 缺省表示该上下文没有启用/停用语义（如技能库资产池），此时不展示状态徽标。
-   * on = 在分发名单内；off = 本工具分发的产物但已停用；unmanaged = 不属于本工具管理范围。
+   * on = 该技能已在本目录中可用；off = 本工具曾分发到这里、现已移出分发名单。
+   * 「本工具管不管它」不在这里表达，由 reason 徽标说明（见 isToolManaged）。
    */
-  state?: 'on' | 'off' | 'unmanaged';
+  state?: 'on' | 'off';
   /** 覆盖行首开关的选中态（缺省由 state 推导）；预设等以名单为准的上下文显式传入 */
   toggleOn?: boolean;
   /** 开关置为不可交互（如预设中由标签自动纳入的技能，只能解锁标签来停用） */
@@ -104,7 +105,7 @@ export interface SkillCardView {
   readVia?: 'own' | 'shared';
   /** 已接管：本目录这条是指向仓库内技能的软链（系统口径，任一自有仓库；指向仓库外的不算） */
   takenOver?: boolean;
-  /** 未纳管行的实际位置（软链附带真实目标，home 已压成 ~）：由服务端给好，列表直接展示 */
+  /** 不在本工具分发范围内的行的实际位置（软链附带真实目标，home 已压成 ~）：由服务端给好，列表直接展示 */
   pathLabel?: string;
   /** 客户端派生：直接展示来源目录的徽标文案，仅多目录 Agent 需要 */
   dirLabel?: string;

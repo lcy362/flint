@@ -3,7 +3,7 @@ import type { BadgeLegendItem } from '../common/BadgeLegend';
 import Badge from '../ui/Badge';
 import type { TFunc } from '../../i18n';
 
-/** 来源原因徽标文字（manual / shared 不以来源徽标表达，返回空串） */
+/** 来源原因徽标文字（manual 不以来源徽标表达，返回空串） */
 function reasonLabel(t: TFunc, r: SkillReason): string {
   switch (r) {
     case 'own':
@@ -12,6 +12,10 @@ function reasonLabel(t: TFunc, r: SkillReason): string {
       return t('badge.reason.preset');
     case 'external':
       return t('badge.reason.external');
+    // 共享标准目录读取：本 Agent 直接可用，但本工具不改写它 —— 用「只读」说明为什么没有开关。
+    // 这属于「为什么本工具不管它」，归在来源徽标，不占状态列（状态列只表达装没装、可不可用）。
+    case 'shared':
+      return t('badge.readonly');
     default:
       return '';
   }
@@ -71,7 +75,6 @@ export function skillBadgeLegend(t: TFunc): BadgeLegendItem[] {
     { label: t('badge.store.pending'), tone: 'warn', desc: t('badge.store.pending.title') },
     { label: t('badge.state.on'), tone: 'good', dot: 'good', desc: t('badge.state.on.title') },
     { label: t('badge.state.off'), tone: 'neutral', dot: 'neutral', desc: t('badge.state.off.title') },
-    { label: t('badge.state.unmanaged'), tone: 'info', desc: t('badge.state.unmanaged.title') },
     { label: t('badge.readonly'), tone: 'info', desc: t('badge.readonly.title') },
     { label: t('badge.takenOver'), tone: 'good', desc: t('badge.takenOver.title') },
   ];
@@ -80,6 +83,17 @@ export function skillBadgeLegend(t: TFunc): BadgeLegendItem[] {
 /** 开关的选中态：只有「在分发名单内」才算开启 */
 export function isOn(item: SkillCardView): boolean {
   return item.state === 'on';
+}
+
+/**
+ * 该行是否由本工具按来源分发（策略落在它身上：预设成员 / 直接加入）。
+ *
+ * 自带目录、外部软链、共享标准目录读取都在本工具的分发范围之外：它们没有启用/停用开关，
+ * 也不参与「按技能的安装方式」。判断依据只能是 reason —— 状态列现在只表达
+ * 「这个目录里装没装、可不可用」，不再用它承载管辖关系。
+ */
+export function isToolManaged(item: SkillCardView): boolean {
+  return item.reason !== 'own' && item.reason !== 'external' && item.reason !== 'shared';
 }
 
 export function reasonBadge(t: TFunc, item: SkillCardView) {
@@ -101,23 +115,18 @@ export function storeBadge(t: TFunc, item: SkillCardView) {
 }
 
 /**
- * 状态徽标；state 缺省时返回 null（该上下文无启用/停用语义）。
+ * 状态徽标；state 缺省时返回 null（该上下文无启用/停用语义，如技能库资产池）。
  *
- * 只描述「本工具对该技能的处置」，不猜测技能本身是否被 Agent 使用 ——
- * 否则会和同一行的开关自相矛盾（例如"使用中"配一个关闭的开关）。
+ * 只回答「这个目录里装了没有、能不能用」：装了就是启用（本工具分发的、自带、外部软链、
+ * 共享目录读到的都算），本工具曾分发但已停用的才是已停用。
+ * 「本工具管不管它、能不能在这里开关」由 reason 徽标 + 有没有开关表达，不占状态列。
  */
 export function stateBadge(t: TFunc, item: SkillCardView) {
-  // 共享标准目录里的技能：该 Agent 直接可用，但不由本工具分发，也不能在这里开关——用「只读」表达
-  if (item.reason === 'shared') {
-    return <Badge tone="info" title={t('badge.readonly.title')}>{t('badge.readonly')}</Badge>;
-  }
   switch (item.state) {
     case 'on':
       return <Badge tone="good" dot="good" title={t('badge.state.on.title')}>{t('badge.state.on')}</Badge>;
     case 'off':
       return <Badge tone="neutral" dot="neutral" title={t('badge.state.off.title')}>{t('badge.state.off')}</Badge>;
-    case 'unmanaged':
-      return <Badge tone="info" title={t('badge.state.unmanaged.title')}>{t('badge.state.unmanaged')}</Badge>;
     default:
       return null;
   }

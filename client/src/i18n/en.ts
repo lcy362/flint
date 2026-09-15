@@ -267,12 +267,9 @@ export const en = {
   'badge.store.pending': 'Pending',
   'badge.store.pending.title': 'On the distribution list, but not written to the skill directory yet',
   'badge.state.on': 'Enabled',
-  'badge.state.on.title': 'On this agent / project\u2019s distribution list and already written to disk',
+  'badge.state.on.title': 'The skill is present in this directory and usable by this agent / project (self-owned and external links count as installed too)',
   'badge.state.off': 'Disabled',
   'badge.state.off.title': 'Previously distributed here by this tool, now removed from the distribution list',
-  'badge.state.unmanaged': 'Unmanaged',
-  'badge.state.unmanaged.title':
-    'It exists in this directory but is outside this tool\u2019s distribution scope (own or external link), so there is no enable / disable switch',
   'badge.readonly': 'Read-only',
   'badge.readonly.title':
     'It lives in the shared standard directory this agent additionally reads: usable directly, but not distributed by this tool and not switchable here.',

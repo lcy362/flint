@@ -39,3 +39,18 @@ describe('Agent 技能行的操作推导（acts）', () => {
     expect(kinds({ reason: 'shared', store: 'own', alreadyInLibrary: true })).toEqual([]);
   });
 });
+
+describe('Agent 技能行的状态（state）', () => {
+  const stateOf = (over: Partial<AgentSkillRow>) => agentCards([row(over)])[0].state;
+
+  it('自带真实目录 / 外部软链 / 共享目录读取：已在目录里、本 Agent 可用 → 开启', () => {
+    expect(stateOf({ reason: 'own', store: 'own', dir: '/from/own' })).toBe('on');
+    expect(stateOf({ reason: 'external', alreadyInLibrary: false })).toBe('on');
+    expect(stateOf({ reason: 'shared', store: 'own' })).toBe('on');
+  });
+
+  it('本工具分发：在名单内开启，移出名单则已停用', () => {
+    expect(stateOf({ reason: 'manual', wanted: true })).toBe('on');
+    expect(stateOf({ reason: 'preset', wanted: false })).toBe('off');
+  });
+});

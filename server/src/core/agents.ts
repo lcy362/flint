@@ -446,9 +446,8 @@ export interface AgentSkillRow {
   /** 软链目标不在任何自有仓库内：由本工具之外的来源创建，本工具既不分发它也不清理它 */
   externalLink?: boolean;
   /**
-   * 已有归属：软链的这条技能已经在库里了，不再提供「归集」。两种成立方式——
-   * 目标落在某个「已登记库」内（自有仓库 / 第三方来源 / 共享标准目录），
-   * 或该名字在自有仓库里已有同名副本（`repo` 即那个仓库）。
+   * 已有归属：这条软链的目标就落在某个「已登记库」内
+   * （自有仓库 / 第三方来源 / 共享标准目录），技能本体已经在库里了，不再提供「归集」。
    */
   alreadyInLibrary?: boolean;
   /** 该技能物理所在的可读目录（自身目录，或额外读取的共享标准目录） */
@@ -512,9 +511,7 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
       return path.isAbsolute(raw) ? raw : path.resolve(path.dirname(p), raw);
     } catch { return undefined; }
   };
-  /** 自有仓库里是否已有同名副本（按名字查仓库，与行的展示来源无关） */
-  const repoIds = new Set(cfg.repos.map((r) => r.id));
-  const repoHasCopy = (name: string) => allSkills.some((s) => s.name === name && repoIds.has(s.source));
+
 
   // 1) 扫描自身目录，记录是否存在及各目录项类型（隐藏项不算技能）
   if (fs.existsSync(ownDir)) {
@@ -568,12 +565,11 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
       // 展示口径：来源 = 这条软链**实际指向**的已登记库；目标不在任何已登记库内就不给来源，
       // 由展示层直接呈现真实路径（绝不拿同名技能去回填来源，那样会把「同名」说成「来自」）。
       const owner = libraryOfLinkTarget(cfg, target, ownDir);
-      // 已有归属＝这条软链的技能已经在库里了，行内「归集」没有意义（只会多复制一份重复本体
-      // 或直接被去重跳过）。两种成立方式：
-      // ① 目标就落在某个已登记库内（自有仓库 / 第三方来源 / 共享标准目录）；
-      // ② 该名字在自有仓库里已有副本（按名字查仓库，与来源展示各算各的）。
-      // 要拿来源版本覆盖仓库副本请走技能库的归集确认页——那里才有并列候选可比。
-      const alreadyInLibrary = isLinkInRegisteredLibrary(cfg, target, ownDir) || repoHasCopy(name);
+      // 已有归属＝目标就落在某个已登记库内（自有仓库 / 第三方来源 / 共享标准目录）：
+      // 这条技能本体已经在库里了，行内「归集」只会复制出一份重复本体，故不提供该入口。
+      // 只按【路径】判定：目标在库外（哪怕是别处一个同名的技能库）就仍可归集——
+      // 「仓库里恰好有同名副本」不是同一条事实，不该拿来冒充归属。
+      const alreadyInLibrary = isLinkInRegisteredLibrary(cfg, target, ownDir);
       rows.push({
         name, title: name,
         description: readSkill(p)?.description, // readSkill 顺着软链读到目标

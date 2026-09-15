@@ -27,6 +27,8 @@
 ### `server/src/domain/cards.ts`
 - `SkillReason` 增加 `'shared'`，`normReason` 放行。
 - `stateOf`：`shared` 归为 `unmanaged`（不由本 Agent 分发，无开关语义）。
+  > 后续口径调整：状态列只表达「这个目录里装没装、可不可用」，`unmanaged` 已移除——`own` / `external` / `shared`
+  > 与分发落盘的技能一样是 `on`；「本工具管不管它」改由 `reason` 徽标表达（客户端 `isToolManaged`）。
 - `acts`：`shared` 返回空操作（该目录的技能由它自己的策略管理）。
 - `agentCard`：`external` / `shared` 的 `store` 一律退化为 `own`（避免"软链安装"误导），并透出 `fromDir` / `readVia`。
 
@@ -36,6 +38,7 @@
 - `components/skill/SkillBadges.tsx`：
   - 新增 `REASON_LABEL.shared = '共享目录'`（信息色）与图例条目；
   - `stateBadge`：`shared` 显示「只读」；
+    > 后续口径调整：「只读」不再占状态列，改由来源徽标（`reasonBadge`）表达，状态列统一为「启用 / 已停用」。
   - 新增 `dirBadge`（来自自身目录 / 共享目录）与 `linkBadge`（共享目录里的软链）并接入 `skillBadges`；
   - 图例补一条「软链」。
 - `components/common/FoldButton.tsx`：从预设详情抽出，供预设 / 智能体复用。

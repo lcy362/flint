@@ -255,12 +255,9 @@ export const zh: Record<MsgKey, string> = {
   'badge.store.pending': '待部署',
   'badge.store.pending.title': '已列入分发名单，但还没有写入技能目录',
   'badge.state.on': '启用',
-  'badge.state.on.title': '已列入该 Agent / 项目的分发名单，并且已经写入目录',
+  'badge.state.on.title': '该技能就在这个目录里，本 Agent / 项目当前可用（自带、外部软链也算装着）',
   'badge.state.off': '已停用',
   'badge.state.off.title': '曾由本工具分发到该目录，现在已移出分发名单',
-  'badge.state.unmanaged': '未纳管',
-  'badge.state.unmanaged.title':
-    '它存在于这个目录，但不属于本工具的分发范围（自带或外部链接），所以没有启用 / 停用开关',
   'badge.readonly': '只读',
   'badge.readonly.title':
     '它在该 Agent 额外读取的共享标准目录里：直接可用，但不由本工具分发，这里不能开关。',

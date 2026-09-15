@@ -1,7 +1,7 @@
 import type { SkillAction, SkillCardView } from '../../api/types';
 import EntityList, { type EntityItem, type EntityListProps } from '../common/EntityList';
 import Switch from '../ui/Switch';
-import { isOn, skillBadges, stateBadge } from './SkillBadges';
+import { isOn, isToolManaged, skillBadges, stateBadge } from './SkillBadges';
 import SkillActions from './SkillActions';
 import { useI18n, type TFunc } from '../../i18n';
 
@@ -38,9 +38,9 @@ export function skillToEntity(
 ): EntityItem {
   const { onToggle, onAction, onTag, onOpen } = opts;
   const on = item.toggleOn ?? isOn(item);
-  // 未纳管的行没有「本工具按来源分发」这层身份，展示服务端给好的真实位置
+  // 不在本工具分发范围内的行没有「按来源分发」这层身份，展示服务端给好的真实位置
   // （软链时形如 `~/x/skills/a → ~/y/skills/a`），避免把 name@来源 摆在那里误导；
-  // 受管行仍以 name@来源 表达身份。
+  // 本工具分发的行仍以 name@来源 表达身份。
   const sub = item.pathLabel ?? item.id;
   return {
     id: item.id,
@@ -51,9 +51,9 @@ export function skillToEntity(
     badges: skillBadges(t, item),
     tags: (item.tags ?? []).map((tag) => ({ label: tag, onClick: onTag ? () => onTag(item, tag) : undefined })),
     meta: <>{item.source}</>,
-    // 未纳管的项（本地自有目录 / 外部软链）不由本工具分发，开关对它没有意义，
-    // 改用「收编到仓库 / 删除」等操作表达可做的事，避免"使用中却开关关闭"这类自相矛盾。
-    toggle: onToggle && item.state !== 'unmanaged' ? (
+    // 不在本工具分发范围内的项（本地自有目录 / 外部软链 / 共享目录读取）开关对它没有意义，
+    // 改用「归集到仓库 / 删除」等操作表达可做的事，避免"明明装着却开关关闭"这类自相矛盾。
+    toggle: onToggle && isToolManaged(item) ? (
       <Switch
         aria-label={
           item.toggleDisabled
@@ -69,7 +69,7 @@ export function skillToEntity(
     ) : undefined,
     actions: <SkillActions item={item} onAction={onAction} />,
     onClick: onOpen ? () => onOpen(item) : undefined,
-    // 仅「已停用」置灰；未纳管与无 state（技能库）保持正常态
+    // 仅「已停用」置灰；无 state（技能库）保持正常态
     muted: item.state === 'off',
   };
 }

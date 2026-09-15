@@ -337,13 +337,14 @@ describe('agentSkillRows：来源展示与「归集到仓库」入口', () => {
     expect(kindsOf('beta')).toEqual(['delete']); // 目标已在已登记来源内 → 无需归集
   });
 
-  it('软链指向未登记目录、仓库里已有同名副本 → 不显示归集，但来源仍为空（不谎报来自仓库）', () => {
-    const { base, link, cardOf, kindsOf } = sandbox();
+  it('软链指向未登记目录、仓库里恰有同名副本 → 来源仍为空（不谎报来自仓库），且照常可归集', () => {
+    const { base, agentDir, link, cardOf, kindsOf } = sandbox();
     const outside = path.join(base, 'outside', 'alpha');
     fs.mkdirSync(outside, { recursive: true });
-    link('alpha', outside); // alpha 在自有仓库里已有副本
+    link('alpha', outside); // alpha 在自有仓库里恰有同名副本：那是「同名」，不是「来自」
     expect(cardOf('alpha').source).toBe('');
-    expect(kindsOf('alpha')).toEqual(['delete']);
+    expect(cardOf('alpha').pathLabel).toBe(`${path.join(agentDir, 'alpha')} → ${outside}`);
+    expect(kindsOf('alpha')).toEqual(['collect', 'delete']);
   });
 
   it('软链指向未登记目录、仓库里也没有同名副本 → 仍可归集', () => {

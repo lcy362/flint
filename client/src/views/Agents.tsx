@@ -3,7 +3,7 @@ import { api, type AgentView, type AgentSkillsResp, type PresetView, type SkillA
 import SkillList from '../components/skill/SkillList';
 import CollectSkillModal, { agentCollectSource } from '../components/skill/CollectSkillModal';
 import { skillViewToCard } from '../components/skill/adapters';
-import { skillBadgeLegend } from '../components/skill/SkillBadges';
+import { isToolManaged, skillBadgeLegend } from '../components/skill/SkillBadges';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
 import FilterBar from '../components/common/FilterBar';
 import FoldButton from '../components/common/FoldButton';
@@ -37,6 +37,13 @@ import { useViewMode } from '../state/viewMode';
 import { useCollapsed } from '../state/collapse';
 import { navigate, useQueryFlag, useQueryParam, useRoute } from '../state/router';
 import { joinList, rich, useI18n } from '../i18n';
+
+/**
+ * 本工具是否已把该技能装到本目录（= 在分发名单内且已落盘）。
+ * 状态列只说明「这个目录里装没装」，自带目录 / 外部软链同样算「装着」——
+ * 但它们不在本工具的分发名单里，开关不能拿它们当「已开启」。
+ */
+const deployedByTool = (row?: SkillCardView) => !!row && row.state === 'on' && isToolManaged(row);
 
 export default function Agents() {
   const { data, loading, error, reload } = useAsync<AgentView[]>(() => api('/agents'));
@@ -255,7 +262,8 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
     }
   };
 
-  const managed = (data?.skills ?? []).filter((s) => s.state === 'on');
+  // 「安装方式」只对由本工具分发的技能有意义：自带 / 外部软链 / 共享目录读取不参与
+  const managed = (data?.skills ?? []).filter((s) => s.state === 'on' && isToolManaged(s));
 
   // 它与别的 Agent 共用同一个目录（不是主 Agent）：目录只有一份，预设 / 安装方式都落在主 Agent 上
   const isAlias = agent.key !== agent.primaryKey;
@@ -294,7 +302,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
       const next: Record<string, boolean> = {};
       let dropped = false;
       for (const k of keys) {
-        if ((rowsByName.get(k)?.state === 'on') === d[k]) { dropped = true; continue; }
+        if (deployedByTool(rowsByName.get(k)) === d[k]) { dropped = true; continue; }
         next[k] = d[k];
       }
       return dropped ? next : d;
@@ -307,7 +315,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   const directCards = useMemo<SkillCardView[]>(
     () => library.map((s) => {
       const row = rowsByName.get(s.name);
-      const on = draftOn[s.name] ?? row?.state === 'on';
+      const on = draftOn[s.name] ?? deployedByTool(row);
       const card = skillViewToCard(s);
       card.state = on ? 'on' : 'off';
       card.toggleOn = on;

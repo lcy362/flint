@@ -249,7 +249,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | 批量导入 | `POST /import` | 复制外部目录进仓库；同名去重；写入 `origin` 来源追溯。 |
 | 合并仲裁 | `POST /skills/merge` | 同名多来源时保留指定来源；未在仓库的候选被收编进主仓库；记录 `mergeSource`。 |
 
-**行内入口的可见性**：Agent 技能表上的「归集到仓库」只在技能**尚无归属**时出现——本体是自带真实目录，或软链既**不在**任何「已登记库」（自有仓库 / 第三方来源 / 共享标准目录 `~/.agents/skills`、`~/.config/agents/skills`）之内，**也未在**自有仓库里存在同名副本。软链有归属时（`alreadyInLibrary` 的两个条件：`isLinkInRegisteredLibrary` 判定目标落在某个已登记库内，或 `repoHasCopy` 判定该名字在自有仓库里已有副本——两者各算各的），再归集只会复制出重复本体或被去重跳过，因此只保留「从本目录移除」；要覆盖仓库副本请走技能库「添加技能 → 从 Agent 归集」，那里才有并列候选可比。自带真实目录不受此限：它的本体在本地，覆盖仓库副本的行内入口保留。
+**行内入口的可见性**：Agent 技能表上的「归集到仓库」只在技能**尚无归属**时出现——本体是自带真实目录，或软链**不落在**任何「已登记库」（自有仓库 / 第三方来源 / 共享标准目录 `~/.agents/skills`、`~/.config/agents/skills`）之内。软链有归属时（`alreadyInLibrary` = `isLinkInRegisteredLibrary`，纯按目标路径判定）本体已经在库里了，再归集只会复制出重复本体，因此只保留「从本目录移除」；要覆盖仓库副本请走技能库「添加技能 → 从 Agent 归集」，那里才有并列候选可比。自带真实目录不受此限：它的本体在本地，覆盖仓库副本的行内入口保留。**「仓库里恰有同名副本」不算归属**——那是「同名」，不是「这条软链来自仓库」，不该据此隐藏入口、更不该拿它冒充来源。
 
 前端 `CollectSkillModal` 通过 `CollectSourceApi` 适配器（Agent 目录 / 项目目录）复用同一弹窗与流程。
 
@@ -376,7 +376,8 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - `components/agent/agentBadges.tsx`：Agent 徽标（活跃 / 共享目录 / 自定义 / 家族 / 未安装 / 预设）与说明数据源。
 - `components/agent/agentGroups.ts`：按解析后的目录把 Agent 归并成卡片模型（主 Agent 在前）。
 - `domain/cards.ts` ↔ `api/types.ts`：后端领域行 → `SkillCardView`，前端按 `reason / store / state` 决定徽标与可执行操作（`toggle / collect / delete / detail`）。
-- **行内「是什么」以事实为准**：`SkillCardView.source` 只表达**软链目标实际落在哪个已登记库**（`libraryOfLinkTarget`，按路径判定；自有仓库 / 第三方来源），判定不出就留空——绝不拿技能名去回填来源。未纳管的行（`own` / `external` / `shared`）再由服务端给出 `pathLabel`（真实位置，软链附带真实目标，home 压成 `~`），列表把它当行的副标题展示；受管行才用 `name@来源` 表达身份。
+- **状态列只回答「装没装、可不可用」**：`state` 只有 `on`（该技能就在本目录里，本 Agent / 项目可用——本工具分发的、自带目录、外部软链、共享目录读到的都算）与 `off`（本工具曾分发、现已移出分发名单）。「本工具管不管它、能不能在这里开关」不占状态列，由 `reason` 徽标表达（自带 / 外部软链 / 只读），前端用 `isToolManaged(item)` 判断是否渲染开关、是否进「安装方式」清单。
+- **行内「是什么」以事实为准**：`SkillCardView.source` 只表达**软链目标实际落在哪个已登记库**（`libraryOfLinkTarget`，按路径判定；自有仓库 / 第三方来源），判定不出就留空——绝不拿技能名去回填来源。不在本工具分发范围内的行（`own` / `external` / `shared`）再由服务端给出 `pathLabel`（真实位置，软链附带真实目标，home 压成 `~`），列表把它当行的副标题展示；本工具分发的行才用 `name@来源` 表达身份。
 
 ### 12.4 关键交互约定
 
