@@ -196,13 +196,26 @@ npm publish --access public
 git checkout package.json
 ```
 
-**B. 用临时 `NPM_TOKEN` 走工作流**
+**B. 用临时 Granular Access Token 走工作流**
 
-1. npm → Access Tokens → 新建 **Automation** token（需有发布权限）；
-2. 仓库 Settings ▸ Secrets and variables ▸ Actions 添加 `NPM_TOKEN`；
-3. 触发 `release.yml` —— 工作流检测到该 secret 时会以「bootstrap 模式」用 token 发布，
-   并在日志里打出 warning；
-4. 首版发完后，按 §5.2 配好 Trusted Publisher，**然后删掉这个 secret**（否则长期留着一把长效钥匙，正是 OIDC 想消除的风险）。
+> ⚠️ **不能用 Classic token**：npm 已于 **2025-12-09 永久撤销全部 Classic token**，
+> 现在只能创建 **Granular Access Token**，且**只能在网站上创建**（CLI 的 `npm token create` 已不支持）。
+
+1. npm → 右上角头像 → **Access Tokens** → **Generate New Token**；
+2. 勾选 **Bypass two-factor authentication**
+   （不勾的话，CI 里的发布会被 2FA 挑战拦下 —— 2026-08 起该开关只管发布类操作，账号治理类操作仍强制交互式 2FA）；
+3. **Packages and scopes** 区块：
+   - Permissions 选 **`Read and write (publish and stage)`**
+     （`stage only` 不能直接发布，只能暂存等人工 promote）；
+   - Select Packages 选 **All Packages**
+     （目标包 `flint-skills-hub` 尚不存在，无法在 “Only select packages” 里勾选它）；
+4. Expiration 设短（例如 7 天）—— 这只是一次性引导用的钥匙；
+5. **Generate Token** → **立刻复制**（完整 token 只在创建后显示这一次）；
+6. 仓库 Settings ▸ Secrets and variables ▸ Actions → New repository secret，
+   名字必须为 **`NPM_TOKEN`**；
+7. 触发 `release.yml` —— 工作流检测到该 secret 时会以「bootstrap 模式」用 token 发布，并在日志里打出 warning；
+8. 首版发完后，按 §5.2 配好 Trusted Publisher，**然后删掉这个 secret**
+   （否则长期留着一把长效钥匙，正是 OIDC 想消除的风险）。
 
 首版之后，后续发版一律走 OIDC。
 
