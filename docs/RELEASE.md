@@ -14,19 +14,19 @@
                   │
               🔴 人工审核通过 ◀── 未经确认不得进入下一步
                   │
-              git push 分支 / 合并
+              git push 到 master（release notes 随之落库）
                   │
-用户点 Actions ▸ Release ▸ Run workflow（填版本号）
-                  │
+                  ▼（自动触发，无需再点任何按钮）
        ┌──────────┴──────────┐
-   校验：构建 + 单测 + smoke   release notes 文档必须存在
+   校验：构建 + 单测 + smoke   解析目标版本（尚未发布的最高版本）
        └──────────┬──────────┘
                   ▼
        发 npm 包（OIDC）→ 建 tag → 建 GitHub Release
 ```
 
-**关键点：发版由人触发。** AI 只负责写 release notes 与改版本号，点下发布按钮的永远是人；
-CI 里没有「push 即发布」的路径。
+**关键点：人工审核发生在 notes 落库之前，落库即发布。** AI 负责写 release notes 与定版本号，人负责审阅
+并让它合并 / 推送到 `master`；一旦 `docs/releases/release_notes_vX.Y.Z.md` 进入 `master`，工作流就**自动**
+发布该版本——不需要再去 GitHub 点按钮。`workflow_dispatch`（填版本号）与推 `v*` 标签保留为手动兜底。
 
 ---
 
@@ -122,14 +122,21 @@ CI 里没有「push 即发布」的路径。
 5. 🔴 **人工审核**：把 release notes 草稿展示给用户审阅，确认通过才可继续。
    用户可要求增删或改措辞，AI 改完再次确认，直到明确批准。
 6. 本地自验：`npm run build`、`npm test`、`npm run smoke -w server`。
-7. 提交并推送分支 → 合并到 `master`。
-8. 用户在 GitHub 上触发发布：**Actions ▸ Release ▸ Run workflow**，填版本号。
-   需要先演练时勾选 `dry-run`（只校验与打包，不发布、不建 Release）。
-9. 工作流自动完成：校验（构建 + 单测 + smoke）→ 检查 release notes 存在 →
-   确认 `flint-skills-hub@X.Y.Z` 尚未发布 → 改写发布用 manifest →
+7. 提交并推送 `master` —— **这一步就是发布动作**，不需要再去 GitHub 操作。
+8. 工作流自动完成：校验（构建 + 单测 + smoke）→ 解析目标版本（`docs/releases/` 里
+   「已写 notes 但尚未发布」的最高版本）→ 检查 release notes 存在 → 改写发布用 manifest →
    `npm publish --provenance`（OIDC）→ 创建 tag `vX.Y.Z` → 创建 GitHub Release。
 
-> 也支持 `git push origin vX.Y.Z` 触发，行为与第 8 步等价。
+### 兜底触发方式
+
+自动触发不适用时（需要重发、需要演练、或只想指定某个版本）：
+
+- **Actions ▸ Release ▸ Run workflow**，填版本号；先演练就勾 `dry-run`
+  （只校验与打包，不发布、不建 Release）。
+- 或 `git push origin vX.Y.Z`，行为等价。
+
+两条口径的差别：**显式指定**（上面两种）遇到「该版本已发布」会直接失败，用来拦住误操作；
+**自动触发**遇到同一情况只报「无可发布」并成功跳过——所以改笔记错字既不会误发、也不会把流水线弄红。
 
 ### 与开发无关的注意事项
 
@@ -237,7 +244,7 @@ git checkout package.json
 > ```
 >
 > 注意：手工建 tag 会以**你的身份**触发 `push: tags v*` 那次 `Release` 运行（正常路径下 tag 由
-> `GITHUB_TOKEN` 创建，不会递归触发）。该运行会在「已发布校验」处**正确地**拦下并失败 ——
+> `GITHUB_TOKEN` 创建，不会递归触发）。该运行会在「版本解析」的已发布校验处**正确地**拦下并失败 ——
 > 这是守卫在起作用，不是故障。
 
 ---
@@ -246,7 +253,7 @@ git checkout package.json
 
 | | `ci.yml` | `release.yml` |
 |---|---|---|
-| 触发 | 每次 push / PR / 手动 | 手动 `workflow_dispatch` / 推 `v*` 标签 |
+| 触发 | 每次 push / PR / 手动 | release notes 落到 `master`（自动）/ 手动 `workflow_dispatch` / 推 `v*` 标签 |
 | 构建 + 单测 | ✅（Node 20 / 22 矩阵） | ✅（发布前再验一遍） |
 | smoke | ✅ | ✅ |
 | 写权限 | 无（`contents: read`） | `contents: write` + `id-token: write` |

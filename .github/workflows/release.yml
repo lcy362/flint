@@ -1,19 +1,23 @@
 name: Release
 
-# 发版由人触发（不自动跟 push 走）：
-#   推荐 workflow_dispatch —— 只需填版本号，工作流负责打 tag、发 npm、建 Release；
-#   也支持推 v* 标签触发，便于习惯打 tag 的场景。
+# 触发方式（任一即可，推荐第 1 种）：
+#   1. 自动：`docs/releases/release_notes_v*.md` 随推送落到 master —— 工作流取「已写 notes 但尚未发布」
+#      的最高版本发布。也就是「写 notes 即发版」，不需要再点任何按钮（见 docs/RELEASE.md）。
+#      改本文件时也会触发一次：流程修好后顺带把尚未发布的版本补发出去。
+#   2. 手动兜底：workflow_dispatch，填版本号（可先 dry-run 演练）。
+#   3. 手动兜底：推 `v*` 标签。
 #
-# 前置条件（由发版流程保证，见 docs/RELEASE.md）：
-#   docs/releases/release_notes_vX.Y.Z.md 必须已存在并经人工审核通过，否则本工作流直接失败。
+# 前置条件：notes 文件必须已存在并经人工审核（人工审核发生在它落库之前，见 docs/RELEASE.md）。
+#
+# 幂等：自动触发遇到「该版本已发布」直接成功跳过，不报错（改笔记错字不会误发或失败）；
+#       显式指定（dispatch / tag）遇到已发布版本仍会失败，拦住误操作。
 #
 # npm 发布走 Trusted Publishing（OIDC），不需要配置任何 NPM_TOKEN。
-# 需在 npmjs.com 的包设置里绑定：本仓库 + 本文件名 release.yml。
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（不带 v 前缀，例如 0.1.0）'
+        description: '版本号（不带 v 前缀，例如 1.0.0）'
         required: true
         type: string
       dry-run:
@@ -24,6 +28,13 @@ on:
   push:
     tags:
       - 'v*'
+    # 自动触发的载体：release notes 落库即发布。
+    # 注意：tag 推送不受 paths 过滤影响，因此上面 tags 与这里的 branches/paths 可以共存。
+    branches:
+      - master
+    paths:
+      - 'docs/releases/release_notes_v*.md'
+      - '.github/workflows/release.yml'
 
 permissions:
   contents: read
@@ -92,24 +103,96 @@ jobs:
       - name: Upgrade npm (required for OIDC trusted publishing)
         run: npm install -g npm@latest && npm --version
 
+      # 版本解析：三种入口统一在这里收敛，并决定本次要不要发布（skip）。
+      # 统一用 registry API（带 no-cache）判断「是否已发布」，不用 npm view —— 它读本地缓存。
       - name: Resolve version
         id: version
         env:
           INPUT_VERSION: ${{ inputs.version }}
           REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          DRY_RUN: ${{ inputs.dry-run }}
         run: |
-          RAW="$INPUT_VERSION"
-          if [ -z "$RAW" ]; then RAW="$REF_NAME"; fi
-          VERSION="${RAW#v}"
-          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
-            echo "::error::Invalid version '$RAW'. Expected semver like 0.1.0 or 0.2.0-rc.1"
+          set -euo pipefail
+
+          published() {
+            curl -fsS -H 'Cache-Control: no-cache' \
+              "https://registry.npmjs.org/flint-skills-hub/$1" -o /dev/null 2>/dev/null
+          }
+
+          raw="${INPUT_VERSION:-}"
+          mode="manual"
+          if [ -z "$raw" ] && [ "${REF_TYPE:-}" = "tag" ]; then raw="${REF_NAME}"; fi
+
+          if [ -z "$raw" ]; then
+            # 自动模式：docs/releases 里「尚未发布」的最高版本
+            mode="auto"
+            mapfile -t versions < <(node -e '
+              const fs = require("fs");
+              const rx = /^release_notes_v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\.md$/;
+              const dir = "docs/releases";
+              const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+              const nums = (v) => v.split("-")[0].split(".").map(Number);
+              files
+                .map((f) => rx.exec(f))
+                .filter(Boolean)
+                .map((m) => m[1])
+                .sort((a, b) => {
+                  const x = nums(a), y = nums(b);
+                  return y[0] - x[0] || y[1] - x[1] || y[2] - x[2];
+                })
+                .forEach((v) => console.log(v));
+            ')
+            for v in "${versions[@]:-}"; do
+              [ -n "$v" ] || continue
+              if ! published "$v"; then raw="$v"; break; fi
+            done
+            if [ -z "$raw" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "Every release note in docs/releases is already published on npm — nothing to release."
+              exit 0
+            fi
+            echo "Auto-detected release target: $raw (highest release note not yet on npm)"
+          fi
+
+          version="${raw#v}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Invalid version '$raw'. Expected semver like 1.0.0 or 1.1.0-rc.1"
             exit 1
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Resolved version: $VERSION"
+
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "mode=$mode" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "tag=v$version" >> "$GITHUB_OUTPUT"
+            echo "dry-run: resolved version $version, skipping npm state checks."
+            exit 0
+          fi
+
+          if published "$version"; then
+            if [ "$mode" = "manual" ]; then
+              echo "::error::flint-skills-hub@${version} is already published on npm; bump the version."
+              exit 1
+            fi
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "flint-skills-hub@${version} is already published — nothing to release."
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $version (mode: $mode)"
+
+      - name: Nothing to release
+        if: steps.version.outputs.skip == 'true'
+        run: |
+          echo "Skipped: no unpublished release notes — nothing to publish."
 
       - name: Require reviewed release notes
+        if: steps.version.outputs.skip != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -124,17 +207,6 @@ jobs:
             cat "$NOTES"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Reject an already published version
-        if: ${{ inputs.dry-run != true }}
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          if npm view "flint-skills-hub@${VERSION}" version >/dev/null 2>&1; then
-            echo "::error::flint-skills-hub@${VERSION} is already published on npm; bump the version."
-            exit 1
-          fi
-          echo "flint-skills-hub@${VERSION} is not published yet — proceeding."
-
       # 发布用 manifest 与开发用 manifest 是两套：
       #   1. private:true 会让 npm 拒绝发布；
       #   2. tarball 的 files 白名单不含 server/ 与 client/ 的 package.json，
@@ -142,6 +214,7 @@ jobs:
       #   3. 顶层 version 是仓库当前版本，发布时必须与 tag 对齐。
       # 只在 CI 的工作区里改写，仓库里的 package.json 保持开发形态。
       - name: Prepare publish manifest
+        if: steps.version.outputs.skip != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -151,12 +224,14 @@ jobs:
           cat package.json
 
       - name: Show package contents
+        if: steps.version.outputs.skip != 'true'
         run: npm pack --dry-run
 
       # 认证方式：默认走 OIDC，不需要任何 secret。
       # 唯一例外是首版引导——Trusted Publisher 是「包级」配置，包还没发布过时无处可配，
       # 所以允许用临时 NPM_TOKEN 先发一次；配好 OIDC 后必须删掉该 secret（见 docs/RELEASE.md §5）。
       - name: Publish to npm
+        if: steps.version.outputs.skip != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -181,7 +256,7 @@ jobs:
       # 2. **不阻断发布流程**：`npm publish` 成功本身已证明发布落地，这里只是兜底确认，
       #    因此失败只告警，绝不阻断后续建 tag / 建 Release。
       - name: Verify the published version resolves
-        if: ${{ inputs.dry-run != true }}
+        if: ${{ steps.version.outputs.skip != 'true' && inputs.dry-run != true }}
         continue-on-error: true
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -198,7 +273,7 @@ jobs:
           echo "::warning::Could not confirm flint-skills-hub@${VERSION} on the registry within ~60s. npm publish reported success, so the release proceeds — confirm manually: https://www.npmjs.com/package/flint-skills-hub?activeTab=versions"
 
       - name: Create GitHub Release
-        if: ${{ inputs.dry-run != true }}
+        if: ${{ steps.version.outputs.skip != 'true' && inputs.dry-run != true }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
