@@ -3,14 +3,18 @@ name: Release
 # 触发方式（任一即可，推荐第 1 种）：
 #   1. 自动：`docs/releases/release_notes_v*.md` 随推送落到 master —— 工作流取「已写 notes 但尚未发布」
 #      的最高版本发布。也就是「写 notes 即发版」，不需要再点任何按钮（见 docs/RELEASE.md）。
-#      改本文件时也会触发一次：流程修好后顺带把尚未发布的版本补发出去。
 #   2. 手动兜底：workflow_dispatch，填版本号（可先 dry-run 演练）。
 #   3. 手动兜底：推 `v*` 标签。
 #
 # 前置条件：notes 文件必须已存在并经人工审核（人工审核发生在它落库之前，见 docs/RELEASE.md）。
 #
-# 幂等：自动触发遇到「该版本已发布」直接成功跳过，不报错（改笔记错字不会误发或失败）；
-#       显式指定（dispatch / tag）遇到已发布版本仍会失败，拦住误操作。
+# 幂等与自愈：
+#   - 自动触发遇到「该版本已发布且 tag 也在」→ 报「无可发布」并成功跳过（改笔记错字既不误发也不变红）；
+#   - 自动触发遇到「已发布但 tag 缺失」（例如上次卡在发布审批、没走到建 tag）→ 只补 tag / Release，不重发；
+#   - 显式指定（dispatch / tag）遇到已发布版本 → 直接失败，拦住误操作。
+#
+# 发布后必须确认版本真的可见（阻断式）：npm 可能在维护者批准前「受理但不公开」，
+# 那种情况下绝不能建 tag / Release（见 docs/RELEASE.md §5.4 的实例）。
 #
 # npm 发布走 Trusted Publishing（OIDC），不需要配置任何 NPM_TOKEN。
 on:
@@ -34,7 +38,6 @@ on:
       - master
     paths:
       - 'docs/releases/release_notes_v*.md'
-      - '.github/workflows/release.yml'
 
 permissions:
   contents: read
@@ -119,14 +122,20 @@ jobs:
             curl -fsS -H 'Cache-Control: no-cache' \
               "https://registry.npmjs.org/flint-skills-hub/$1" -o /dev/null 2>/dev/null
           }
+          tagged() {
+            [ -n "$(git ls-remote --tags origin "refs/tags/v$1" 2>/dev/null)" ]
+          }
 
           raw="${INPUT_VERSION:-}"
           mode="manual"
+          publish="true"   # 手动触发（dispatch / tag）默认就是要发布
           if [ -z "$raw" ] && [ "${REF_TYPE:-}" = "tag" ]; then raw="${REF_NAME}"; fi
 
           if [ -z "$raw" ]; then
-            # 自动模式：docs/releases 里「尚未发布」的最高版本
+            # 自动模式：优先发「已写 notes 但尚未发布」的最高版本；
+            # 若都已发布、但最高版本的 tag 还没建出来（上次卡在发布审批之类），只补 tag / Release。
             mode="auto"
+            publish="false"
             mapfile -t versions < <(node -e '
               const fs = require("fs");
               const rx = /^release_notes_v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\.md$/;
@@ -145,14 +154,21 @@ jobs:
             ')
             for v in "${versions[@]:-}"; do
               [ -n "$v" ] || continue
-              if ! published "$v"; then raw="$v"; break; fi
+              if ! published "$v"; then raw="$v"; publish="true"; break; fi
             done
             if [ -z "$raw" ]; then
+              top="${versions[0]:-}"
+              if [ -n "$top" ] && ! tagged "$top"; then
+                raw="$top"
+                echo "flint-skills-hub@$top is on npm but tag v$top is missing — creating tag / Release only."
+              fi
+            fi
+            if [ -z "$raw" ]; then
               echo "skip=true" >> "$GITHUB_OUTPUT"
-              echo "Every release note in docs/releases is already published on npm — nothing to release."
+              echo "All release notes are published and tagged — nothing to release."
               exit 0
             fi
-            echo "Auto-detected release target: $raw (highest release note not yet on npm)"
+            echo "Auto-detected release target: v${raw#v} (publish=${publish})"
           fi
 
           version="${raw#v}"
@@ -164,13 +180,14 @@ jobs:
           if [ "${DRY_RUN:-false}" = "true" ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "mode=$mode" >> "$GITHUB_OUTPUT"
+            echo "publish=$publish" >> "$GITHUB_OUTPUT"
             echo "version=$version" >> "$GITHUB_OUTPUT"
             echo "tag=v$version" >> "$GITHUB_OUTPUT"
             echo "dry-run: resolved version $version, skipping npm state checks."
             exit 0
           fi
 
-          if published "$version"; then
+          if [ "$publish" = "true" ] && published "$version"; then
             if [ "$mode" = "manual" ]; then
               echo "::error::flint-skills-hub@${version} is already published on npm; bump the version."
               exit 1
@@ -182,9 +199,10 @@ jobs:
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
-          echo "Resolved version: $version (mode: $mode)"
+          echo "Resolved version: $version (mode: $mode, publish: $publish)"
 
       - name: Nothing to release
         if: steps.version.outputs.skip == 'true'
@@ -214,7 +232,7 @@ jobs:
       #   3. 顶层 version 是仓库当前版本，发布时必须与 tag 对齐。
       # 只在 CI 的工作区里改写，仓库里的 package.json 保持开发形态。
       - name: Prepare publish manifest
-        if: steps.version.outputs.skip != 'true'
+        if: steps.version.outputs.skip != 'true' && steps.version.outputs.publish == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -224,14 +242,14 @@ jobs:
           cat package.json
 
       - name: Show package contents
-        if: steps.version.outputs.skip != 'true'
+        if: steps.version.outputs.skip != 'true' && steps.version.outputs.publish == 'true'
         run: npm pack --dry-run
 
       # 认证方式：默认走 OIDC，不需要任何 secret。
       # 唯一例外是首版引导——Trusted Publisher 是「包级」配置，包还没发布过时无处可配，
       # 所以允许用临时 NPM_TOKEN 先发一次；配好 OIDC 后必须删掉该 secret（见 docs/RELEASE.md §5）。
       - name: Publish to npm
-        if: steps.version.outputs.skip != 'true'
+        if: steps.version.outputs.skip != 'true' && steps.version.outputs.publish == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -248,30 +266,33 @@ jobs:
           fi
           npm publish --provenance
 
-      # 发布后确认新版本能从 registry 解析。
-      # 两条教训（v0.1.0 与 v0.1.1 各踩一次，两次都是包发成功了却跳过建 tag / 建 Release）：
+      # 发布后**必须**确认新版本真的能从 registry 解析，否则不建 tag / Release。
+      # 教训：
       # 1. **不要用 `npm view`**：它读本地 npm 缓存，而上一步「未发布探测」刚把 404 缓存下来，
       #    于是重试 60s 全在读同一个缓存（v0.1.1 实录：runner 上六次全部 404，本地却早已可见）。
-      #    这里改为直接查 registry API，并带 no-cache 头。
-      # 2. **不阻断发布流程**：`npm publish` 成功本身已证明发布落地，这里只是兜底确认，
-      #    因此失败只告警，绝不阻断后续建 tag / 建 Release。
+      #    这里直接查 registry API，并带 no-cache 头。
+      # 2. **必须是阻断式**：npm 会在「维护者批准前」受理发布并成功退出——v1.0.0 就踩过：
+      #    CLI 打印 "Your package is being processed and may take a few minutes to become available."
+      #    且退出码为 0，但版本在批准前对所有人不可见。若这里继续放行，就会建出一个
+      #    「指向不存在版本」的 tag / Release。所以确认不到就红掉，把人叫来处理。
       - name: Verify the published version resolves
-        if: ${{ steps.version.outputs.skip != 'true' && inputs.dry-run != true }}
-        continue-on-error: true
+        if: ${{ steps.version.outputs.skip != 'true' && steps.version.outputs.publish == 'true' && inputs.dry-run != true }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          for attempt in 1 2 3 4 5 6; do
+          for attempt in $(seq 1 8); do
             if curl -fsS -H 'Cache-Control: no-cache' \
               "https://registry.npmjs.org/flint-skills-hub/${VERSION}" -o /dev/null; then
               echo "flint-skills-hub@${VERSION} resolves on the registry."
               exit 0
             fi
-            echo "Attempt ${attempt}: not resolvable yet; retrying in 10s..."
-            sleep 10
+            echo "Attempt ${attempt}: not resolvable yet; retrying in 15s..."
+            sleep 15
           done
-          echo "::warning::Could not confirm flint-skills-hub@${VERSION} on the registry within ~60s. npm publish reported success, so the release proceeds — confirm manually: https://www.npmjs.com/package/flint-skills-hub?activeTab=versions"
+          echo "::error::The npm CLI accepted the publish, but flint-skills-hub@${VERSION} is still not visible on the registry after ~2min — refusing to create the tag / Release."
+          echo "::error::Most likely the publish is waiting for maintainer approval on npmjs.com (see docs/RELEASE.md §5.4). Approve it, then re-run this workflow: the tag / Release are created in that run."
 
+      # 建 tag / Release：publish=false 时也走这里（补 tag 的场景），因此只看 skip / dry-run
       - name: Create GitHub Release
         if: ${{ steps.version.outputs.skip != 'true' && inputs.dry-run != true }}
         uses: softprops/action-gh-release@v2

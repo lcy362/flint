@@ -124,8 +124,10 @@
 6. 本地自验：`npm run build`、`npm test`、`npm run smoke -w server`。
 7. 提交并推送 `master` —— **这一步就是发布动作**，不需要再去 GitHub 操作。
 8. 工作流自动完成：校验（构建 + 单测 + smoke）→ 解析目标版本（`docs/releases/` 里
-   「已写 notes 但尚未发布」的最高版本）→ 检查 release notes 存在 → 改写发布用 manifest →
-   `npm publish --provenance`（OIDC）→ 创建 tag `vX.Y.Z` → 创建 GitHub Release。
+   「已写 notes 但尚未发布」的最高版本；若都已发布、但最高版本缺 tag，则只补 tag / Release）→
+   检查 release notes 存在 → 改写发布用 manifest → `npm publish --provenance`（OIDC）→
+   **确认该版本已在 registry 可见**（看不到就红掉，不建 tag / Release，见 §5.4）→
+   创建 tag `vX.Y.Z` → 创建 GitHub Release。
 
 ### 兜底触发方式
 
@@ -226,15 +228,15 @@ git checkout package.json
 
 首版之后，后续发版一律走 OIDC。
 
-> ℹ️ **发布后校验的坑（v0.1.0 / v0.1.1 各踩一次）**：`release.yml` 发布后会确认新版本能从 registry 解析。
-> 两次都出现「**包发成功了，却因为这一步判死而跳过建 tag / 建 GitHub Release**」。真实原因有两个：
+> ℹ️ **发布后校验：直接查 registry API，且必须阻断（v1.0.0 起）**。`release.yml` 在 `npm publish`
+> 之后会确认新版本真的能从 registry 解析，最多重试 8 次 × 15s：
 >
-> 1. **`npm view` 读的是本地 npm 缓存**：紧邻的上一步「未发布探测」刚把 404 写进缓存，
+> 1. **不要用 `npm view`**：它读本地 npm 缓存，而紧邻的上一步「未发布探测」刚把 404 写进缓存，
 >    于是后续重试 60s 全都在读同一个缓存（v0.1.1 实录：runner 上六次全 404，本机却早已可见）。
-> 2. 首版还存在真实的 registry 传播延迟。
->
-> 现已改为**直接查 registry API**（带 `Cache-Control: no-cache`）并加 `continue-on-error`。
-> `npm publish` 成功本身已证明发布落地，这一步只是兜底确认，因此**失败只告警、不再阻断**建 tag / Release。
+>    这就是当初改用 registry API（带 `Cache-Control: no-cache`）的原因。
+> 2. **不能只告警**：v0.1.0 / v0.1.1 曾因「包发成功了却跳过建 tag / Release」把这一步降级成
+>    `continue-on-error` 的告警；但 v1.0.0 证明那个前提不成立——npm 会**受理发布却暂不公开**（见 §5.4）。
+>    于是校验恢复为阻断式：确认不到就不建 tag / Release，**宁可红掉，也不发出指向不存在版本的 Release**。
 >
 > 万一仍然遇到「已发布但没建 tag/Release」（例如用旧版工作流发的），手工补一条即可：
 >
@@ -246,6 +248,22 @@ git checkout package.json
 > 注意：手工建 tag 会以**你的身份**触发 `push: tags v*` 那次 `Release` 运行（正常路径下 tag 由
 > `GITHUB_TOKEN` 创建，不会递归触发）。该运行会在「版本解析」的已发布校验处**正确地**拦下并失败 ——
 > 这是守卫在起作用，不是故障。
+
+### 5.4 发布被「暂存待批准」时怎么办
+
+npm 可能**受理发布但暂不公开**：CLI 打印
+`npm notice Your package is being processed and may take a few minutes to become available.`
+随后以 0 退出，而 registry 上查不到该版本（`https://registry.npmjs.org/flint-skills-hub/<version>`
+返回 404、`dist-tags` 也不变）。常见原因是账号 / 包的**发布审批策略**：发布需要维护者批准。
+
+处理步骤：
+
+1. 到 npmjs.com 的包页面批准这次发布（该版本此时显示为待批准状态）。
+2. 再看是否需要补 tag / Release：
+   - 那次运行按现在的口径**失败了**（确认不到就会红，且**不会**建 tag / Release）→ **重跑工作流**即可：
+     自动模式会认到「版本已在 npm、但 tag 缺失」，于是只补 tag / Release，不重发；
+   - tag / Release **已经存在**（旧版工作流发的，v1.0.0 就是这种）→ 批准后什么都不用做；
+   - 若 npm 上**根本没有待批准的发布**，那就不是审批问题：删掉 tag / Release 后重跑工作流排查。
 
 ---
 
