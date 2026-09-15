@@ -7,6 +7,7 @@ import { Skill } from './skill.js';
 import { Candidate } from './integrate.js';
 import { CONFIG_PATH } from '../config/defaults.js';
 import { log } from '../infra/logger.js';
+import { t } from '../i18n/index.js';
 
 export type DiagStatus = 'ok' | 'warn' | 'error';
 
@@ -63,35 +64,35 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
   const items: DiagItem[] = [];
 
   // ---- config 配置解析 ----
-  if (fs.existsSync(CONFIG_PATH)) groups.config.push({ key: 'config', status: 'ok', message: `配置已加载: ${CONFIG_PATH}` });
-  else groups.config.push({ key: 'config', status: 'warn', message: '配置不存在，将用默认值' });
+  if (fs.existsSync(CONFIG_PATH)) groups.config.push({ key: 'config', status: 'ok', message: t('diag.configOk', { path: CONFIG_PATH }) });
+  else groups.config.push({ key: 'config', status: 'warn', message: t('diag.configMissing') });
 
   // ---- repo 仓库与外部源存在性 ----
-  if (cfg.data.repos.length === 0) groups.repo.push({ key: 'repos', status: 'warn', message: '未配置 skill 仓库' });
+  if (cfg.data.repos.length === 0) groups.repo.push({ key: 'repos', status: 'warn', message: t('diag.noRepos') });
   for (const r of cfg.data.repos) {
     const home = expandTilde(r.path);
     if (!fs.existsSync(home)) {
-      groups.repo.push({ key: `repo:${r.id}`, status: 'error', message: `仓库 ${r.id} 目录缺失: ${home}` });
+      groups.repo.push({ key: `repo:${r.id}`, status: 'error', message: t('diag.repoMissing', { id: r.id, path: home }) });
       continue;
     }
     const p = path.join(home, 'skills');
-    groups.repo.push({ key: `repo:${r.id}`, status: fs.existsSync(p) ? 'ok' : 'error', message: `仓库 ${r.id} @ ${p}` });
+    groups.repo.push({ key: `repo:${r.id}`, status: fs.existsSync(p) ? 'ok' : 'error', message: t('diag.repoOk', { id: r.id, path: p }) });
   }
   for (const f of cfg.data.foreignSources) {
     const home = expandTilde(f.path);
-    groups.repo.push({ key: `fsrc:${f.id}`, status: fs.existsSync(home) ? 'ok' : 'error', message: `外部源 ${f.id}: ${home}` });
+    groups.repo.push({ key: `fsrc:${f.id}`, status: fs.existsSync(home) ? 'ok' : 'error', message: t('diag.fsrc', { id: f.id, path: home }) });
   }
 
   // ---- project 项目存在性 ----
-  if (cfg.data.projects.length === 0) groups.project.push({ key: 'projects', status: 'ok', message: '未登记项目（无需校验）' });
+  if (cfg.data.projects.length === 0) groups.project.push({ key: 'projects', status: 'ok', message: t('diag.noProjects') });
   for (const p of cfg.data.projects) {
     const home = expandTilde(p.path);
     if (!fs.existsSync(home)) {
-      groups.project.push({ key: `project:${home}`, status: 'error', message: `项目路径缺失: ${home}` });
+      groups.project.push({ key: `project:${home}`, status: 'error', message: t('diag.projectMissing', { path: home }) });
       continue;
     }
     const ag = path.join(home, '.agents', 'skills');
-    groups.project.push({ key: `project:${home}`, status: fs.existsSync(ag) ? 'ok' : 'warn', message: `项目 ${home}（已登记，未生成 .agents/skills）` });
+    groups.project.push({ key: `project:${home}`, status: fs.existsSync(ag) ? 'ok' : 'warn', message: t('diag.projectNoAgents', { path: home }) });
   }
 
   // ---- 活跃集合 ----
@@ -103,18 +104,20 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
   const diffs = diffSync(cfg, deps.lib.skills);
   for (const d of diffs) {
     const parts: string[] = [];
-    if (d.missing.length) parts.push(`缺 ${d.missing.length}`);
-    if (d.extra.length) parts.push(`多 ${d.extra.length}`);
-    if (d.brokenLink.length) parts.push(`失效 ${d.brokenLink.length}`);
+    if (d.missing.length) parts.push(t('diag.syncMissing', { n: d.missing.length }));
+    if (d.extra.length) parts.push(t('diag.syncExtra', { n: d.extra.length }));
+    if (d.brokenLink.length) parts.push(t('diag.syncBroken', { n: d.brokenLink.length }));
     const bad = parts.length > 0;
     groups.sync.push({
       key: `sync:${d.agent}`,
       status: bad ? 'warn' : 'ok',
-      message: `${d.agent}: ${d.desiredNames.length} 期望${bad ? ' · ' + parts.join(' / ') : ' 已同步'}`,
+      message: bad
+        ? t('diag.syncBad', { agent: d.agent, n: d.desiredNames.length, parts: parts.join(' / ') })
+        : t('diag.syncOk', { agent: d.agent, n: d.desiredNames.length }),
       detail: d,
     });
   }
-  if (diffs.length === 0) groups.sync.push({ key: 'sync:none', status: 'ok', message: '无活跃 agent，未比对' });
+  if (diffs.length === 0) groups.sync.push({ key: 'sync:none', status: 'ok', message: t('diag.syncNone') });
 
   // ---- durability 失效软链 ----
   // 同目录的 Agent 共用一个目录，按目录去重，避免同一个失效软链报多次
@@ -130,11 +133,11 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
       try { lstat = fs.lstatSync(p); } catch { continue; }
       if (lstat.isSymbolicLink() && !fs.existsSync(p)) {
         hasBroken = true;
-        groups.durability.push({ key: `broken:${ent}`, status: 'warn', message: `${a.name} 存在失效软链: ${ent}` });
+        groups.durability.push({ key: `broken:${ent}`, status: 'warn', message: t('diag.brokenFound', { agent: a.name, name: ent }) });
       }
     }
   }
-  if (!hasBroken) groups.durability.push({ key: 'broken', status: 'ok', message: '无失效软链' });
+  if (!hasBroken) groups.durability.push({ key: 'broken', status: 'ok', message: t('diag.noBroken') });
 
   // ---- dup 重复 skill（同名多来源汇总；完整交互交前端收编面板） ----
   const byName = new Map<string, Candidate[]>();
@@ -147,9 +150,9 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
   for (const [name, arr] of byName) {
     if (arr.length <= 1) continue;
     dupCount++;
-    groups.dup.push({ key: `dup:${name}`, status: 'warn', message: `${name} 有 ${arr.length} 个来源待收编`, detail: arr });
+    groups.dup.push({ key: `dup:${name}`, status: 'warn', message: t('diag.dupFound', { name, n: arr.length }), detail: arr });
   }
-  if (dupCount === 0) groups.dup.push({ key: 'dup', status: 'ok', message: '无同名多来源' });
+  if (dupCount === 0) groups.dup.push({ key: 'dup', status: 'ok', message: t('diag.noDup') });
 
   // ---- 扁平化 ----
   for (const d of DIMS) for (const it of groups[d]) items.push(it);
@@ -164,7 +167,7 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
       error: arr.filter((x) => x.status === 'error').length,
     };
   }
-  log.info('diagnose', '诊断完成', summary);
+  log.info('diagnose', 'Diagnostics finished', summary);
 
   return { config: CONFIG_PATH, summary, groups, items };
 }

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import { scanDir, detectLayoutAbs } from './scanner.js';
 import { expandTilde, repoSkillRoot } from './agents.js';
+import { t } from '../i18n/index.js';
 
 export interface ImportResult { source: string; imported: string[]; skipped: string[] }
 
@@ -17,7 +18,7 @@ export function previewImportDirs(sourceDirs: string[]): ImportPreviewItem[] {
   const out: ImportPreviewItem[] = [];
   for (const sd of sourceDirs) {
     const abs = expandTilde(sd);
-    if (!fs.existsSync(abs)) { out.push({ source: sd, layout: 'flat', count: 0, tags: [], error: '路径不存在' }); continue; }
+    if (!fs.existsSync(abs)) { out.push({ source: sd, layout: 'flat', count: 0, tags: [], error: t('import.pathMissing') }); continue; }
     try {
       const det = detectLayoutAbs(abs);
       const found = scanDir(abs, 'probe', 'nested');
@@ -40,8 +41,8 @@ export function importDirs(cfg: ConfigStore, sourceDirs: string[], repoId?: stri
   for (const sd of sourceDirs) {
     const abs = expandTilde(sd);
     const res: ImportResult = { source: sd, imported: [], skipped: [] };
-    if (!fs.existsSync(abs)) { res.skipped.push(`(路径不存在)`); out.push(res); continue; }
-    if (!repo) { res.skipped.push('(无仓库可导入)'); out.push(res); continue; }
+    if (!fs.existsSync(abs)) { res.skipped.push(t('import.dirMissing')); out.push(res); continue; }
+    if (!repo) { res.skipped.push(t('import.noRepo')); out.push(res); continue; }
     // 用统一的仓库 skill 根换算（honors repo.root）：否则自定义 root 的仓库会出现"导入了却扫不到"
     const skillsRoot = repoSkillRoot(repo);
     fs.mkdirSync(skillsRoot, { recursive: true });
@@ -50,9 +51,9 @@ export function importDirs(cfg: ConfigStore, sourceDirs: string[], repoId?: stri
       // 解引用源软链：导入的是真实位置的内容，而非把链接本身复制进仓库
       let srcReal: string;
       try { srcReal = fs.realpathSync(s.dir); }
-      catch (e) { res.skipped.push(`${s.name}(源不可达: ${(e as Error).message})`); out.push(res); continue; }
+      catch (e) { res.skipped.push(t('import.srcUnreachable', { name: s.name, msg: (e as Error).message })); out.push(res); continue; }
       const dest = path.join(skillsRoot, s.name);
-      if (fs.existsSync(dest)) { res.skipped.push(`${s.name}(已存在，去重跳过)`); continue; }
+      if (fs.existsSync(dest)) { res.skipped.push(t('import.existsSkip', { name: s.name })); continue; }
       try {
         fs.cpSync(srcReal, dest, { recursive: true });
         // 来源追溯（IM-04）
@@ -60,7 +61,7 @@ export function importDirs(cfg: ConfigStore, sourceDirs: string[], repoId?: stri
         meta.origin = abs;
         cfg.data.skillMeta[`${s.name}@${repo.id}`] = meta;
         res.imported.push(s.name);
-      } catch (e) { res.skipped.push(`${s.name}(${(e as Error).message})`); }
+      } catch (e) { res.skipped.push(t('import.failed', { name: s.name, msg: (e as Error).message })); }
     }
     out.push(res);
   }

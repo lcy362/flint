@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import { listAgents, repoSkillRoot } from './agents.js';
 import { symlinkSkill } from './sync.js';
+import { t } from '../i18n/index.js';
 
 export interface TakeoverResult {
   /** 来源标识：`agent:<key>` / `project:<id>` */
@@ -48,16 +49,16 @@ export function takeoverInSource(
   confirm?: boolean,
 ): TakeoverResult {
   const repo = repoId ? cfg.data.repos.find((r) => r.id === repoId) : undefined;
-  if (repoId && !repo) return { ref: source.ref, name, linked: false, reason: `repo 不存在: ${repoId}` };
+  if (repoId && !repo) return { ref: source.ref, name, linked: false, reason: t('takeover.repoMissing', { id: repoId }) };
 
   const skillsRoot = repo ? repoSkillRoot(repo) : source.dir; // 仓库 skill 根（honors repo.root）
   const target = path.join(skillsRoot, name); // 仓库内副本
   const src = path.join(source.dir, name);    // 来源目录里的条目
 
-  if (!fs.existsSync(target)) return { ref: source.ref, name, linked: false, reason: `仓库副本 ${name} 不存在，请先归集入库` };
+  if (!fs.existsSync(target)) return { ref: source.ref, name, linked: false, reason: t('takeover.copyMissing', { name }) };
 
   const srcStat = fs.lstatSync(src, { throwIfNoEntry: false });
-  if (!srcStat) return { ref: source.ref, name, linked: false, reason: `来源目录 ${name} 不存在` };
+  if (!srcStat) return { ref: source.ref, name, linked: false, reason: t('takeover.srcMissing', { name }) };
 
   const targetReal = fs.realpathSync(target);
 
@@ -70,13 +71,13 @@ export function takeoverInSource(
     // 真实目录：它本身就是仓库本体时不做任何事，否则删的正是唯一本体
     try {
       if (fs.realpathSync(src) === targetReal) {
-        return { ref: source.ref, name, linked: false, reason: `来源目录里的 ${name} 就是仓库本体，无需接管` };
+        return { ref: source.ref, name, linked: false, reason: t('takeover.isRepoBody', { name }) };
       }
     } catch { /* ignore */ }
   }
 
   if (!confirm) {
-    return { ref: source.ref, name, linked: false, needConfirm: true, reason: '接管会把该目录里的条目替换为指向仓库副本的软链，请确认' };
+    return { ref: source.ref, name, linked: false, needConfirm: true, reason: t('takeover.needConfirm') };
   }
 
   symlinkSkill(src, target);
@@ -87,6 +88,6 @@ export function takeoverInSource(
 /** 兼容入口：接管某个已安装 agent 全局目录里的技能条目 */
 export function takeover(cfg: ConfigStore, agentKey: string, name: string, repoId?: string, confirm?: boolean): TakeoverResult {
   const a = listAgents(cfg.data).find((x) => x.key === agentKey);
-  if (!a?.installed) return { ref: `agent:${agentKey}`, name, linked: false, reason: `agent 未安装: ${agentKey}` };
+  if (!a?.installed) return { ref: `agent:${agentKey}`, name, linked: false, reason: t('takeover.agentNotInstalled', { key: agentKey }) };
   return takeoverInSource(cfg, { ref: `agent:${agentKey}`, name: a.name, dir: a.globalDir }, name, repoId, confirm);
 }

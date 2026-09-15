@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Button from './Button';
+import { joinList, useI18n } from '../../i18n';
 
 export interface MultiSelectOption<T extends string = string> {
   label: string;
@@ -33,6 +34,7 @@ export default function MultiSelect<T extends string = string>({
   searchThreshold = 8,
   emptyHint,
 }: MultiSelectProps<T>) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
@@ -90,7 +92,7 @@ export default function MultiSelect<T extends string = string>({
         className={`field multiselect__trigger ${selected.length > 0 ? 'is-on' : ''}`}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title={selected.length > 0 ? selected.join('、') : label}
+        title={selected.length > 0 ? joinList(selected) : label}
         onClick={() => setOpen((o) => !o)}
       >
         <span className="multiselect__summary">{summary}</span>
@@ -105,8 +107,8 @@ export default function MultiSelect<T extends string = string>({
               className="field multiselect__search"
               type="search"
               value={q}
-              placeholder={`筛选${label}…`}
-              aria-label={`筛选${label}`}
+              placeholder={t('common.filterPlaceholder', { label })}
+              aria-label={label}
               onChange={(e) => setQ(e.target.value)}
             />
           )}
@@ -130,15 +132,15 @@ export default function MultiSelect<T extends string = string>({
               );
             })}
             {filtered.length === 0 && (
-              <p className="multiselect__empty">{options.length === 0 ? (emptyHint ?? '暂无可选项') : '无匹配项'}</p>
+              <p className="multiselect__empty">{options.length === 0 ? (emptyHint ?? t('common.noOptions')) : t('common.noMatch')}</p>
             )}
           </div>
 
           <div className="multiselect__foot">
-            <span className="multiselect__hint">已选 {selected.length} 项</span>
+            <span className="multiselect__hint">{t('common.selectedCount', { n: selected.length })}</span>
             {selected.length > 0 && (
               <Button size="sm" variant="ghost" onClick={() => onChange([])}>
-                清空
+                {t('common.clear')}
               </Button>
             )}
           </div>

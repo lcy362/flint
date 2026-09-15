@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Spinner from './Spinner';
 import EmptyState from './EmptyState';
+import { useI18n } from '../../i18n';
 
 interface LoadingBoundaryProps<T> {
   state: { loading: boolean; error?: string | null; data?: T | null };
@@ -9,6 +10,7 @@ interface LoadingBoundaryProps<T> {
 }
 
 export default function LoadingBoundary<T>({ state, empty, children }: LoadingBoundaryProps<T>) {
+  const { t } = useI18n();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -17,7 +19,7 @@ export default function LoadingBoundary<T>({ state, empty, children }: LoadingBo
   if (state.error) {
     return (
       <div className="error-box" role="alert">
-        <b>加载失败</b> {state.error}
+        <b>{t('common.loadFailed')}</b> {state.error}
       </div>
     );
   }

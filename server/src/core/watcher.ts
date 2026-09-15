@@ -28,7 +28,7 @@ export class CopyWatcher {
   start(cfg: ConfigStore, onChange: () => void): void {
     this.stop();
     if (!CopyWatcher.shouldRun(cfg)) {
-      log.info('watcher', '未启用（需开关打开且存在复制模式 agent）');
+      log.info('watcher', 'Not enabled (requires the switch on and at least one copy-mode agent)');
       return;
     }
     this.onChange = onChange;
@@ -37,17 +37,17 @@ export class CopyWatcher {
       .filter((p) => fs.existsSync(p));
     if (roots.length === 0) return;
     this.watcher = watch(roots, { ignoreInitial: true, depth: 3, awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 } });
-    log.info('watcher', '已启用', { roots });
+    log.info('watcher', 'Enabled', { roots });
     const debounce = () => {
       if (this.timer) clearTimeout(this.timer);
       this.timer = setTimeout(() => this.onChange?.(), 800);
     };
-    this.watcher.on('all', (ev, p) => { log.debug('watcher', '文件变更', { ev, path: p }); debounce(); });
+    this.watcher.on('all', (ev, p) => { log.debug('watcher', 'File change', { ev, path: p }); debounce(); });
   }
 
   stop(): void {
     if (this.timer) clearTimeout(this.timer);
-    if (this.watcher) log.info('watcher', '已停止');
+    if (this.watcher) log.info('watcher', 'Stopped');
     this.watcher?.close().catch(() => {});
     this.watcher = undefined;
   }

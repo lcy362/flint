@@ -5,6 +5,7 @@ import { expandTilde } from './agents.js';
 import { syncActive } from './sync.js';
 import { migrateTagsToFrontmatter } from './repo-tags.js';
 import { Skill } from './skill.js';
+import { t } from '../i18n/index.js';
 
 export interface FixResult {
   key: string;
@@ -29,32 +30,32 @@ export function applyFix(cfg: ConfigStore, deps: FixDeps, key: string): FixResul
     if (key.startsWith('sync:')) {
       // 用户在体检中心显式点修复：允许回收该 agent 上本工具多部署的软链
       syncActive(cfg, deps.lib.skills, [key.slice(5)], 'fix', { prune: true });
-      return { key, applied: true, fix: 'sync', message: `已重同步 ${key.slice(5)}` };
+      return { key, applied: true, fix: 'sync', message: t('fix.resynced', { agent: key.slice(5) }) };
     }
     if (key.startsWith('broken:')) {
       syncActive(cfg, deps.lib.skills, cfg.data.activeAgents, 'fix', { prune: true });
-      return { key, applied: true, fix: 'sync', message: '已重同步活跃 agent，消除失效软链' };
+      return { key, applied: true, fix: 'sync', message: t('fix.resyncedActive') };
     }
     if (key.startsWith('project:')) {
       const p = expandTilde(key.slice('project:'.length));
       fs.mkdirSync(path.join(p, '.agents', 'skills'), { recursive: true });
-      return { key, applied: true, fix: 'mkdir', message: `已确保项目结构存在: ${p}` };
+      return { key, applied: true, fix: 'mkdir', message: t('fix.projectReady', { path: p }) };
     }
     if (key.startsWith('repo:')) {
       const id = key.slice(5);
       const repo = cfg.data.repos.find((x) => x.id === id);
-      if (!repo) return { key, applied: false, message: 'repo 未找到' };
+      if (!repo) return { key, applied: false, message: t('fix.repoNotFound') };
       fs.mkdirSync(path.join(expandTilde(repo.path), 'skills'), { recursive: true });
-      return { key, applied: true, fix: 'mkdir', message: `已创建仓库目录: ${repo.path}/skills` };
+      return { key, applied: true, fix: 'mkdir', message: t('fix.repoCreated', { path: `${repo.path}/skills` }) };
     }
     if (key.startsWith('tags:')) {
       const id = key.slice(5);
       const repo = cfg.data.repos.find((x) => x.id === id);
-      if (!repo) return { key, applied: false, message: 'repo 未找到' };
+      if (!repo) return { key, applied: false, message: t('fix.repoNotFound') };
       const r = migrateTagsToFrontmatter(cfg, repo);
-      return { key, applied: true, fix: 'tags-migrate', message: `已迁移 ${r.migrated} 个 skill 标签到 frontmatter`, result: r };
+      return { key, applied: true, fix: 'tags-migrate', message: t('fix.tagsMigrated', { n: r.migrated }), result: r };
     }
-    return { key, applied: false, message: '该项无需自动修复' };
+    return { key, applied: false, message: t('fix.nothing') };
   } catch (e) {
     return { key, applied: false, message: (e as Error).message };
   }

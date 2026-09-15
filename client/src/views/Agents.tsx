@@ -3,7 +3,7 @@ import { api, type AgentView, type AgentSkillsResp, type PresetView, type SkillA
 import SkillList from '../components/skill/SkillList';
 import CollectSkillModal, { agentCollectSource } from '../components/skill/CollectSkillModal';
 import { skillViewToCard } from '../components/skill/adapters';
-import { SKILL_BADGE_LEGEND } from '../components/skill/SkillBadges';
+import { skillBadgeLegend } from '../components/skill/SkillBadges';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
 import FilterBar from '../components/common/FilterBar';
 import FoldButton from '../components/common/FoldButton';
@@ -23,7 +23,7 @@ import AgentNamesTitle from '../components/agent/AgentNamesTitle';
 import { AddAgentModal } from '../components/agent/AddAgentModal';
 import { groupAgentsByDir } from '../components/agent/agentGroups';
 import {
-  AGENT_BADGE_LEGEND,
+  agentBadgeLegend,
   activeBadge,
   customBadge,
   familyBadge,
@@ -36,9 +36,11 @@ import { useAsync } from '../state/useAsync';
 import { useViewMode } from '../state/viewMode';
 import { useCollapsed } from '../state/collapse';
 import { navigate, useQueryFlag, useQueryParam, useRoute } from '../state/router';
+import { joinList, rich, useI18n } from '../i18n';
 
 export default function Agents() {
   const { data, loading, error, reload } = useAsync<AgentView[]>(() => api('/agents'));
+  const { t } = useI18n();
   const route = useRoute();
   const [q, setQ] = useQueryParam('q');
   const [onlyInstalled, setOnlyInstalled] = useQueryFlag('installed');
@@ -77,14 +79,14 @@ export default function Agents() {
       title: <AgentNamesTitle agents={g.agents} onOpen={openAgent} />,
       sub: <span className="mono">{g.keys.join(' / ')}</span>,
       desc: <span className="mono">{g.dir}</span>,
-      status: activeBadge({ active: g.anyActive }),
+      status: activeBadge(t, { active: g.anyActive }),
       // 一个目录只有一套策略，同目录的 Agent 共用它（系统内存于主 Agent 名下）
       badges: (
         <>
-          {customBadge(primary)}
-          {!primary.sharedOwn && sharedReadBadge(primary)}
-          {presetBadge(primary.preset ?? null)}
-          {!g.installed && notInstalledBadge()}
+          {customBadge(t, primary)}
+          {!primary.sharedOwn && sharedReadBadge(t, primary)}
+          {presetBadge(t, primary.preset ?? null)}
+          {!g.installed && notInstalledBadge(t)}
         </>
       ),
       onClick: () => openAgent(primary.key),
@@ -95,11 +97,11 @@ export default function Agents() {
   return (
     <>
       <PageHeader
-        title="智能体"
-        sub={data ? `共 ${groups.length} 个技能目录 · ${data.length} 个 Agent` : undefined}
+        title={t('nav.agents')}
+        sub={data ? t('agents.subtitle', { dirs: groups.length, agents: data.length }) : undefined}
         actions={<>
-          <Button variant="ghost" onClick={reload}>刷新</Button>
-          <Button onClick={() => setAddOpen(true)} title="新增一个内置清单之外的自定义 Agent">新增自定义 Agent</Button>
+          <Button variant="ghost" onClick={reload}>{t('common.refresh')}</Button>
+          <Button onClick={() => setAddOpen(true)} title={t('agents.addCustom.title')}>{t('agents.addCustom')}</Button>
         </>}
       />
       {selectedKey ? (
@@ -108,7 +110,7 @@ export default function Agents() {
         ) : (
           <LoadingBoundary
             state={{ loading, error, data }}
-            empty={{ title: '未找到该 Agent', hint: `没有 key 为「${selectedKey}」的 Agent。`, icon: '◉' }}
+            empty={{ title: t('agents.notFound.title'), hint: t('agents.notFound.hint', { key: selectedKey }), icon: '◉' }}
           >
             {() => null}
           </LoadingBoundary>
@@ -117,19 +119,15 @@ export default function Agents() {
         <>
           <div className="panel">
             <FilterBar
-              search={{ value: q, onChange: setQ, placeholder: '搜索名称 / key / 目录' }}
-              controls={<SwitchLabel checked={onlyInstalled} onChange={setOnlyInstalled}>只看已安装</SwitchLabel>}
+              search={{ value: q, onChange: setQ, placeholder: t('filter.searchAgent') }}
+              controls={<SwitchLabel checked={onlyInstalled} onChange={setOnlyInstalled}>{t('agents.onlyInstalled')}</SwitchLabel>}
               hasFilters={filtered}
               onReset={() => { setQ(''); setOnlyInstalled(false); }}
               actions={
                 <BadgeLegend
-                  title="卡片上的标签是什么意思？"
-                  items={AGENT_BADGE_LEGEND}
-                  intro={
-                    <>
-                      每张卡片对应一个<strong>实际的技能目录</strong>。多个 Agent 用同一个目录时合成一张卡：标题罗列这些 Agent（可逐个点开各自详情），它们<strong>共用同一套策略</strong>——一个目录只有一套设置，无所谓"归谁"；系统内这套设置存在其中一个 Agent 名下（只是存放位置，可在 Agent 详情页更换）。
-                    </>
-                  }
+                  title={t('agents.legend.title')}
+                  items={agentBadgeLegend(t)}
+                  intro={rich(t('agents.legend.intro'))}
                 />
               }
               view={{ value: viewMode, onChange: setViewMode }}
@@ -137,12 +135,12 @@ export default function Agents() {
           </div>
           <LoadingBoundary
             state={{ loading, error, data }}
-            empty={{ title: '暂无 Agent', hint: '系统中尚未登记任何 Agent。', icon: '◉' }}
+            empty={{ title: t('agents.empty.title'), hint: t('agents.empty.hint'), icon: '◉' }}
           >
             {() => (
               <EntityList
                 items={items}
-                title={`${filtered ? '筛选结果' : '全部技能目录'} · ${items.length}${filtered ? ` / ${groups.length}` : ''}`}
+                title={`${filtered ? t('list.filtered') : t('list.allSkillDirs')} · ${items.length}${filtered ? ` / ${groups.length}` : ''}`}
                 hideToggle
               />
             )}
@@ -162,6 +160,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   onBack: () => void;
   onChanged: () => void;
 }) {
+  const { t } = useI18n();
   const toast = useToast();
   const { data, loading, error, reload } = useAsync<AgentSkillsResp>(
     () => api(`/agents/${encodeURIComponent(agent.key)}/skills`),
@@ -192,7 +191,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
     try {
       await fn();
       // 非活跃 Agent 的显式改动由服务端就地同步，因此与活跃态一样是「已同步」
-      toast.push('已更新并同步', 'good');
+      toast.push(t('agents.synced'), 'good');
       reload();
       onChanged();
     } catch (e) {
@@ -206,8 +205,8 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
       const res = await api<SyncResult>(`/agents/${encodeURIComponent(agent.key)}/sync`, { method: 'POST' });
       setLastSync(res);
       const failed = res.failed?.length ?? 0;
-      if (failed > 0) toast.push(`同步完成，但有 ${failed} 项失败`, 'bad');
-      else toast.push(`已同步：新增 ${res.created.length} / 移除 ${res.removed.length}`, 'good');
+      if (failed > 0) toast.push(t('agents.sync.failed', { n: failed }), 'bad');
+      else toast.push(t('agents.sync.done', { created: res.created.length, removed: res.removed.length }), 'good');
       for (const w of res.warnings ?? []) toast.push(w, 'bad');
       reload();
       onChanged();
@@ -245,10 +244,10 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
   // 自定义 Agent（AG-03）：删除后回到列表并刷新
   const deleteAgent = async () => {
-    if (!window.confirm(`确定删除自定义 Agent「${agent.name}」？此操作不可撤销。`)) return;
+    if (!window.confirm(t('agents.deleteConfirm', { name: agent.name }))) return;
     try {
       await api(`/agents/custom/${encodeURIComponent(agent.key)}`, { method: 'DELETE' });
-      toast.push('已删除自定义 Agent', 'good');
+      toast.push(t('agents.deletedCustom'), 'good');
       onChanged();
       onBack();
     } catch (e) {
@@ -277,7 +276,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
     id: f.skill,
     title: f.skill,
     sub: f.reason,
-    status: <Badge tone="bad">失败</Badge>,
+    status: <Badge tone="bad">{t('agents.failed')}</Badge>,
   }));
 
   // 当前技能行按名字索引：直接添加面板据此判断「是否已装 / 来源」
@@ -314,14 +313,14 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
       card.toggleOn = on;
       if (row?.reason === 'preset') {
         card.reason = 'preset';
-        card.reasonLabel = '预设引入';
-        card.reasonTitle = `由关联预设「${row.preset ?? agent.preset ?? ''}」带入；在这里关掉可让它只对本 Agent 不生效`;
+        card.reasonLabel = t('badge.reason.preset');
+        card.reasonTitle = t('agents.presetReason.title', { preset: row.preset ?? agent.preset ?? '' });
       }
       if (on && row) card.store = row.store;
       card.preset = row?.preset;
       return card;
     }),
-    [library, rowsByName, draftOn, agent.preset]
+    [library, rowsByName, draftOn, agent.preset, t]
   );
 
   const allSources = useMemo(() => [...new Set(library.map((s) => s.source))].sort(), [library]);
@@ -333,7 +332,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   const allTags = useMemo(() => [...new Set(library.flatMap((s) => s.tags ?? []))].sort(), [library]);
   const tagCounts = useMemo(() => {
     const m: Record<string, number> = {};
-    library.forEach((s) => s.tags?.forEach((t) => { m[t] = (m[t] ?? 0) + 1; }));
+    library.forEach((s) => s.tags?.forEach((tag) => { m[tag] = (m[tag] ?? 0) + 1; }));
     return m;
   }, [library]);
 
@@ -345,7 +344,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
     const kw = q.trim().toLowerCase();
     return directCards.filter((c) => {
       if (activeSrcs.length > 0 && !activeSrcs.includes(c.source)) return false;
-      if (facets.length > 0 && !facets.some((t) => c.tags.includes(t))) return false;
+      if (facets.length > 0 && !facets.some((tag) => c.tags.includes(tag))) return false;
       if (kw) {
         const hay = `${c.name} ${c.title ?? ''} ${c.description ?? ''}`.toLowerCase();
         if (!hay.includes(kw)) return false;
@@ -370,7 +369,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
     if (tagSet.size > 0) {
       for (const s of library) {
         if (seen.has(s.name)) continue;
-        if ((s.tags ?? []).some((t) => tagSet.has(t))) { seen.add(s.name); out.push(s.name); }
+        if ((s.tags ?? []).some((tag) => tagSet.has(tag))) { seen.add(s.name); out.push(s.name); }
       }
     }
     return out;
@@ -387,7 +386,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   const withDir = (items: SkillCardView[]): SkillCardView[] => {
     if (!sharedDir) return items;
     return items.map((s) => (s.fromDir
-      ? { ...s, dirLabel: shortDir(s.fromDir), dirTitle: `这个技能来自 ${s.fromDir}` }
+      ? { ...s, dirLabel: shortDir(s.fromDir), dirTitle: t('agents.skillDirs.title') + ` (${s.fromDir})` }
       : s));
   };
 
@@ -413,12 +412,12 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
     sub: <span className="mono">{s.source}</span>,
     actions: (
       <FieldSelect
-        aria-label={`${s.name} 安装方式`}
+        aria-label={t('agents.installModeAria', { name: s.name })}
         value={agent.skillSync?.[s.name] ?? agent.sync}
         onChange={(e) => setSkillSync(s.name, e.target.value as 'symlink' | 'copy')}
       >
-        <option value="symlink">软链（不复制文件，即时生效）</option>
-        <option value="copy">复制（独立副本，需重新同步）</option>
+        <option value="symlink">{t('agents.install.symlink')}</option>
+        <option value="copy">{t('agents.install.copy')}</option>
       </FieldSelect>
     ),
   }));
@@ -426,26 +425,26 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   return (
     <>
       <div className="detail-head">
-        <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>← 返回</Button>
+        <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
         <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{agent.name}</h2>
-        {activeBadge(agent)}
+        {activeBadge(t, agent)}
         {siblings.length > 0 && (isAlias
-          ? <Badge tone="info" title={`它与同目录的其它 Agent 共用同一个技能目录，也共用同一套预设 / 安装方式；系统内这套设置存在「${primaryAgent?.name ?? agent.primaryKey}」名下`}>同目录</Badge>
-          : <Badge tone="accent" title="同目录的这些 Agent 共用同一套预设 / 安装方式，系统内这套设置存在本 Agent 名下（只是存放位置，不代表策略归它所有）">策略存于此</Badge>)}
-        {familyBadge(agent)}
-        {customBadge(agent)}
-        {sharedReadBadge(agent)}
+          ? <Badge tone="info" title={t('agents.alias.body', { name: primaryAgent?.name ?? agent.primaryKey })}>{t('agents.skillDirs')}</Badge>
+          : <Badge tone="accent" title={t('agents.install.strategyHint')}>{t('agents.install.strategy')}</Badge>)}
+        {familyBadge(t, agent)}
+        {customBadge(t, agent)}
+        {sharedReadBadge(t, agent)}
         <div className="detail-actions">
-          <Button size="sm" variant={agent.active ? 'ghost' : 'primary'} onClick={toggleActive} title="加入/移出活跃集合（加入即刻就位）">
-            {agent.active ? '移出活跃' : '设为活跃'}
+          <Button size="sm" variant={agent.active ? 'ghost' : 'primary'} onClick={toggleActive} title={t('agents.active.toggle.title')}>
+            {agent.active ? t('agents.deactivate') : t('agents.activate')}
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setDirOpen(true)} title="覆盖该 Agent 的全局/项目 skill 目录">
-            目录
+          <Button size="sm" variant="ghost" onClick={() => setDirOpen(true)} title={t('agents.dirs.title')}>
+            {t('agents.dirs')}
           </Button>
-          <Button size="sm" variant="primary" loading={syncing} onClick={() => void runSync()} title="按当前策略补齐缺失技能，并回收本工具自己多部署的软链（不动你的自有内容）">同步</Button>
+          <Button size="sm" variant="primary" loading={syncing} onClick={() => void runSync()} title={t('agents.sync.title')}>{t('agents.sync')}</Button>
           {agent.custom && (
-            <Button size="sm" variant="danger" onClick={() => void deleteAgent()} title="删除这个自定义 Agent（内置 Agent 不可删除）">
-              删除
+            <Button size="sm" variant="danger" onClick={() => void deleteAgent()} title={t('agents.delete.title')}>
+              {t('common.delete')}
             </Button>
           )}
         </div>
@@ -453,53 +452,52 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
       {!agent.active && (
         <div className="notice">
-          <span className="notice__title">未加入活跃集合，不会自动跟随变更</span>
+          <span className="notice__title">{t('agents.inactive.title')}</span>
           <span className="notice__body">
             {activeSiblings.length > 0
-              ? `这个技能目录还有 ${activeSiblings.join('、')} 在活跃集合里，技能库与预设的变动仍会自动同步进来；你在本页的操作也会立即写入。`
-              : '技能库、预设之后的变动不会自动同步到这个目录，需要你在这里点「同步」；你在本页的操作仍会立即写入。想让它持续跟随，点右上角「设为活跃」。'}
+              ? t('agents.inactive.bodySiblings', { names: joinList(activeSiblings) })
+              : t('agents.inactive.bodyAlone')}
           </span>
         </div>
       )}
 
       {isAlias && (
         <div className="notice">
-          <span className="notice__title">它与「{primaryAgent?.name ?? agent.primaryKey}」共用一个技能目录</span>
+          <span className="notice__title">{t('agents.alias.title', { name: primaryAgent?.name ?? agent.primaryKey })}</span>
           <span className="notice__body">
-            目录只有一份实体，所以这些 Agent <strong>共用同一套</strong>预设 / 安装方式：在这里改等同在那里改，两边看到的始终一致。
-            系统内这套设置存在「{primaryAgent?.name ?? agent.primaryKey}」名下——那只是存放位置，不代表策略归它所有。
+            {rich(t('agents.alias.body', { name: primaryAgent?.name ?? agent.primaryKey }))}
           </span>
         </div>
       )}
 
       <section className="detail-section">
         <h3 className="section-head section-head--quiet">
-          <span className="section-head__label">现有技能</span>
+          <span className="section-head__label">{t('agents.currentSkills')}</span>
           <span className="section-head__rule" aria-hidden="true" />
-          <span className="section-head__note">这个目录现在装了什么，只读</span>
+          <span className="section-head__note">{t('agents.currentSkills.note')}</span>
         </h3>
 
         <div className="panel panel--quiet">
           <div className="panel__hint" style={{ marginBottom: 'var(--sp-3)', display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
-            <span title="这个 Agent 会读取这些目录里的技能">
-              技能目录 <span className="mono">{[agent.globalDir, ...(sharedDir ? [sharedDir] : [])].map(shortDir).join('、')}</span>
+            <span title={t('agents.skillDirs.title')}>
+              {t('agents.skillDirs')} <span className="mono">{joinList([agent.globalDir, ...(sharedDir ? [sharedDir] : [])].map(shortDir))}</span>
             </span>
-            {agent.project && <span className="mono">项目 {agent.project}</span>}
-            {agent.alsoUsedBy?.length ? <span>该目录也被 {agent.alsoUsedBy.join('、')} 直接读取，无需单独安装</span> : null}
+            {agent.project && <span className="mono">{t('agents.project', { path: agent.project })}</span>}
+            {agent.alsoUsedBy?.length ? <span>{t('agents.alsoUsedBy', { names: joinList(agent.alsoUsedBy) })}</span> : null}
             {siblings.length > 0 && (
               <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--sp-1)' }}>
-                与
+                {t('agents.sharedWith.pre')}
                 {siblings.map((o) => (
                   <Tag key={o.key} onClick={() => onOpenAgent(o.key)}>{o.name}</Tag>
                 ))}
-                指向同一个技能目录：共用同一套策略，分发一次全部生效
+                {t('agents.sharedWith.post')}
               </span>
             )}
           </div>
-          <LoadingBoundary state={{ loading, error, data }} empty={{ title: '该 Agent 暂无技能', icon: '○' }}>
+          <LoadingBoundary state={{ loading, error, data }} empty={{ title: t('agents.noSkills'), icon: '○' }}>
             {(resp) => (
               <SkillList
-                title={`现有技能（${resp.skills.length}）`}
+                title={t('agents.currentSkillsCount', { n: resp.skills.length })}
                 items={withDir(resp.skills)}
                 onAction={handleAction}
                 hideToggle
@@ -510,45 +508,46 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
         {lastSync && lastSync.failed.length > 0 && (
           <div className="panel">
-            <EntityList title="同步失败项" items={failedItems} />
+            <EntityList title={t('agents.syncFailedItems')} items={failedItems} />
           </div>
         )}
       </section>
 
       <section className="detail-section">
         <h3 className="section-head">
-          <span className="section-head__label">技能的控制</span>
+          <span className="section-head__label">{t('agents.section.control')}</span>
           <span className="section-head__rule" aria-hidden="true" />
-          <span className="section-head__note">改动立即生效并同步</span>
+          <span className="section-head__note">{t('agents.section.control.note')}</span>
         </h3>
 
         <div className="panel">
           <div className="panel__head">
-            <span className="panel__title">关联预设</span>
-            <Badge tone={enabledViaPreset ? 'accent' : 'neutral'} title="由关联预设带入、当前已启用的技能数">{enabledViaPreset} 个技能</Badge>
-            <FoldButton expanded={!presetCollapsed} label="关联预设" onClick={togglePresetCollapsed} />
+            <span className="panel__title">{t('agents.preset.section')}</span>
+            <Badge tone={enabledViaPreset ? 'accent' : 'neutral'} title={t('agents.preset.badge.title')}>{t('common.skillCount', { n: enabledViaPreset })}</Badge>
+            <FoldButton expanded={!presetCollapsed} label={t('agents.preset.section')} onClick={togglePresetCollapsed} />
           </div>
           {!presetCollapsed && (
             <>
               <p className="panel__hint">
-                选一个预设作为分发基准：预设里开启的技能都会装到这个 Agent。不选则只用下方「直接添加技能」单独开启的技能。
+                {t('agents.preset.hint')}
               </p>
               <FieldSelect
-                label="关联预设"
+                label={t('agents.preset.section')}
                 value={agent.preset ?? ''}
-                hint="改动立即生效并同步"
+                hint={t('agents.preset.fieldHint')}
                 onChange={(e) => void busy(() => api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ preset: e.target.value || null }) }))}
               >
-                <option value="">不使用预设</option>
+                <option value="">{t('agents.preset.none')}</option>
                 {(presets ?? []).map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
               </FieldSelect>
               {agent.preset && (
                 <div style={{ marginTop: 'var(--sp-3)' }}>
                   <p className="panel__hint" style={{ marginBottom: 'var(--sp-2)' }}>
-                    该预设当前会带入 {presetSkillNames.length} 个技能{activePreset?.tags.length ? `（含 ${activePreset.tags.length} 个关联标签命中的技能）` : ''}。
+                    {t('agents.preset.brings', { n: presetSkillNames.length })}
+                    {activePreset?.tags.length ? t('agents.preset.bringsTags', { t: activePreset.tags.length }) : ''}
                   </p>
                   {presetSkillNames.length === 0 ? (
-                    <EmptyState title="该预设还没有开启任何技能" hint="去「预设」页给它添加技能或关联标签。" />
+                    <EmptyState title={t('agents.preset.empty.title')} hint={t('agents.preset.empty.hint')} />
                   ) : (
                     <div className="skill-pills">
                       {presetSkillNames.map((n) => (
@@ -564,30 +563,29 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
         <div className="panel">
           <div className="panel__head">
-            <span className="panel__title">直接添加技能</span>
-            <Badge tone={enabledDirect ? 'accent' : 'neutral'} title="直接开启（不经预设）的技能数">{enabledDirect} 个技能</Badge>
+            <span className="panel__title">{t('agents.direct.section')}</span>
+            <Badge tone={enabledDirect ? 'accent' : 'neutral'} title={t('agents.direct.badge.title')}>{t('common.skillCount', { n: enabledDirect })}</Badge>
           </div>
           <p className="panel__hint">
-            从技能库整体勾选：打开即单独装到这个 Agent（不受上方预设影响），关闭即移除。
-            打「预设引入」标记的技能来自关联预设，在这里关掉只对它单独生效。
+            {t('agents.direct.hint')}
           </p>
           <FilterBar
-            search={{ value: q, onChange: setQ, placeholder: '搜索技能名称 / 描述' }}
+            search={{ value: q, onChange: setQ, placeholder: t('filter.searchSkills') }}
             controls={
               <>
                 <MultiSelect
-                  label="来源"
+                  label={t('filter.source')}
                   options={allSources.map((s) => ({ label: s, value: s, count: sourceCounts[s] }))}
                   selected={activeSrcs}
                   onChange={setSrcs}
-                  emptyHint="技能库还没有来源。"
+                  emptyHint={t('agents.source.empty')}
                 />
                 <MultiSelect
-                  label="标签"
-                  options={allTags.map((t) => ({ label: t, value: t, count: tagCounts[t] }))}
+                  label={t('filter.tags')}
+                  options={allTags.map((tag) => ({ label: tag, value: tag, count: tagCounts[tag] }))}
                   selected={facets}
                   onChange={setFacets}
-                  emptyHint="技能都还没有标签。"
+                  emptyHint={t('agents.tags.empty')}
                 />
               </>
             }
@@ -595,64 +593,66 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
             onReset={() => { setQ(''); setSrcs(null); setFacets([]); }}
             actions={
               <BadgeLegend
-                title="技能上的标签是什么意思？"
-                items={SKILL_BADGE_LEGEND}
-                intro={<>开关控制该技能是否装到这个 Agent；徽标说明它的来源与装入目录的形态。</>}
+                title={t('agents.legend.skill.title')}
+                items={skillBadgeLegend(t)}
+                intro={t('agents.legend.skill.intro')}
               />
             }
             view={{ value: viewMode, onChange: setViewMode }}
           />
           <div style={{ marginTop: 'var(--sp-4)' }}>
             <SkillList
-              title={`${directFiltered ? '筛选结果' : '技能库'} · ${shownDirect.length}${directFiltered ? ` / ${directCards.length}` : ''}`}
+              title={`${directFiltered ? t('list.filtered') : t('nav.library')} · ${shownDirect.length}${directFiltered ? ` / ${directCards.length}` : ''}`}
               items={shownDirect}
               onToggle={(item) => toggleDirect(item.name, !(item.toggleOn ?? item.state === 'on'))}
               hideToggle
               collapsible
               storageKey="lsh.collapsed.agent.direct"
-              empty={directFiltered ? <EmptyState title="没有匹配的技能" /> : <EmptyState title="技能库为空" hint="先在技能库登记并导入技能。" />}
+              empty={directFiltered
+                ? <EmptyState title={t('agents.list.empty')} />
+                : <EmptyState title={t('agents.libraryEmpty.title')} hint={t('agents.libraryEmpty.hint')} />}
             />
           </div>
         </div>
 
         <div className="panel">
           <div className="panel__head">
-            <span className="panel__title">安装与存放</span>
-            <FoldButton expanded={!installCollapsed} label="安装与存放" onClick={toggleInstallCollapsed} />
+            <span className="panel__title">{t('agents.install.section')}</span>
+            <FoldButton expanded={!installCollapsed} label={t('agents.install.section')} onClick={toggleInstallCollapsed} />
           </div>
           {!installCollapsed && (
             <>
               <p className="panel__hint">
-                「默认安装方式」决定新技能进来时是软链引用还是复制副本，可对单个技能单独覆盖。
-                {siblings.length > 0 ? ' 同目录的 Agent 共用同一套设置，「策略存放于」只决定这套设置存在谁名下。' : ''}
+                {t('agents.install.hint')}
+                {siblings.length > 0 ? t('agents.install.hintSiblings') : ''}
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--sp-3)' }}>
                 <FieldSelect
-                  label="默认安装方式"
+                  label={t('agents.install.default')}
                   value={agent.sync}
-                  hint="可在下方按技能单独覆盖"
+                  hint={t('agents.install.defaultHint')}
                   onChange={(e) => void busy(() => api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ sync: e.target.value }) }))}
                 >
-                  <option value="symlink">软链（不复制文件，即时生效）</option>
-                  <option value="copy">复制（独立副本，需重新同步）</option>
+                  <option value="symlink">{t('agents.install.symlink')}</option>
+                  <option value="copy">{t('agents.install.copy')}</option>
                 </FieldSelect>
                 {siblings.length > 0 && (
                   <FieldSelect
-                    label="策略存放于"
+                    label={t('agents.install.strategy')}
                     value={designatedKey}
-                    hint="这些 Agent 共用同一套策略；系统内需要存到其中一个 Agent 名下，换到谁名下都不会改变策略内容"
+                    hint={t('agents.install.strategyHint')}
                     onChange={(e) => setPrimaryAgent(e.target.value)}
                   >
-                    <option value="auto">自动（活跃优先，其次名称序）</option>
+                    <option value="auto">{t('agents.install.auto')}</option>
                     {members.map((m) => <option key={m.key} value={m.key}>{m.name}</option>)}
                   </FieldSelect>
                 )}
               </div>
               <div style={{ marginTop: 'var(--sp-4)' }}>
                 <EntityList
-                  title="按技能覆盖安装方式"
+                  title={t('agents.install.perSkill')}
                   items={syncModeItems}
-                  empty={<EmptyState title="当前没有已启用的技能" />}
+                  empty={<EmptyState title={t('agents.install.noneEnabled')} />}
                   toggle={false}
                 />
               </div>
@@ -680,6 +680,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
 /** Agent 目录覆盖（AG-04 / AG-05） */
 function DirModal({ open, agent, onClose, onDone }: { open: boolean; agent: AgentView; onClose: () => void; onDone: () => void }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [globalDir, setGlobalDir] = useState(agent.globalDir);
   const [projectDir, setProjectDir] = useState(agent.project ?? '');
@@ -692,7 +693,7 @@ function DirModal({ open, agent, onClose, onDone }: { open: boolean; agent: Agen
         method: 'PUT',
         body: JSON.stringify({ globalDir: globalDir.trim() || null, projectDir: projectDir.trim() || null }),
       });
-      toast.push('目录已覆盖', 'good');
+      toast.push(t('agents.dir.overridden'), 'good');
       onDone();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
@@ -702,19 +703,19 @@ function DirModal({ open, agent, onClose, onDone }: { open: boolean; agent: Agen
   return (
     <Modal
       open={open}
-      title={`覆盖目录 · ${agent.name}`}
+      title={t('agents.dir.title', { name: agent.name })}
       onClose={onClose}
-      footer={<><Button variant="ghost" onClick={onClose}>取消</Button><Button variant="primary" loading={busy} onClick={save}>保存</Button></>}
+      footer={<><Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button><Button variant="primary" loading={busy} onClick={save}>{t('common.save')}</Button></>}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
-        <PathField label="全局技能目录" value={globalDir} onChange={setGlobalDir} />
+        <PathField label={t('agents.dir.global')} value={globalDir} onChange={setGlobalDir} />
         <FieldInput
-          label="项目级技能目录（相对项目根）"
-          hint="相对路径，不支持系统选择器，请手动输入"
+          label={t('agents.dir.project')}
+          hint={t('agents.dir.projectHint')}
           value={projectDir}
           onChange={(e) => setProjectDir(e.target.value)}
         />
-        <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>留空恢复内置约定；覆盖后视为已安装可用。</span>
+        <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{t('agents.dir.note')}</span>
       </div>
     </Modal>
   );

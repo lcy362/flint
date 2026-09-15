@@ -8,21 +8,25 @@ import LoadingBoundary from '../components/ui/LoadingBoundary';
 import Modal from '../components/ui/Modal';
 import { useAsync } from '../state/useAsync';
 import { useToast } from '../components/ui/Toast';
+import { joinList, rich, useI18n, type MsgKey, type TFunc } from '../i18n';
 
 /**
- * 诊断 summary / 分组 键的本地化映射。
+ * 诊断 summary / 分组 键的展示键映射。
  * 服务端维度 key 用单数（见 core/diagnose.ts 的 DIMS），这里补齐；
  * 复数形态一并保留，兼容历史结果的键名。
  */
-const KEY_LABEL: Record<string, string> = {
-  sync: '同步',
-  dup: '重复技能',
-  durability: '失效软链',
-  config: '配置',
-  repo: '仓库',
-  project: '项目',
-  repos: '仓库', skills: '技能', presets: '预设',
-  projects: '项目', sources: '来源',
+const DIM_MSG_KEY: Record<string, MsgKey> = {
+  sync: 'health.dim.sync',
+  dup: 'health.dim.dup',
+  durability: 'health.dim.durability',
+  config: 'health.dim.config',
+  repo: 'health.dim.repo',
+  project: 'health.dim.project',
+  repos: 'health.dim.repos',
+  skills: 'health.dim.skills',
+  presets: 'health.dim.presets',
+  projects: 'health.dim.projects',
+  sources: 'health.dim.sources',
 };
 
 /**
@@ -35,8 +39,8 @@ function fixable(it: DiagItem): boolean {
 }
 
 /** 名称清单过长时截断，避免确认弹窗被一长串名字撑爆 */
-function nameList(names: string[], max = 8): string {
-  return names.length <= max ? names.join('、') : `${names.slice(0, max).join('、')} 等 ${names.length} 个`;
+function nameList(t: TFunc, names: string[], max = 8): string {
+  return names.length <= max ? joinList(names) : `${joinList(names.slice(0, max))}${t('health.andMore', { n: names.length })}`;
 }
 
 /** 一次待确认的修复：由诊断项推导出「将要执行什么」，供确认弹窗逐条列出 */
@@ -54,7 +58,7 @@ interface FixPlan {
  * 把诊断项翻译成「将要执行的具体操作」。
  * 修复一律先经此生成清单、由用户确认后再执行，不做点击即改。
  */
-function planFix(it: DiagItem): FixPlan {
+function planFix(t: TFunc, it: DiagItem): FixPlan {
   const key = it.key;
   const subject = it.message;
 
@@ -62,23 +66,20 @@ function planFix(it: DiagItem): FixPlan {
     const d = it.detail as SyncDiff | undefined;
     const ops: ReactNode[] = [];
     if (d?.missing.length) {
-      ops.push(<>补齐缺失的 <strong>{d.missing.length}</strong> 个技能：<span className="mono">{nameList(d.missing)}</span></>);
+      ops.push(rich(t('health.plan.sync.missing', { n: d.missing.length, names: nameList(t, d.missing) })));
     }
     if (d?.brokenLink.length) {
-      ops.push(<>重建失效软链 <strong>{d.brokenLink.length}</strong> 个：<span className="mono">{nameList(d.brokenLink)}</span></>);
+      ops.push(rich(t('health.plan.sync.broken', { n: d.brokenLink.length, names: nameList(t, d.brokenLink) })));
     }
     if (d?.extra.length) {
-      ops.push(
-        <>清理多余项 <strong>{d.extra.length}</strong> 个：<span className="mono">{nameList(d.extra)}</span>
-          —— 其中只有<strong>本工具自己部署的软链</strong>会被回收，你的真实目录与外部软链不动</>
-      );
+      ops.push(rich(t('health.plan.sync.extra', { n: d.extra.length, names: nameList(t, d.extra) })));
     }
-    if (ops.length === 0) ops.push(<>按当前期望集重新对账一次，补齐缺失并修复失效软链</>);
-    ops.push(<>只作用于这一个技能目录，不影响其它 Agent</>);
+    if (ops.length === 0) ops.push(t('health.plan.sync.reconcile'));
+    ops.push(t('health.plan.sync.scope'));
     return {
       key,
       subject,
-      intro: <>对上面这个技能目录按当前期望集重新对账：</>,
+      intro: t('health.plan.sync.intro'),
       ops,
     };
   }
@@ -87,11 +88,11 @@ function planFix(it: DiagItem): FixPlan {
     return {
       key,
       subject,
-      intro: <>对所有「活跃」Agent 重跑一次同步（作用范围比单条更大）：</>,
+      intro: rich(t('health.plan.broken.intro')),
       ops: [
-        <>重建全部失效软链</>,
-        <>顺带补齐缺失、清理多余项（同样只回收本工具部署的软链）</>,
-        <>未加入活跃集合的 Agent 不受影响，你的真实目录与外部软链不动</>,
+        t('health.plan.broken.op1'),
+        t('health.plan.broken.op2'),
+        t('health.plan.broken.op3'),
       ],
     };
   }
@@ -101,10 +102,10 @@ function planFix(it: DiagItem): FixPlan {
     return {
       key,
       subject,
-      intro: <>为该项目建设技能目录结构：</>,
+      intro: t('health.plan.project.intro'),
       ops: [
-        <>创建目录 <span className="mono">{dir}/.agents/skills</span></>,
-        <>已存在则保持不变；不写入、不删除任何技能</>,
+        rich(t('health.plan.project.op1', { dir })),
+        t('health.plan.project.op2'),
       ],
     };
   }
@@ -114,19 +115,20 @@ function planFix(it: DiagItem): FixPlan {
     return {
       key,
       subject,
-      intro: <>为该仓库补上技能根目录：</>,
+      intro: t('health.plan.repo.intro'),
       ops: [
-        <>创建仓库 <span className="mono">{id}</span> 下的 <span className="mono">skills</span> 目录</>,
-        <>已存在则保持不变；不写入、不删除任何技能</>,
+        rich(t('health.plan.repo.op1', { id, skills: 'skills' })),
+        t('health.plan.repo.op2'),
       ],
     };
   }
 
-  return { key, subject, intro: <>执行该项修复：</>, ops: [<>该项没有可列出的细项</>] };
+  return { key, subject, intro: t('health.plan.generic.intro'), ops: [t('health.plan.generic.ops')] };
 }
 
 export default function Health() {
   const { data, loading, error, reload } = useAsync<DiagnoseResult>(() => api('/diagnose'));
+  const { t } = useI18n();
   // 点「修复」只打开确认弹窗；确认后才真正调用 /fix
   const [plan, setPlan] = useState<FixPlan | null>(null);
   const [fixing, setFixing] = useState<string | null>(null);
@@ -138,7 +140,10 @@ export default function Health() {
     setFixing(key);
     try {
       const res = await api<{ key: string; applied: boolean; message: string }>('/fix', { method: 'POST', body: JSON.stringify({ key }) });
-      toast.push(res.applied ? `已修复：${res.message}` : `无法自动修复：${res.message}`, res.applied ? 'good' : 'bad');
+      toast.push(
+        res.applied ? t('health.fix.applied', { msg: res.message }) : t('health.fix.failed', { msg: res.message }),
+        res.applied ? 'good' : 'bad',
+      );
       setPlan(null);
       reload();
     } catch (e) {
@@ -153,23 +158,23 @@ export default function Health() {
     if (s === 'warn') return 'warn' as const;
     return 'bad' as const;
   };
-  const label = (s: DiagItem['status']) => (s === 'ok' ? 'OK' : s === 'warn' ? '警告' : '错误');
+  const label = (s: DiagItem['status']) => (s === 'ok' ? 'OK' : s === 'warn' ? t('health.status.warn') : t('health.status.error'));
 
   return (
     <>
       <PageHeader
-        title="诊断"
+        title={t('nav.health')}
         sub={data ? data.config : undefined}
-        actions={<Button variant="ghost" onClick={reload}>重新诊断</Button>}
+        actions={<Button variant="ghost" onClick={reload}>{t('health.rediagnose')}</Button>}
       />
-      <LoadingBoundary state={{ loading, error, data }} empty={{ title: '没有诊断结果', hint: '运行诊断以检查技能库健康状态。', icon: '◎' }}>
+      <LoadingBoundary state={{ loading, error, data }} empty={{ title: t('health.empty.title'), hint: t('health.empty.hint'), icon: '◎' }}>
         {(diag) => (
           <>
             <div className="panel">
               <div style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
                 {Object.entries(diag.summary).map(([k, s]) => (
                   <div key={k} style={{ flex: 1, minWidth: 120, display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
-                    <span className="field-label">{KEY_LABEL[k] ?? k}</span>
+                    <span className="field-label">{t(DIM_MSG_KEY[k] ?? k as MsgKey)}</span>
                     <span style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
                       <Badge tone="good">{s.ok}</Badge>
                       <Badge tone="warn">{s.warn}</Badge>
@@ -181,15 +186,15 @@ export default function Health() {
             </div>
 
             {Object.keys(diag.groups).length === 0 ? (
-              <EmptyState title="一切正常" hint="没有检测到任何问题。" icon="✓" />
+              <EmptyState title={t('health.allGood.title')} hint={t('health.allGood.hint')} icon="✓" />
             ) : (
               Object.entries(diag.groups).map(([group, items]) => (
                 <div key={group} className="panel" style={{ padding: 0 }}>
                   <div style={{ padding: 'var(--sp-4) var(--sp-6)', borderBottom: '1px solid var(--c-line)' }}>
-                    <span className="page-head__title" style={{ fontSize: 'var(--fs-16)' }}>{KEY_LABEL[group] ?? group}</span>
+                    <span className="page-head__title" style={{ fontSize: 'var(--fs-16)' }}>{t(DIM_MSG_KEY[group] ?? group as MsgKey)}</span>
                     <span className="mono" style={{ color: 'var(--c-ink-3)', marginLeft: 'var(--sp-2)' }}>{items.length}</span>
                   </div>
-                  {items.length === 0 && <div style={{ padding: 'var(--sp-4) var(--sp-6)' }}><EmptyState title="无异常" /></div>}
+                  {items.length === 0 && <div style={{ padding: 'var(--sp-4) var(--sp-6)' }}><EmptyState title={t('health.noneInGroup')} /></div>}
                   <div className="diag-group" style={{ padding: 'var(--sp-2) var(--sp-6)' }}>
                     {items.map((it) => (
                       <div key={it.key} className="diag-row">
@@ -207,9 +212,9 @@ export default function Health() {
                             size="sm"
                             variant="primary"
                             loading={fixing === it.key}
-                            onClick={() => setPlan(planFix(it))}
+                            onClick={() => setPlan(planFix(t, it))}
                           >
-                            修复
+                            {t('health.fix')}
                           </Button>
                         )}
                       </div>
@@ -224,24 +229,24 @@ export default function Health() {
 
       <Modal
         open={!!plan}
-        title="确认执行修复"
+        title={t('health.fixModal.title')}
         onClose={() => setPlan(null)}
         width={540}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setPlan(null)}>取消</Button>
-            <Button variant="primary" loading={!!plan && fixing === plan.key} onClick={() => void runFix()}>确认执行</Button>
+            <Button variant="ghost" onClick={() => setPlan(null)}>{t('common.cancel')}</Button>
+            <Button variant="primary" loading={!!plan && fixing === plan.key} onClick={() => void runFix()}>{t('common.confirmRun')}</Button>
           </>
         }
       >
         {plan && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
-              <span className="field-label">诊断项</span>
+              <span className="field-label">{t('health.fixModal.subject')}</span>
               <span style={{ fontSize: 'var(--fs-13)', color: 'var(--c-ink-2)', wordBreak: 'break-all' }}>{plan.subject}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
-              <span className="field-label">将要执行</span>
+              <span className="field-label">{t('health.fixModal.ops')}</span>
               <span style={{ fontSize: 'var(--fs-13)', color: 'var(--c-ink-2)' }}>{plan.intro}</span>
               <ul style={{ margin: 0, paddingLeft: '1.2em', display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
                 {plan.ops.map((op, i) => (

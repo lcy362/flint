@@ -14,6 +14,7 @@ import { FieldSelect } from '../ui/Field';
 import SwitchLabel from '../ui/SwitchLabel';
 import { useToast } from '../ui/Toast';
 import { useAsync } from '../../state/useAsync';
+import { joinList, rich, useI18n } from '../../i18n';
 
 /**
  * 归集来源适配器：把「某目录里的技能 → 仓库」这条链路的接口差异收敛到一处，
@@ -107,6 +108,7 @@ export default function CollectSkillModal({
   onDone: () => void;
 }) {
   const toast = useToast();
+  const { t } = useI18n();
   const { data: state } = useAsync<StateView>(() => api('/state'));
   const repos = state?.repos;
   const [repo, setRepo] = useState('');
@@ -147,16 +149,16 @@ export default function CollectSkillModal({
     setBusy(true);
     try {
       const res = await source.collect(repo, name, previewExists && overwrite ? [name] : undefined);
-      if (res.collected.length) toast.push(`已归集「${name}」到仓库`, 'good');
-      else toast.push(`未复制到仓库：${res.skipped.join('；') || '无变化'}`, 'bad');
+      if (res.collected.length) toast.push(t('collectModal.collected', { name }), 'good');
+      else toast.push(t('collectModal.notCollected', { reason: joinList(res.skipped) || t('collectModal.noChange') }), 'bad');
 
       if (takeoverOn) {
-        const t = await source.takeover(repo, name);
-        if (!t.ok) toast.push(`接管未完成：${t.reason ?? '未知原因'}`, 'bad');
+        const tr = await source.takeover(repo, name);
+        if (!tr.ok) toast.push(t('collectModal.takeoverFailed', { reason: tr.reason ?? t('collectModal.takeoverUnknown') }), 'bad');
         else toast.push(
           symlinkMode
-            ? '已接管：该目录已改为指向仓库副本的软链'
-            : '已接管：项目里已换成仓库那一版的真实副本，并纳入项目管理',
+            ? t('collectModal.takeoverDone.symlink')
+            : t('collectModal.takeoverDone.copy'),
           'good',
         );
       }
@@ -169,93 +171,78 @@ export default function CollectSkillModal({
   // 接管形态决定文案：Agent 目录建软链（省一份副本），项目 .agents/skills 落真实副本（要提交、要自包含）
   const symlinkMode = source.takeoverKind === 'symlink';
   const takeoverLabel = symlinkMode
-    ? '同时接管：把该目录里的技能换成指向仓库副本的软链'
-    : '同时接管：用仓库那一版替换项目里的这条，并纳入项目管理';
+    ? t('collectModal.takeover.symlink')
+    : t('collectModal.takeover.copy');
   const takeoverNotes: ReactNode[] = [];
   if (takeoverOn) {
-    takeoverNotes.push(<span key="order">接管在归集完成后执行：</span>);
+    takeoverNotes.push(<span key="order">{t('collectModal.note.order')}</span>);
     if (item?.reason === 'external') {
       takeoverNotes.push(
-        <span key="ext">
-          · 该目录这条软链会被换成{symlinkMode ? <>指向仓库副本的<strong>软链</strong></> : <>仓库那一版的<strong>真实副本</strong></>}；
-          它指向的外部目录不受影响，原链接不再保留。
-        </span>
+        <span key="ext">{rich(symlinkMode ? t('collectModal.note.externalSymlinkToLink') : t('collectModal.note.externalSymlinkToCopy'))}</span>
       );
     } else if (previewExists && !overwrite) {
-      takeoverNotes.push(
-        <span key="keep">
-          · 该目录里的这条技能会被替换为仓库那一版：你选的是「保持仓库现状」，这版内容不会进仓库，接管后读到的是仓库那一版。
-        </span>
-      );
+      takeoverNotes.push(<span key="keep">{rich(t('collectModal.note.keepRepo'))}</span>);
     } else {
-      takeoverNotes.push(
-        <span key="replace">· 该目录里的这条技能会被<strong>替换为仓库那一版</strong>（内容已在仓库副本里，不会丢失）。</span>
-      );
+      takeoverNotes.push(<span key="replace">{rich(t('collectModal.note.replaceByRepo'))}</span>);
     }
     takeoverNotes.push(
-      symlinkMode ? (
-        <span key="form">· 在原位置建立<strong>指向仓库副本的软链</strong>：以后改仓库里这份技能，使用方立刻生效，不再有第二份副本。</span>
-      ) : (
-        <span key="form">· 项目里保留<strong>真实副本</strong>、不建软链：项目依旧自包含、可直接提交 git，仓库更新会同步进来。</span>
-      )
+      <span key="form">{rich(symlinkMode ? t('collectModal.note.formSymlink') : t('collectModal.note.formCopy'))}</span>
     );
-    takeoverNotes.push(<span key="reg">· 该技能<strong>登记为受管项</strong>，之后由本工具维护它。</span>);
+    takeoverNotes.push(<span key="reg">{rich(t('collectModal.note.register'))}</span>);
   }
 
   return (
     <Modal
       open={!!item}
-      title="归集到仓库"
+      title={t('collectModal.title')}
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>取消</Button>
-          <Button variant="primary" loading={busy} disabled={!repo || !canCollect} onClick={() => void run()}>归集</Button>
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={busy} disabled={!repo || !canCollect} onClick={() => void run()}>{t('collectModal.button')}</Button>
         </>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
         <p className="panel__hint" style={{ marginBottom: 0 }}>
-          把 <span className="mono">{item?.name}</span> 复制进选定仓库，之后各 Agent / 项目都能共享；
-          <strong>该目录里的原技能保持不动</strong>。
+          {rich(t('collectModal.intro', { name: item?.name ?? '' }))}
         </p>
         {(repos ?? []).length === 0 ? (
-          <EmptyState title="还没有登记仓库" hint="先到「技能库」登记一个自有仓库，再来归集。" />
+          <EmptyState title={t('collectModal.noRepo.title')} hint={t('collectModal.noRepo.hint')} />
         ) : (
-          <FieldSelect label="目标仓库" value={repo} onChange={(e) => setRepo(e.target.value)}>
+          <FieldSelect label={t('collectModal.targetRepo')} value={repo} onChange={(e) => setRepo(e.target.value)}>
             {(repos ?? []).map((r) => <option key={r.id} value={r.id}>{r.name || r.id}</option>)}
           </FieldSelect>
         )}
 
         {item?.reason === 'external' && (
           <p className="panel__hint" style={{ marginBottom: 0 }}>
-            注意：该目录里当前是一个指向别处的软链。归集会把<span className="mono">{item.linkTarget}</span>里的内容复制进仓库
-            （该外部目录本身不会被改动或删除）。
+            {rich(t('collectModal.externalNote', { target: item.linkTarget ?? '' }))}
           </p>
         )}
 
         {previewState === 'loading' && repo && (
-          <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>正在检查该仓库是否已有同名技能…</span>
+          <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{t('collectModal.checking')}</span>
         )}
         {previewState === 'none' && (
           <p className="panel__hint" style={{ marginBottom: 0 }}>
-            这一条不在可归集清单里（可能是失效软链，或不是带 SKILL.md 的技能目录），暂时无法归集。
+            {t('collectModal.notCollectable')}
           </p>
         )}
         {previewState === 'ready' && previewInRepo && (
           <p className="panel__hint" style={{ marginBottom: 0 }}>
-            它已经是指向本仓库的软链，内容就是仓库本体，无需归集。
+            {t('collectModal.alreadyLinked')}
           </p>
         )}
         {previewState === 'ready' && !previewInRepo && previewExists && (
           <FieldSelect
-            label="仓库已有同名技能"
-            hint="与技能库归集一致：保持现状则不动仓库副本，覆盖会先删除仓库里的同名目录再写入来源版本"
+            label={t('collectModal.existsLabel')}
+            hint={t('collectModal.existsHint')}
             value={overwrite ? 'overwrite' : 'keep'}
             onChange={(e) => setOverwrite(e.target.value === 'overwrite')}
           >
-            <option value="keep">保持仓库现状（不覆盖）</option>
-            <option value="overwrite">用来源版本覆盖仓库副本</option>
+            <option value="keep">{t('collectModal.keep')}</option>
+            <option value="overwrite">{t('collectModal.overwrite')}</option>
           </FieldSelect>
         )}
 

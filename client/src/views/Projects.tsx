@@ -17,6 +17,7 @@ import { PathField } from '../components/ui/PathField';
 import { useToast } from '../components/ui/Toast';
 import { useAsync } from '../state/useAsync';
 import { navigate, useRoute } from '../state/router';
+import { joinList, useI18n } from '../i18n';
 
 interface ProjectItem {
   id: number;
@@ -28,6 +29,7 @@ interface ProjectItem {
 
 export default function Projects() {
   const { data, loading, error, reload } = useAsync<ProjectItem[]>(() => api('/projects'));
+  const { t } = useI18n();
   const route = useRoute();
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -40,7 +42,7 @@ export default function Projects() {
   const items: EntityItem[] = (data ?? []).map((p) => ({
     id: String(p.id),
     title: p.path,
-    sub: p.tags.length ? p.tags.map((t) => `#${t}`).join(' ') : '无标签',
+    sub: p.tags.length ? p.tags.map((tag) => `#${tag}`).join(' ') : t('common.noTags'),
     onClick: () => openProject(p.id),
     actions: <span style={{ color: 'var(--c-ink-3)' }}>→</span>,
   }));
@@ -48,9 +50,9 @@ export default function Projects() {
   return (
     <>
       <PageHeader
-        title="项目"
-        sub={data ? `共 ${data.length} 个项目` : undefined}
-        actions={<Button onClick={() => setCreateOpen(true)}>新建项目</Button>}
+        title={t('nav.projects')}
+        sub={data ? t('projects.subtitle', { n: data.length }) : undefined}
+        actions={<Button onClick={() => setCreateOpen(true)}>{t('projects.new')}</Button>}
       />
       {selectedId ? (
         selected ? (
@@ -58,7 +60,7 @@ export default function Projects() {
         ) : (
           <LoadingBoundary
             state={{ loading, error, data }}
-            empty={{ title: '未找到该项目', hint: `没有 id 为「${selectedId}」的项目。`, icon: '❐' }}
+            empty={{ title: t('projects.notFound.title'), hint: t('projects.notFound.hint', { id: selectedId }), icon: '❐' }}
           >
             {() => null}
           </LoadingBoundary>
@@ -66,9 +68,9 @@ export default function Projects() {
       ) : (
         <LoadingBoundary
           state={{ loading, error, data }}
-          empty={{ title: '暂无项目', hint: '没有关联技能的项目，点击「新建项目」创建。', icon: '❐' }}
+          empty={{ title: t('projects.empty.title'), hint: t('projects.empty.hint'), icon: '❐' }}
         >
-          {() => <EntityList items={items} title={`全部项目（${items.length}）`} />}
+          {() => <EntityList items={items} title={t('list.allProjects')} />}
         </LoadingBoundary>
       )}
 
@@ -78,6 +80,7 @@ export default function Projects() {
 }
 
 function CreateProjectModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [path, setPath] = useState('');
   const [tags, setTags] = useState('');
@@ -85,11 +88,11 @@ function CreateProjectModal({ open, onClose, onDone }: { open: boolean; onClose:
   return (
     <Modal
       open={open}
-      title="新建项目"
+      title={t('projects.new')}
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>取消</Button>
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
           <Button
             variant="primary"
             loading={saving}
@@ -101,7 +104,7 @@ function CreateProjectModal({ open, onClose, onDone }: { open: boolean; onClose:
                   method: 'POST',
                   body: JSON.stringify({ path, tags: tags.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean) }),
                 });
-                toast.push('已创建', 'good');
+                toast.push(t('projects.created'), 'good');
                 setPath(''); setTags('');
                 onDone();
               } catch (e) {
@@ -109,16 +112,16 @@ function CreateProjectModal({ open, onClose, onDone }: { open: boolean; onClose:
               } finally { setSaving(false); }
             }}
           >
-            创建
+            {t('common.create')}
           </Button>
         </>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
-        <PathField label="项目路径" placeholder="/path/to/project" value={path} onChange={setPath} />
+        <PathField label={t('projects.path')} placeholder="/path/to/project" value={path} onChange={setPath} />
         <FieldInput
-          label="标签（逗号分隔）"
-          hint="打上标签后，资产库中同标签的 skill 会自动进入本项目"
+          label={t('projects.tags')}
+          hint={t('projects.tagsHint')}
           placeholder="react, frontend"
           value={tags}
           onChange={(e) => setTags(e.target.value)}
@@ -129,6 +132,7 @@ function CreateProjectModal({ open, onClose, onDone }: { open: boolean; onClose:
 }
 
 function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; onBack: () => void; onChanged: () => void }) {
+  const { t } = useI18n();
   const toast = useToast();
   const { data, loading, error, reload } = useAsync<ProjectSkillsResp>(
     () => api(`/projects/${project.id}/skills`),
@@ -151,7 +155,7 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
   const busy = async (fn: () => Promise<unknown>) => {
     try {
       await fn();
-      toast.push('已更新', 'good');
+      toast.push(t('common.updated'), 'good');
       reload();
       reloadAgents();
       onChanged();
@@ -197,7 +201,7 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
         body: JSON.stringify({ repoId: repoId || undefined }),
       });
       setPushResult(res);
-      toast.push(res.pushed.length ? `已回写 ${res.pushed.length} 个技能` : '无可回写内容', res.pushed.length ? 'good' : 'bad');
+      toast.push(res.pushed.length ? t('projects.push.done', { n: res.pushed.length }) : t('projects.push.nothing'), res.pushed.length ? 'good' : 'bad');
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
     } finally { setPushing(false); }
@@ -214,10 +218,10 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
     id: a.key,
     title: a.name,
     sub: <span className="mono">{a.key}</span>,
-    status: deployed.includes(a.key) ? <Badge tone="good">已部署</Badge> : <Badge tone="neutral">未部署</Badge>,
+    status: deployed.includes(a.key) ? <Badge tone="good">{t('projects.deployed')}</Badge> : <Badge tone="neutral">{t('projects.notDeployed')}</Badge>,
     toggle: (
       <Switch
-        aria-label={`部署 ${a.name}`}
+        aria-label={t('projects.deployAria', { name: a.name })}
         checked={deployed.includes(a.key)}
         onChange={(v) => toggleDeploy(a.key, v)}
       />
@@ -227,50 +231,49 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
   return (
     <>
       <div className="detail-head">
-        <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>← 返回</Button>
+        <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
         <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{project.path}</h2>
-        {project.tags.map((t) => <Badge key={t} tone="accent">#{t}</Badge>)}
+        {project.tags.map((tag) => <Badge key={tag} tone="accent">#{tag}</Badge>)}
         <div className="detail-actions">
-          <Button size="sm" variant="ghost" onClick={() => setTagOpen(true)} title="编辑项目标签，同标签 skill 自动进入本项目">标签</Button>
-          <Button size="sm" variant="ghost" loading={pushing} onClick={() => { setPushOpen(true); void push(); }} title="把项目内改动的 skill 回写到仓库">回写仓库</Button>
-          <Button size="sm" onClick={() => setAddOpen(true)}>添加</Button>
-          <Button size="sm" variant="primary" onClick={() => void busy(() => api(`/projects/${project.id}/sync`, { method: 'POST' }))} title="把期望集落地到 .agents 并软链到各 Agent 项目目录">
-            同步
+          <Button size="sm" variant="ghost" onClick={() => setTagOpen(true)} title={t('projects.tags.button.title')}>{t('projects.tags.button')}</Button>
+          <Button size="sm" variant="ghost" loading={pushing} onClick={() => { setPushOpen(true); void push(); }} title={t('projects.push.title')}>{t('projects.push')}</Button>
+          <Button size="sm" onClick={() => setAddOpen(true)}>{t('common.add')}</Button>
+          <Button size="sm" variant="primary" onClick={() => void busy(() => api(`/projects/${project.id}/sync`, { method: 'POST' }))} title={t('projects.sync.title')}>
+            {t('projects.sync')}
           </Button>
         </div>
       </div>
 
-      <LoadingBoundary state={{ loading, error, data }} empty={{ title: '该项目暂无技能', icon: '○' }}>
+      <LoadingBoundary state={{ loading, error, data }} empty={{ title: t('projects.noSkills'), icon: '○' }}>
         {(resp) => (
           <div className="panel">
-            <SkillList title={`项目技能（${resp.skills.length}）`} items={resp.skills} onAction={handleAction} />
+            <SkillList title={t('projects.skillsCount', { n: resp.skills.length })} items={resp.skills} onAction={handleAction} />
           </div>
         )}
       </LoadingBoundary>
 
       <div className="panel">
         <div className="panel__head">
-          <span className="panel__title">部署到 Agent</span>
-          <Badge tone={deployed.length ? 'accent' : 'neutral'} title="已把本项目技能目录投放过去的 Agent 数">
-            {deployed.length} 个已部署
+          <span className="panel__title">{t('projects.deploy.section')}</span>
+          <Badge tone={deployed.length ? 'accent' : 'neutral'} title={t('projects.deploy.badge.title')}>
+            {t('projects.deploy.count', { n: deployed.length })}
           </Badge>
         </div>
         <p className="panel__hint">
-          打开开关即把本项目 <span className="mono">.agents/skills</span> 投放到该 Agent 的项目技能目录：
-          一套本体、多 Agent 共享，无需各自复制一份。
+          {t('projects.deploy.hint')}
         </p>
         <FilterBar
-          search={{ value: agentQ, onChange: setAgentQ, placeholder: '搜索 Agent 名称 / key' }}
+          search={{ value: agentQ, onChange: setAgentQ, placeholder: t('filter.searchAgentName') }}
           hasFilters={agentKeyword !== ''}
           onReset={() => setAgentQ('')}
         />
         <div style={{ marginTop: 'var(--sp-4)' }}>
           <EntityList
-            title={agentKeyword ? `筛选结果 · ${deployItems.length} / ${(agentData ?? []).length}` : `全部 Agent · ${deployItems.length}`}
+            title={agentKeyword ? `${t('list.filtered')} · ${deployItems.length} / ${(agentData ?? []).length}` : `${t('list.allAgents')} · ${deployItems.length}`}
             items={deployItems}
             collapsible
             storageKey="lsh.collapsed.project.agents"
-            empty={agentKeyword ? <EmptyState title="没有匹配的 Agent" /> : <EmptyState title="暂无已登记的 Agent" />}
+            empty={agentKeyword ? <EmptyState title={t('projects.deploy.empty.match')} /> : <EmptyState title={t('projects.deploy.empty.none')} />}
           />
         </div>
       </div>
@@ -282,8 +285,8 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
         onDone={() => { setCollectItem(null); reload(); onChanged(); }}
       />
 
-      <Modal open={addOpen} title="添加技能" onClose={() => setAddOpen(false)}
-        footer={<Button variant="ghost" onClick={() => setAddOpen(false)}>关闭</Button>}>
+      <Modal open={addOpen} title={t('projects.addSkill.title')} onClose={() => setAddOpen(false)}
+        footer={<Button variant="ghost" onClick={() => setAddOpen(false)}>{t('common.close')}</Button>}>
         <AddableSkillList items={data?.addable ?? []} onAdd={collectAddable} />
       </Modal>
 
@@ -294,22 +297,22 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
         onSave={(tags) => { saveTags(tags); setTagOpen(false); }}
       />
 
-      <Modal open={pushOpen} title="回写仓库" onClose={() => setPushOpen(false)}
-        footer={<Button variant="ghost" onClick={() => setPushOpen(false)}>关闭</Button>}>
+      <Modal open={pushOpen} title={t('projects.push')} onClose={() => setPushOpen(false)}
+        footer={<Button variant="ghost" onClick={() => setPushOpen(false)}>{t('common.close')}</Button>}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
           <span style={{ fontSize: 'var(--fs-13)', color: 'var(--c-ink-2)' }}>
-            把 <span className="mono">.agents/skills</span> 中团队改动过的 skill 反向写回仓库本体；仅覆盖仓库中已存在的同名 skill。
+            {t('projects.push.note')}
           </span>
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             {(repos ?? []).map((r) => (
-              <Button key={r.id} size="sm" loading={pushing} onClick={() => void push(r.id)}>回写到 {r.id}</Button>
+              <Button key={r.id} size="sm" loading={pushing} onClick={() => void push(r.id)}>{t('projects.push.toRepo', { id: r.id })}</Button>
             ))}
           </div>
           {pushResult && (
             <div style={{ fontSize: 'var(--fs-13)' }}>
-              <div>已回写：{pushResult.pushed.join(', ') || '无'}</div>
-              {pushResult.skipped.length > 0 && <div style={{ color: 'var(--c-ink-3)' }}>跳过：{pushResult.skipped.join(', ')}</div>}
-              {pushResult.errors.length > 0 && <div style={{ color: 'var(--c-bad)' }}>错误：{pushResult.errors.join(', ')}</div>}
+              <div>{t('projects.pushResult.pushed')} {joinList(pushResult.pushed) || t('projects.pushResult.none')}</div>
+              {pushResult.skipped.length > 0 && <div style={{ color: 'var(--c-ink-3)' }}>{t('projects.pushResult.skipped')} {joinList(pushResult.skipped)}</div>}
+              {pushResult.errors.length > 0 && <div style={{ color: 'var(--c-bad)' }}>{t('projects.pushResult.errors')} {joinList(pushResult.errors)}</div>}
             </div>
           )}
         </div>
@@ -319,17 +322,18 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
 }
 
 function TagModal({ open, tags, onClose, onSave }: { open: boolean; tags: string[]; onClose: () => void; onSave: (tags: string[]) => void }) {
+  const { t } = useI18n();
   const [text, setText] = useState(tags.join(', '));
   return (
     <Modal
       open={open}
-      title="编辑项目标签"
+      title={t('projects.tagsEdit.title')}
       onClose={onClose}
-      footer={<><Button variant="ghost" onClick={onClose}>取消</Button><Button variant="primary" onClick={() => onSave(text.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean))}>保存</Button></>}
+      footer={<><Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button><Button variant="primary" onClick={() => onSave(text.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean))}>{t('common.save')}</Button></>}
     >
       <FieldInput
-        label="标签（逗号分隔）"
-        hint="资产库中打有相同标签的 skill 会自动进入本项目"
+        label={t('projects.tags')}
+        hint={t('projects.tagsEdit.hint')}
         placeholder="react, frontend"
         value={text}
         onChange={(e) => setText(e.target.value)}

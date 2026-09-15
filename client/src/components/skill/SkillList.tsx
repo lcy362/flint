@@ -3,6 +3,7 @@ import EntityList, { type EntityItem, type EntityListProps } from '../common/Ent
 import Switch from '../ui/Switch';
 import { isOn, skillBadges, stateBadge } from './SkillBadges';
 import SkillActions from './SkillActions';
+import { useI18n, type TFunc } from '../../i18n';
 
 interface SkillListProps {
   items: SkillCardView[];
@@ -26,6 +27,7 @@ interface SkillListProps {
 
 /** SkillCardView → 通用 EntityItem，保证与其他实体列表风格一致 */
 export function skillToEntity(
+  t: TFunc,
   item: SkillCardView,
   opts: {
     onToggle?: (item: SkillCardView) => void;
@@ -41,15 +43,21 @@ export function skillToEntity(
     title: item.title || item.name,
     sub: <span className="mono">{item.id}</span>,
     desc: item.description,
-    status: stateBadge(item),
-    badges: skillBadges(item),
-    tags: (item.tags ?? []).map((t) => ({ label: t, onClick: onTag ? () => onTag(item, t) : undefined })),
+    status: stateBadge(t, item),
+    badges: skillBadges(t, item),
+    tags: (item.tags ?? []).map((tag) => ({ label: tag, onClick: onTag ? () => onTag(item, tag) : undefined })),
     meta: <>{item.source}</>,
     // 未纳管的项（本地自有目录 / 外部软链）不由本工具分发，开关对它没有意义，
     // 改用「收编到仓库 / 删除」等操作表达可做的事，避免"使用中却开关关闭"这类自相矛盾。
     toggle: onToggle && item.state !== 'unmanaged' ? (
       <Switch
-        aria-label={item.toggleDisabled ? `${item.name}：由标签自动纳入，不可直接关闭` : on ? `停用 ${item.name}` : `启用 ${item.name}`}
+        aria-label={
+          item.toggleDisabled
+            ? t('skillList.toggleDisabledAria', { name: item.name })
+            : on
+              ? t('skillList.disableAria', { name: item.name })
+              : t('skillList.enableAria', { name: item.name })
+        }
         checked={on}
         disabled={item.toggleDisabled}
         onChange={() => onToggle(item)}
@@ -77,7 +85,8 @@ export default function SkillList({
   collapsible,
   storageKey,
 }: SkillListProps) {
-  const entities = items.map((item) => skillToEntity(item, { onToggle, onAction, onTag, onOpen }));
+  const { t } = useI18n();
+  const entities = items.map((item) => skillToEntity(t, item, { onToggle, onAction, onTag, onOpen }));
   return (
     <EntityList
       items={entities}

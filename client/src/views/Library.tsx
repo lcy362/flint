@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillAction } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
-import { SKILL_BADGE_LEGEND } from '../components/skill/SkillBadges';
+import { skillBadgeLegend } from '../components/skill/SkillBadges';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
 import BadgeLegend from '../components/common/BadgeLegend';
 import FilterBar from '../components/common/FilterBar';
@@ -23,11 +23,11 @@ import { useToast } from '../components/ui/Toast';
 import { useAsync } from '../state/useAsync';
 import { useViewMode } from '../state/viewMode';
 import { navigate, useQueryFlag, useQueryList, useQueryParam, useRoute } from '../state/router';
-
-const DETAIL_ACTION: SkillAction[] = [{ kind: 'detail', label: '详情' }];
+import { joinList, rich, useI18n } from '../i18n';
 
 export default function Library() {
   const { data, loading, error, reload } = useAsync<StateView>(() => api('/state'));
+  const { t } = useI18n();
   const toast = useToast();
   const route = useRoute();
 
@@ -45,7 +45,7 @@ export default function Library() {
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
-    data?.skills.forEach((s) => s.tags?.forEach((t) => set.add(t)));
+    data?.skills.forEach((s) => s.tags?.forEach((tag) => set.add(tag)));
     return [...set].sort();
   }, [data]);
 
@@ -58,7 +58,7 @@ export default function Library() {
   /** 每个标签 / 来源下的技能数，供筛选器展示 */
   const tagCounts = useMemo(() => {
     const m: Record<string, number> = {};
-    data?.skills.forEach((s) => s.tags?.forEach((t) => { m[t] = (m[t] ?? 0) + 1; }));
+    data?.skills.forEach((s) => s.tags?.forEach((tag) => { m[tag] = (m[tag] ?? 0) + 1; }));
     return m;
   }, [data]);
 
@@ -68,12 +68,12 @@ export default function Library() {
     return m;
   }, [data]);
 
-  const cards = useMemo(() => (data?.skills ?? []).map((s) => skillViewToCard(s, DETAIL_ACTION)), [data]);
+  const cards = useMemo(() => (data?.skills ?? []).map((s) => skillViewToCard(s, [{ kind: 'detail', label: t('library.detail') }])), [data, t]);
   const shown = useMemo(() => {
     const kw = q.trim().toLowerCase();
     return cards.filter((c) => {
       // 多选条件之间为「或」：命中任一选中项即保留，与来源筛选保持一致
-      if (facets.length > 0 && !facets.some((t) => c.tags.includes(t))) return false;
+      if (facets.length > 0 && !facets.some((tag) => c.tags.includes(tag))) return false;
       if (srcs.length > 0 && !srcs.includes(c.source)) return false;
       if (untaggedOnly && c.tags.length > 0) return false;
       if (kw) {
@@ -96,43 +96,39 @@ export default function Library() {
   return (
     <>
       <PageHeader
-        title="技能库"
-        sub={data ? `共 ${data.skills.length} 个技能` : undefined}
+        title={t('nav.library')}
+        sub={data ? t('library.subtitle', { n: data.skills.length }) : undefined}
       />
 
       <div className="panel">
         <FilterBar
-          search={{ value: q, onChange: setQ, placeholder: '搜索技能名称 / 描述' }}
+          search={{ value: q, onChange: setQ, placeholder: t('filter.searchSkills') }}
           controls={
             <>
               <MultiSelect
-                label="来源"
+                label={t('filter.source')}
                 options={allSources.map((s) => ({ label: s, value: s, count: sourceCounts[s] }))}
                 selected={srcs}
                 onChange={setSrcs}
-                emptyHint="尚未登记任何仓库。"
+                emptyHint={t('library.sourceEmpty')}
               />
               <MultiSelect
-                label="标签"
-                options={allTags.map((t) => ({ label: t, value: t, count: tagCounts[t] }))}
+                label={t('filter.tags')}
+                options={allTags.map((tag) => ({ label: tag, value: tag, count: tagCounts[tag] }))}
                 selected={facets}
                 onChange={setFacets}
-                emptyHint={`当前 ${data?.skills.length ?? 0} 个技能都还没有标签。打开任意技能卡片的「详情」，在标签区添加标签后即可在此按标签筛选。`}
+                emptyHint={t('library.tagsEmpty', { n: data?.skills.length ?? 0 })}
               />
-              <SwitchLabel checked={untaggedOnly} onChange={setUntaggedOnly}>只看未打标签</SwitchLabel>
+              <SwitchLabel checked={untaggedOnly} onChange={setUntaggedOnly}>{t('library.untaggedOnly')}</SwitchLabel>
             </>
           }
           hasFilters={hasFilter}
           onReset={clearFilters}
           actions={
             <BadgeLegend
-              title="技能卡片上的标签是什么意思？"
-              items={SKILL_BADGE_LEGEND}
-              intro={
-                <>
-                  技能卡片上的徽标只说明<strong>本工具对它做了什么</strong>：行首开关表示是否在分发名单里，徽标说明它的来源与装入目录的形态。
-                </>
-              }
+              title={t('library.legend.title')}
+              items={skillBadgeLegend(t)}
+              intro={rich(t('library.legend.intro'))}
             />
           }
           view={{ value: viewMode, onChange: setViewMode }}
@@ -142,11 +138,11 @@ export default function Library() {
       <div className="panel">
         <LoadingBoundary
           state={{ loading, error, data }}
-          empty={{ title: '技能库为空', hint: '尚未导入任何技能。先在下方登记自有仓库，再通过其「归集 / 导入」添加技能。', icon: '◈' }}
+          empty={{ title: t('library.empty.title'), hint: t('library.empty.hint'), icon: '◈' }}
         >
           {() => (
             <SkillList
-              title={`${hasFilter ? '筛选结果' : '全部技能'} · ${shown.length}${hasFilter ? ` / ${cards.length}` : ''}`}
+              title={`${hasFilter ? t('list.filtered') : t('list.allSkills')} · ${shown.length}${hasFilter ? ` / ${cards.length}` : ''}`}
               items={shown}
               onAction={(item) => openDetail(item.id)}
               onTag={(item) => openDetail(item.id)}
@@ -182,6 +178,7 @@ type WarehouseTarget = (RepoView & { kind: 'repo' }) | (SourceView & { kind: 'so
 /* 仓库管理。技能入库动作（归集 / 导入）挂在自有仓库上：第三方仓库作为独立仓库维护，
  * 但当其技能被自有仓库导入时，它只是数据源目录，无需任何登记。 */
 function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; sources: SourceView[]; reload: () => void }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [addFor, setAddFor] = useState<RepoView | null>(null);
@@ -191,7 +188,7 @@ function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; source
   const remove = async (kind: 'repos' | 'sources', id: string) => {
     try {
       await api(`/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      toast.push('已删除', 'good');
+      toast.push(t('common.deleted'), 'good');
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
     } finally {
@@ -207,15 +204,15 @@ function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; source
       id: `repo:${repo.id}`,
       title: repo.name || repo.id,
       sub: <span className="mono">{repo.path}{repo.root ? ` · ${repo.root}` : ''}</span>,
-      status: <Badge tone="info">自有仓库</Badge>,
+      status: <Badge tone="info">{t('repo.kind.own')}</Badge>,
       badges: <Badge tone="neutral">{repo.layout}</Badge>,
       actions: (
         <>
-          <Button size="sm" variant="ghost" onClick={() => setEditTarget({ ...repo, kind: 'repo' })}>编辑</Button>
-          <Button size="sm" variant="primary" onClick={() => setAddFor(repo)} title="从已安装 Agent 归集，或从外部目录导入（如第三方库，仅作数据源）">
-            添加技能
+          <Button size="sm" variant="ghost" onClick={() => setEditTarget({ ...repo, kind: 'repo' })}>{t('common.edit')}</Button>
+          <Button size="sm" variant="primary" onClick={() => setAddFor(repo)} title={t('repo.addSkills.hint')}>
+            {t('repo.addSkills')}
           </Button>
-          <Button size="sm" variant="danger" loading={busy === `del:${repo.id}`} onClick={() => remove('repos', repo.id)}>删除</Button>
+          <Button size="sm" variant="danger" loading={busy === `del:${repo.id}`} onClick={() => remove('repos', repo.id)}>{t('common.delete')}</Button>
         </>
       ),
     })),
@@ -223,12 +220,12 @@ function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; source
       id: `source:${s.id}`,
       title: s.name || s.id,
       sub: <span className="mono">{s.path}</span>,
-      status: <Badge tone="accent">第三方仓库</Badge>,
+      status: <Badge tone="accent">{t('repo.kind.third')}</Badge>,
       badges: <Badge tone="neutral">{s.layout}</Badge>,
       actions: (
         <>
-          <Button size="sm" variant="ghost" onClick={() => setEditTarget({ ...s, kind: 'source' })}>编辑</Button>
-          <Button size="sm" variant="danger" loading={busy === `del:${s.id}`} onClick={() => remove('sources', s.id)}>删除</Button>
+          <Button size="sm" variant="ghost" onClick={() => setEditTarget({ ...s, kind: 'source' })}>{t('common.edit')}</Button>
+          <Button size="sm" variant="danger" loading={busy === `del:${s.id}`} onClick={() => remove('sources', s.id)}>{t('common.delete')}</Button>
         </>
       ),
     })),
@@ -237,10 +234,10 @@ function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; source
   return (
     <>
       <EntityList
-        title="仓库"
+        title={t('repo.section')}
         items={items}
-        toolbar={<Button size="sm" variant="ghost" onClick={() => setCreateOpen(true)}>登记仓库</Button>}
-        empty={<EmptyState title="暂无仓库" hint="点击「登记仓库」添加自有仓库或第三方仓库。" />}
+        toolbar={<Button size="sm" variant="ghost" onClick={() => setCreateOpen(true)}>{t('repo.register')}</Button>}
+        empty={<EmptyState title={t('repo.empty.title')} hint={t('repo.empty.hint')} />}
         hideToggle
       />
       <WarehouseModal
@@ -256,6 +253,7 @@ function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; source
 
 /** 添加技能到自有仓库：归集（Agent 目录）与导入（外部数据源目录）的合并入口，进入后再选方式 */
 function AddSkillsModal({ repo, onClose, onDone }: { repo: RepoView | null; onClose: () => void; onDone: () => void }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<'collect' | 'import'>('collect');
   const [wasOpen, setWasOpen] = useState(false);
   if (!!repo !== wasOpen) {
@@ -263,13 +261,13 @@ function AddSkillsModal({ repo, onClose, onDone }: { repo: RepoView | null; onCl
     if (repo) setMode('collect');
   }
   return (
-    <Modal open={!!repo} title={repo ? `添加技能到 ${repo.name || repo.id}` : ''} onClose={onClose} width={560}>
+    <Modal open={!!repo} title={repo ? t('repo.addTo', { name: repo.name || repo.id }) : ''} onClose={onClose} width={560}>
       {repo && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
           <Segment
             options={[
-              { label: '从 Agent 归集', value: 'collect' },
-              { label: '从目录导入', value: 'import' },
+              { label: t('repo.collectTab'), value: 'collect' },
+              { label: t('repo.importTab'), value: 'import' },
             ]}
             value={mode}
             onChange={setMode}
@@ -295,6 +293,7 @@ const REPO_KEY = '__repo__';
  * 选仓库版本保持现状，选 agent 版本则覆盖仓库副本；逐项展示写入路径后由用户确认。
  */
 function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () => void; onDone: () => void }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [adjusting, setAdjusting] = useState<string | null>(null);
@@ -317,11 +316,11 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
   const adjustable = (it: AgentCollectItem) => !it.inRepo && it.exists;
 
   /** Agent 接管状态：所有 skill 均为指向仓库的软链 = 已接管 */
-  const takeoverStatus = (a: AgentCollectPreview): { tone: 'good' | 'accent' | 'neutral'; label: string } => {
+  const takeoverStatus = (a: AgentCollectPreview): { tone: 'good' | 'accent' | 'neutral'; label: string; title: string } => {
     const linked = a.items.filter((it) => it.symlink && it.inRepo).length;
-    if (a.items.length > 0 && linked === a.items.length) return { tone: 'good', label: '已接管' };
-    if (linked > 0) return { tone: 'accent', label: '部分接管' };
-    return { tone: 'neutral', label: '未接管' };
+    if (a.items.length > 0 && linked === a.items.length) return { tone: 'good', label: t('collect.taken.fully'), title: t('collect.taken.fully.title') };
+    if (linked > 0) return { tone: 'accent', label: t('collect.taken.partial'), title: t('collect.taken.partial.title') };
+    return { tone: 'neutral', label: t('collect.taken.none'), title: t('collect.taken.none.title') };
   };
 
   const toggleSkill = (agentKey: string, name: string) =>
@@ -347,8 +346,8 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
         `/repos/${encodeURIComponent(repo.id)}/takeover`,
         { method: 'POST', body: JSON.stringify({ agentKey, name, confirm: true }) }
       );
-      if (res.linked) toast.push(`已接管 ${name}：本目录已指向仓库副本`, 'good');
-      else toast.push(res.reason ?? '接管失败', 'bad');
+      if (res.linked) toast.push(t('collect.takenToast', { name }), 'good');
+      else toast.push(res.reason ?? t('collect.takeoverFailed'), 'bad');
       reload();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
@@ -382,7 +381,7 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
     const options = noop
       ? []
       : [
-          ...(exists ? [{ label: '仓库内版本（保持现状）', value: REPO_KEY }] : []),
+          ...(exists ? [{ label: t('collect.keepRepoVersion'), value: REPO_KEY }] : []),
           ...agentCands.map((c) => ({ label: c.agent.agentName, value: c.agent.agentKey })),
         ];
     let chosen = choices[name];
@@ -407,7 +406,7 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
       }
       const sels = Object.entries(byAgent).map(([agentKey, names]) => ({ agentKey, names }));
       if (sels.length === 0) {
-        toast.push('全部保持仓库现状，未写入任何文件', 'good');
+        toast.push(t('collect.allKept'), 'good');
         onDone();
         return;
       }
@@ -415,7 +414,10 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
         `/repos/${encodeURIComponent(repo.id)}/collect`,
         { method: 'POST', body: JSON.stringify({ selections: sels, replaceNames }) }
       );
-      toast.push(`已归集 ${res.collected.length} 个技能${res.skipped.length ? `，跳过 ${res.skipped.length}` : ''}`, 'good');
+      toast.push(
+        res.skipped.length ? t('collect.doneSkipped', { n: res.collected.length, s: res.skipped.length }) : t('collect.done', { n: res.collected.length }),
+        'good',
+      );
       onDone();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
@@ -426,9 +428,15 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
     return (
       <>
         <div style={{ fontSize: 'var(--fs-13)', color: 'var(--c-ink-2)' }}>
-          将把 <strong>{writePlans.length}</strong> 个技能写入 <span className="mono">{repo.name || repo.id}</span>
-          （新增 {writePlans.length - overwriteCount} · 覆盖仓库副本 {overwriteCount}），
-          {keepCount} 个保持仓库现状；已勾选 {totalPicked} 项，按名字合并为 {selectedGroups.length} 个：
+          {rich(t('collect.confirm.summary', {
+            write: writePlans.length,
+            repo: repo.name || repo.id,
+            added: writePlans.length - overwriteCount,
+            overwritten: overwriteCount,
+            kept: keepCount,
+            picked: totalPicked,
+            groups: selectedGroups.length,
+          }))}
         </div>
         <EntityList
           mode="list"
@@ -444,28 +452,28 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
                 title: p.name,
                 sub: (
                   <span className="mono">
-                    {src.agent.agentName} · 软链 → {src.item.linkTarget ?? '(悬空)'}（即仓库本体）
+                    {src.agent.agentName} · {t('collect.sub.symlinkToBody', { target: src.item.linkTarget ?? t('collect.dangling') })}
                   </span>
                 ),
-                status: <Badge tone="info" title="agent 内是指向仓库本体的软链，没有独立版本，无需归集">仓库本体 · 无需归集</Badge>,
+                status: <Badge tone="info" title={t('collect.badge.repoBody.title')}>{t('collect.badge.repoBody')}</Badge>,
               };
             }
             return {
               id: p.name,
               title: p.name,
               sub: adoptingRepo ? (
-                <span className="mono">仓库内版本 · {dest}</span>
+                <span className="mono">{t('collect.sub.repoVersion', { dest })}</span>
               ) : (
                 <span className="mono">
                   {cand!.agent.agentName} · {cand!.item.dir}
-                  {cand!.item.symlink ? '（软链）' : ''}
+                  {cand!.item.symlink ? `（${t('collect.sub.symlink')}）` : ''}
                 </span>
               ),
               desc: (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
                   {p.options.length > 1 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>采纳版本：</span>
+                      <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{t('collect.adoptVersion')}</span>
                       <Chip
                         options={p.options}
                         selected={[p.chosen]}
@@ -475,27 +483,27 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
                   )}
                   {!adoptingRepo && (
                     <div className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-2)' }}>
-                      写入：{cand!.item.dir} → {dest}
+                      {t('collect.writeTo', { src: cand!.item.dir, dest })}
                     </div>
                   )}
                 </div>
               ),
               status: adoptingRepo ? (
-                <Badge tone="info" title="不写入任何文件，仓库副本保持现状">保持现状</Badge>
+                <Badge tone="info" title={t('collect.badge.keep.title')}>{t('collect.badge.keep')}</Badge>
               ) : p.exists ? (
-                <Badge tone="warn" title={`将覆盖仓库现有副本：${dest}`}>覆盖仓库副本</Badge>
+                <Badge tone="warn" title={t('collect.badge.overwrite.title', { dest })}>{t('collect.badge.overwrite')}</Badge>
               ) : (
-                <Badge tone="good">新增</Badge>
+                <Badge tone="good">{t('collect.badge.new')}</Badge>
               ),
             };
           })}
         />
         <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
-          agent 目录始终保持不动；「覆盖仓库副本」会先删除 <span className="mono">{repoRootDisplay}</span> 下的同名目录再写入所选版本。
+          {rich(t('collect.confirm.note', { root: repoRootDisplay }))}
         </div>
         <div className="modal-actions">
-          <Button variant="ghost" onClick={() => setStep('select')}>返回</Button>
-          <Button variant="primary" onClick={() => setStep('final')}>确认归集</Button>
+          <Button variant="ghost" onClick={() => setStep('select')}>{t('common.back')}</Button>
+          <Button variant="primary" onClick={() => setStep('final')}>{t('collect.confirm.button')}</Button>
         </div>
       </>
     );
@@ -509,56 +517,59 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
       if (p.chosen === REPO_KEY) {
         return {
           id: p.name,
-          title: `无操作 · ${dest}`,
-          sub: '保持仓库内现有副本不变：不写入、不删除任何文件',
-          status: <Badge tone="info">保持现状</Badge>,
+          title: t('collect.final.noop', { dest }),
+          sub: t('collect.final.keep'),
+          status: <Badge tone="info">{t('collect.badge.keep')}</Badge>,
         };
       }
       const cand = p.cands.find((c) => c.agent.agentKey === p.chosen)!;
       const realSrc = cand.item.symlink ? (cand.item.linkTarget ?? cand.item.dir) : cand.item.dir;
       const srcNote = cand.item.symlink
-        ? `${cand.item.dir}（软链，实际内容位于 ${realSrc}）`
+        ? `${cand.item.dir}（${t('collect.sub.symlink')}，${t('badge.symlink.title', { target: realSrc })}）`
         : cand.item.dir;
       n += 1;
       return p.exists
         ? {
             id: p.name,
-            title: `${n}. 覆盖 ${dest}`,
+            title: t('collect.final.overwriteTitle', { n, dest }),
             sub: (
               <span style={{ fontSize: 'var(--fs-12)' }}>
-                第一步：删除现有目录 <span className="mono">{dest}</span> 及其全部内容；
-                第二步：把 <span className="mono">{srcNote}</span> 的全部内容复制到该位置
+                {rich(t('collect.final.overwriteOps', { dest, src: srcNote }))}
               </span>
             ),
-            status: <Badge tone="warn">覆盖</Badge>,
+            status: <Badge tone="warn">{t('collect.final.overwrite')}</Badge>,
           }
         : {
             id: p.name,
-            title: `${n}. 新增 ${dest}`,
+            title: t('collect.final.newTitle', { n, dest }),
             sub: (
               <span style={{ fontSize: 'var(--fs-12)' }}>
-                把 <span className="mono">{srcNote}</span> 的全部内容复制到该位置（目标处当前不存在同名目录）
+                {rich(t('collect.final.newOps', { src: srcNote }))}
               </span>
             ),
-            status: <Badge tone="good">新增</Badge>,
+            status: <Badge tone="good">{t('collect.badge.new')}</Badge>,
           };
     });
     return (
       <>
         <div style={{ fontSize: 'var(--fs-13)', color: 'var(--c-ink-2)' }}>
-          本次归集共 {writePlans.length} 项文件写入（新增 {writePlans.length - overwriteCount} · 覆盖现有目录 {overwriteCount}），
-          {keepCount} 项保持仓库现状。完整操作清单如下，请逐条确认：
+          {t('collect.final.summary', {
+            write: writePlans.length,
+            added: writePlans.length - overwriteCount,
+            overwritten: overwriteCount,
+            kept: keepCount,
+          })}
         </div>
         <EntityList mode="list" toggle={false} items={opItems} />
         <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', lineHeight: 1.7 }}>
-          以上是本次将执行的全部文件操作，除此之外：
-          <br />· 不删除、不修改任何其他文件，仓库中其余技能不受影响
-          <br />· 所有 Agent 目录（含其中的软链）不会被改动或删除
-          <br />· 复制为整目录拷贝，源位置内容保持原样
+          {t('collect.final.notesIntro')}
+          <br />{t('collect.final.note1')}
+          <br />{t('collect.final.note2')}
+          <br />{t('collect.final.note3')}
         </div>
         <div className="modal-actions">
-          <Button variant="ghost" onClick={() => setStep('confirm')}>返回</Button>
-          <Button variant="primary" loading={busy} onClick={run}>确认执行</Button>
+          <Button variant="ghost" onClick={() => setStep('confirm')}>{t('common.back')}</Button>
+          <Button variant="primary" loading={busy} onClick={run}>{t('common.confirmRun')}</Button>
         </div>
       </>
     );
@@ -566,8 +577,8 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
 
   return (
     <>
-      {loading && <span style={{ color: 'var(--c-ink-3)' }}>扫描中…</span>}
-      {!loading && agents.length === 0 && <EmptyState title="没有已安装的 Agent 可归集" />}
+      {loading && <span style={{ color: 'var(--c-ink-3)' }}>{t('common.scanning')}</span>}
+      {!loading && agents.length === 0 && <EmptyState title={t('collect.noAgents')} />}
       {agents.map((a) => {
         const st = takeoverStatus(a);
         const cur = picked[a.agentKey] ?? [];
@@ -583,22 +594,22 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
             title={
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
                 {a.agentName}
-                <Badge tone={st.tone} title={st.label === '未接管' ? 'skill 本体仍在 agent 目录，未替换为指向仓库的软链' : st.label === '部分接管' ? '部分 skill 已指向仓库本体' : '所有 skill 均已指向仓库本体'}>{st.label}</Badge>
+                <Badge tone={st.tone} title={st.title}>{st.label}</Badge>
                 <span className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
-                  {a.agentKey} · {a.items.length} 项
+                  {t('collect.agentMeta', { key: a.agentKey, n: a.items.length })}
                 </span>
               </span>
             }
             toolbar={
               <>
-                {st.label === '未接管' && (
+                {st.label === t('collect.taken.none') && (
                   <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
-                    未接管：本目录的条目还是实体目录 / 指向仓库外的软链；仓库里已有同名副本时，可对它执行「接管」，把本目录换成指向仓库副本的软链
+                    {t('collect.noTakeoverNote')}
                   </span>
                 )}
                 {a.items.length > 0 && (
                   <SwitchLabel checked={allSelected} onChange={() => toggleAgent(a)}>
-                    全选（{selectedCount}/{a.items.length}）
+                    {t('collect.selectAll', { a: selectedCount, b: a.items.length })}
                   </SwitchLabel>
                 )}
               </>
@@ -606,18 +617,18 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
             items={a.items.map((it) => ({
               id: it.name,
               title: it.name,
-              sub: <span className="mono">{it.symlink ? `软链 → ${it.linkTarget ?? '(悬空)'}` : '真实目录'}</span>,
+              sub: <span className="mono">{it.symlink ? t('collect.sub.symlinkTo', { target: it.linkTarget ?? t('collect.dangling') }) : t('collect.sub.realDir')}</span>,
               desc: it.description,
               status: it.symlink && it.inRepo ? (
-                <Badge tone="info" title={`已接管：本目录这条软链指向仓库本体 ${it.linkTarget}`}>仓库本体</Badge>
+                <Badge tone="info" title={t('collect.repoVersionBadge.title', { target: it.linkTarget ?? '' })}>{t('badge.takenOver')}</Badge>
               ) : it.exists ? (
-                <Badge tone="neutral" title="仓库已有同名技能，归集时默认去重跳过">已在仓库</Badge>
+                <Badge tone="neutral" title={t('collect.existsBadge.title')}>{t('collect.existsBadge')}</Badge>
               ) : it.symlink ? (
-                <Badge tone="accent">软链</Badge>
+                <Badge tone="accent">{t('collect.sub.symlink')}</Badge>
               ) : undefined,
               toggle: (
                 <Switch
-                  aria-label={`归集 ${it.name}`}
+                  aria-label={t('collect.toggleAria', { name: it.name })}
                   checked={cur.includes(it.name)}
                   onChange={() => toggleSkill(a.agentKey, it.name)}
                 />
@@ -627,11 +638,9 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
                   size="sm"
                   loading={adjusting === `${a.agentKey}:${it.name}`}
                   onClick={() => adjust(a.agentKey, it.name)}
-                  title={it.symlink
-                    ? '接管：这条软链当前指向仓库之外，接管后改指仓库副本（它指向的外部目录不受影响，原链接不再保留）'
-                    : '接管：本目录这条真实技能目录会被替换为指向仓库副本的软链；如果本目录这版有改动，请先勾选它做「归集」'}
+                  title={it.symlink ? t('collect.takeover.symlinkTitle') : t('collect.takeover.realTitle')}
                 >
-                  接管
+                  {t('collect.takeover')}
                 </Button>
               ) : undefined,
             }))}
@@ -639,8 +648,8 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
         );
       })}
       <div className="modal-actions">
-        <Button variant="ghost" onClick={onClose}>关闭</Button>
-        <Button variant="primary" disabled={totalPicked === 0} onClick={() => setStep('confirm')}>下一步：确认</Button>
+        <Button variant="ghost" onClick={onClose}>{t('common.close')}</Button>
+        <Button variant="primary" disabled={totalPicked === 0} onClick={() => setStep('confirm')}>{t('collect.next')}</Button>
       </div>
     </>
   );
@@ -692,6 +701,7 @@ function WarehouseModal({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { t } = useI18n();
   const toast = useToast();
   const editing = !!target;
   const [d, setD] = useState<WarehouseDraft>(EMPTY_DRAFT);
@@ -724,7 +734,7 @@ function WarehouseModal({
   const submit = async () => {
     setBusy(true);
     try {
-      if (!d.id.trim() || !d.path.trim()) throw new Error('标识与路径必填');
+      if (!d.id.trim() || !d.path.trim()) throw new Error(t('repo.idPathRequired'));
       const id = d.id.trim();
       if (d.kind === 'repo') {
         const body = { name: d.name.trim() || undefined, path: d.path.trim(), layout: d.layout, root: d.root.trim() || undefined };
@@ -745,7 +755,7 @@ function WarehouseModal({
           await api('/sources', { method: 'POST', body: JSON.stringify({ id, name, path, layout: d.layout }) });
         }
       }
-      toast.push(editing ? '仓库已更新' : `已登记${d.kind === 'repo' ? '自有仓库' : '第三方仓库'} ${id}`, 'good');
+      toast.push(editing ? t('repo.updated') : t(d.kind === 'repo' ? 'repo.registered.own' : 'repo.registered.third', { id }), 'good');
       onDone();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
@@ -754,67 +764,68 @@ function WarehouseModal({
     }
   };
 
+  const kindLabel = (k: 'repo' | 'source') => (k === 'repo' ? t('repo.kind.own') : t('repo.kind.third'));
+
   return (
     <Modal
       open={open}
-      title={editing ? '编辑仓库' : '登记仓库'}
+      title={editing ? t('repo.editTitle') : t('repo.registerTitle')}
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>取消</Button>
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
           <Button variant="primary" loading={busy} disabled={!d.id.trim() || !d.path.trim()} onClick={submit}>
-            {editing ? '保存' : '登记'}
+            {editing ? t('common.save') : t('common.register')}
           </Button>
         </>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
         <div>
-          <span className="field-label">类型</span>
+          <span className="field-label">{t('repo.kind')}</span>
           <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
             {(['repo', 'source'] as const).map((k) => (
               <Button key={k} size="sm" variant={d.kind === k ? 'primary' : 'ghost'} onClick={() => switchKind(k)}>
-                {k === 'repo' ? '自有仓库' : '第三方仓库'}
+                {kindLabel(k)}
               </Button>
             ))}
           </div>
           {editing && target && d.kind !== target.kind && (
             <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 'var(--sp-2)', lineHeight: 1.6 }}>
-              从{target.kind === 'repo' ? '自有仓库' : '第三方仓库'}改为{d.kind === 'repo' ? '自有仓库' : '第三方仓库'}。
-              标识 <span className="mono">{target.id}</span> 保持不变，技能引用（标签 / 预设 / 项目）不受影响；路径已按新类型的扫描规则自动换算。
+              {rich(t('repo.kindSwitch', { from: kindLabel(target.kind), to: kindLabel(d.kind), id: target.id }))}
             </div>
           )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)' }}>
           <FieldInput
-            label="标识 ID"
+            label={t('repo.id')}
             placeholder="my-lib"
             value={d.id}
             readOnly={editing}
-            hint={editing ? '不可修改：参与技能标识 name@id' : undefined}
+            hint={editing ? t('repo.idHint') : undefined}
             onChange={(e) => set('id', e.target.value)}
           />
           <FieldInput
-            label="名称"
-            placeholder="缺省与 ID 相同"
+            label={t('common.name')}
+            placeholder={t('repo.namePlaceholder')}
             value={d.name}
             onChange={(e) => set('name', e.target.value)}
           />
         </div>
 
-        <PathField label="路径" placeholder="/path/to/library" value={d.path} onChange={(v) => set('path', v)} />
+        <PathField label={t('repo.path')} placeholder="/path/to/library" value={d.path} onChange={(v) => set('path', v)} />
 
-        <FieldSelect label="布局" value={d.layout} onChange={(e) => set('layout', e.target.value)}>
-          <option value="auto">auto（自动检测）</option>
-          <option value="nested">nested（嵌套分类）</option>
-          <option value="flat">flat（扁平）</option>
+        <FieldSelect label={t('repo.layout')} value={d.layout} onChange={(e) => set('layout', e.target.value)}>
+          <option value="auto">{t('repo.layout.auto')}</option>
+          <option value="nested">{t('repo.layout.nested')}</option>
+          <option value="flat">{t('repo.layout.flat')}</option>
         </FieldSelect>
 
         {d.kind === 'repo' && (
           <FieldInput
-            label="root（可选）"
-            hint="skills 根目录，缺省 <路径>/skills"
+            label={t('repo.root')}
+            hint={t('repo.rootHint')}
             placeholder="skills"
             value={d.root}
             onChange={(e) => set('root', e.target.value)}
@@ -822,7 +833,7 @@ function WarehouseModal({
         )}
 
         <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
-          技能扫描根：<span className="mono">{scanRoot}</span>
+          {t('repo.scanRoot')} <span className="mono">{scanRoot}</span>
         </div>
       </div>
     </Modal>
@@ -843,6 +854,7 @@ function SkillDetailModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
   const [saving, setSaving] = useState(false);
@@ -864,8 +876,8 @@ function SkillDetailModal({
   const addTagInput = (input: string, base: string[]): string[] => {
     const out = [...base];
     for (const seg of input.split(/\r?\n/)) {
-      const t = seg.trim();
-      if (t && !out.includes(t)) out.push(t);
+      const tag = seg.trim();
+      if (tag && !out.includes(tag)) out.push(tag);
     }
     return out;
   };
@@ -889,33 +901,33 @@ function SkillDetailModal({
   return (
     <Modal
       open={!!id}
-      title={skill ? `技能详情 · ${skill.name}` : ''}
+      title={skill ? `${t('library.detail')} · ${skill.name}` : ''}
       width={720}
       onClose={onClose}
-      footer={<><Button variant="ghost" onClick={onClose}>关闭</Button><Button variant="primary" loading={saving} onClick={save}>保存标签</Button></>}
+      footer={<><Button variant="ghost" onClick={onClose}>{t('common.close')}</Button><Button variant="primary" loading={saving} onClick={save}>{t('common.save')}</Button></>}
     >
       {skill && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
             <Badge tone="info">{skill.source}</Badge>
             {skill.version && <Badge tone="neutral">v{skill.version}</Badge>}
-            {skill.origin && <Badge tone="accent" title="来源追溯">来自 {skill.origin}</Badge>}
+            {skill.origin && <Badge tone="accent" title={t('badge.reason.own.title')}>{t('skillDetail.origin', { origin: skill.origin })}</Badge>}
           </div>
           <div className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{skill.dir}</div>
           {skill.description && <p style={{ color: 'var(--c-ink-2)' }}>{skill.description}</p>}
 
           <div>
-            <span className="field-label">标签</span>
+            <span className="field-label">{t('filter.tags')}</span>
             <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
               <div style={{ flex: 1 }}>
-                <FieldInput placeholder="新标签" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addNew()} />
+                <FieldInput placeholder={t('skillDetail.newTag')} value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addNew()} />
               </div>
-              <Button onClick={addNew}>添加</Button>
+              <Button onClick={addNew}>{t('common.add')}</Button>
             </div>
             <div style={{ marginTop: 'var(--sp-2)' }}>
               {/* 库内已有标签 + 本次新增的标签，一并作为可多选的候选项 */}
               <Chip
-                options={[...allTags, ...tags.filter((t) => !allTags.includes(t))].map((t) => ({ label: t, value: t }))}
+                options={[...allTags, ...tags.filter((tag) => !allTags.includes(tag))].map((tag) => ({ label: tag, value: tag }))}
                 selected={tags}
                 multiple
                 onChange={setTags}
@@ -924,8 +936,8 @@ function SkillDetailModal({
           </div>
 
           <div>
-            <span className="field-label">SKILL.md 预览</span>
-            {loading && <span style={{ color: 'var(--c-ink-3)' }}>加载中…</span>}
+            <span className="field-label">SKILL.md</span>
+            {loading && <span style={{ color: 'var(--c-ink-3)' }}>{t('common.loading')}</span>}
             {content && (
               <>
                 <pre className="mono" style={{
@@ -937,7 +949,7 @@ function SkillDetailModal({
                 </pre>
                 {content.files.length > 0 && (
                   <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 'var(--sp-2)' }}>
-                    附带文件：{content.files.join('、')}
+                    {t('skillDetail.files', { files: joinList(content.files) })}
                   </div>
                 )}
               </>
@@ -955,6 +967,7 @@ function SkillDetailModal({
  * 同名 skill 已在目标仓库则去重跳过，导入的技能带来源追溯（origin=源目录）。
  */
 function ImportPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () => void; onDone: () => void }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [text, setText] = useState('');
   const [preview, setPreview] = useState<ImportPreviewItem[] | null>(null);
@@ -978,7 +991,7 @@ function ImportPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =>
       const res = await api<{ source: string; imported: string[]; skipped: string[] }[]>('/import', { method: 'POST', body: JSON.stringify({ dirs, repoId: repo.id }) });
       const imported = res.reduce((n, r) => n + r.imported.length, 0);
       const skipped = res.reduce((n, r) => n + r.skipped.length, 0);
-      toast.push(`已导入 ${imported} 个技能${skipped ? `，去重跳过 ${skipped}` : ''}`, 'good');
+      toast.push(skipped ? t('import.doneSkipped', { n: imported, s: skipped }) : t('import.done', { n: imported }), 'good');
       setText(''); setPreview(null);
       onClose(); onDone();
     } catch (e) {
@@ -990,28 +1003,28 @@ function ImportPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =>
     id: p.source,
     title: <span className="mono">{p.source}</span>,
     sub: <span className="mono">{p.layout}{p.error ? ` · ${p.error}` : ''}</span>,
-    status: <Badge tone="accent">{p.count} 项</Badge>,
+    status: <Badge tone="accent">{t('common.itemCount', { n: p.count })}</Badge>,
   }));
 
   return (
     <>
       <PathListField
-        label="数据源目录（每行一个，支持扁平/嵌套/带索引清单三类结构）"
+        label={t('import.dirsLabel')}
         placeholder={'/path/to/skills\n/path/to/third-party-lib/skills'}
         rows={4}
         value={text}
         onChange={setText}
       />
       <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 'calc(-1 * var(--sp-2))' }}>
-        目录仅作为导入的数据源，不会登记进系统；同名技能已存在时自动跳过。
+        {t('import.note')}
       </div>
       {preview && (
-        <EntityList items={items} title={`识别结果（${items.length}）`} toggle={false} />
+        <EntityList items={items} title={t('import.previewCount', { n: items.length })} toggle={false} />
       )}
       <div className="modal-actions">
-        <Button variant="ghost" onClick={onClose}>关闭</Button>
-        <Button size="sm" onClick={runPreview} loading={busy} disabled={dirs.length === 0}>识别</Button>
-        <Button variant="primary" loading={busy} disabled={!preview} onClick={runImport}>开始导入</Button>
+        <Button variant="ghost" onClick={onClose}>{t('common.close')}</Button>
+        <Button size="sm" onClick={runPreview} loading={busy} disabled={dirs.length === 0}>{t('import.detect')}</Button>
+        <Button variant="primary" loading={busy} disabled={!preview} onClick={runImport}>{t('import.start')}</Button>
       </div>
     </>
   );

@@ -10,18 +10,21 @@ import Health from './views/Health';
 import Settings from './views/Settings';
 import { emitReload, getStoredTheme, storeTheme, type Tab } from './state/store';
 import { navigate, useRoute } from './state/router';
+import { useI18n, type MsgKey } from './i18n';
 
-const TITLES: Record<Tab, { t: string; s: string }> = {
-  library: { t: '技能库', s: '统一技能资产库' },
-  agents: { t: '智能体', s: 'Agent 技能管理' },
-  presets: { t: '预设', s: '技能预设组' },
-  projects: { t: '项目', s: '项目技能关联' },
-  health: { t: '诊断', s: '健康检查与诊断' },
-  settings: { t: '设置', s: '活跃 Agent 与同步策略' },
+/** 一级页面的标题 / 副标题键（语言切换时随之变化） */
+const TITLES: Record<Tab, { t: MsgKey; s: MsgKey }> = {
+  library: { t: 'nav.library', s: 'app.library.sub' },
+  agents: { t: 'nav.agents', s: 'app.agents.sub' },
+  presets: { t: 'nav.presets', s: 'app.presets.sub' },
+  projects: { t: 'nav.projects', s: 'app.projects.sub' },
+  health: { t: 'nav.health', s: 'app.health.sub' },
+  settings: { t: 'nav.settings', s: 'app.settings.sub' },
 };
 
 export default function App() {
   const { tab } = useRoute();
+  const { t } = useI18n();
   const [theme, setTheme] = useState<'light' | 'dark'>(getStoredTheme());
   const [reloading, setReloading] = useState(false);
   useToast();
@@ -50,8 +53,8 @@ export default function App() {
       <NavRail active={tab} onSelect={selectTab} />
       <div className="shell-main">
         <Topbar
-          title={TITLES[tab].t}
-          sub={TITLES[tab].s}
+          title={t(TITLES[tab].t)}
+          sub={t(TITLES[tab].s)}
           theme={theme}
           onToggleTheme={toggleTheme}
           onReload={reloadAll}

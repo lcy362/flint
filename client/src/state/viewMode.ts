@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
+import { useI18n } from '../i18n';
 
 /** 全局共享的展示形态：卡片优先，可切换为列表 */
 export type ViewMode = 'card' | 'list';
 
-/** 切换器选项（卡片优先，故置于首位）—— 列表与筛选条共用同一份定义 */
-export const VIEW_MODE_OPTIONS: { label: string; value: ViewMode }[] = [
-  { label: '卡片', value: 'card' },
-  { label: '列表', value: 'list' },
-];
+/** 切换器选项（卡片优先，故置于首位）—— 列表与筛选条共用同一份定义（文案随语言变化） */
+export function useViewModeOptions(): { label: string; value: ViewMode }[] {
+  const { t } = useI18n();
+  return [
+    { label: t('view.card'), value: 'card' },
+    { label: t('view.list'), value: 'list' },
+  ];
+}
 
 const KEY = 'lsh-view-mode';
 const listeners = new Set<(v: ViewMode) => void>();

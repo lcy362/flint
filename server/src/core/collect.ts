@@ -4,6 +4,7 @@ import { ConfigStore } from '../config/store.js';
 import { Repo } from '../config/types.js';
 import { scanDir } from './scanner.js';
 import { listAgents, repoSkillRoot, isLinkInRepo } from './agents.js';
+import { t } from '../i18n/index.js';
 
 export interface AgentCollectItem {
   name: string;
@@ -126,7 +127,7 @@ export function collectFromSource(
   replaceNames?: string[],
 ): CollectResult {
   const res: CollectResult = { collected: [], skipped: [] };
-  if (!fs.existsSync(source.dir)) { res.skipped.push(`(来源目录不存在: ${source.name})`); return res; }
+  if (!fs.existsSync(source.dir)) { res.skipped.push(t('collect.sourceMissing', { name: source.name })); return res; }
   const skillsRoot = repoSkillRoot(repo);
   fs.mkdirSync(skillsRoot, { recursive: true });
   const found = scanDir(source.dir, source.ref, source.layout);
@@ -135,7 +136,7 @@ export function collectFromSource(
     // 解引用源软链：归集的是真实位置的内容，而非把链接本身复制进仓库
     let srcReal: string;
     try { srcReal = fs.realpathSync(s.dir); }
-    catch (e) { res.skipped.push(`${s.name}(源不可达: ${(e as Error).message})`); continue; }
+    catch (e) { res.skipped.push(t('collect.srcUnreachable', { name: s.name, msg: (e as Error).message })); continue; }
     const dest = path.join(skillsRoot, s.name);
     if (fs.existsSync(dest)) {
       if (replaceNames?.includes(s.name)) {
@@ -143,15 +144,15 @@ export function collectFromSource(
         // 否则 rm 掉的正是软链指向的内容，来源与仓库一起损坏
         let same = false;
         try { same = srcReal === fs.realpathSync(dest); } catch { /* ignore */ }
-        if (same) { res.skipped.push(`${s.name}(源与仓库副本为同一本体，跳过覆盖)`); continue; }
+        if (same) { res.skipped.push(t('collect.sameBody', { name: s.name })); continue; }
         try { fs.rmSync(dest, { recursive: true, force: true }); }
-        catch (e) { res.skipped.push(`${s.name}(覆盖失败: ${(e as Error).message})`); continue; }
-      } else { res.skipped.push(`${s.name}(已存在，去重跳过)`); continue; }
+        catch (e) { res.skipped.push(t('collect.overwriteFailed', { name: s.name, msg: (e as Error).message })); continue; }
+      } else { res.skipped.push(t('collect.existsSkip', { name: s.name })); continue; }
     }
     try {
       fs.cpSync(srcReal, dest, { recursive: true });
       res.collected.push(s.name);
-    } catch (e) { res.skipped.push(`${s.name}(${(e as Error).message})`); }
+    } catch (e) { res.skipped.push(t('collect.copyFailed', { name: s.name, msg: (e as Error).message })); }
   }
   cfg.save();
   return res;
@@ -166,6 +167,6 @@ export function collectAgentSkill(
   replaceNames?: string[],
 ): CollectResult {
   const a = listAgents(cfg.data).find((x) => x.key === agentKey);
-  if (!a?.installed) return { collected: [], skipped: [`(agent 未安装: ${agentKey})`] };
+  if (!a?.installed) return { collected: [], skipped: [t('collect.agentNotInstalled', { key: agentKey })] };
   return collectFromSource(cfg, repo, agentCollectSource(agentKey, a.name, a.globalDir), names, replaceNames);
 }

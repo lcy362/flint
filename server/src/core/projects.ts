@@ -8,6 +8,7 @@ import { listAgents, resolveProjectDir, findAgentDef, isManagedLinkTarget } from
 import { expandTilde, repoSkillRoot } from './agents.js';
 import { dirsEqual } from './sync.js';
 import { ProjectLink } from '../config/types.js';
+import { t } from '../i18n/index.js';
 
 /** 项目技能目录的清单文件名（目录 = INDEX.md，被管理/已安装的 skill 登记于此） */
 export const INDEX_NAME = 'INDEX.md';
@@ -251,7 +252,7 @@ export function ensureAgentLinks(cfg: ConfigStore, projectPath: string, wanted?:
 export function syncProject(cfg: ConfigStore, projectPath: string, allSkills: Skill[], wantedAgents?: Set<string>): ProjectSyncResult {
   const res: ProjectSyncResult = { project: projectPath, copied: [], removed: [], agentLinks: [], errors: [] };
   const proj = cfg.data.projects.find((p) => path.resolve(p.path) === path.resolve(projectPath));
-  if (!proj) { res.errors.push('项目未登记'); return res; }
+  if (!proj) { res.errors.push(t('projects.notRegistered')); return res; }
 
   const desired = projectedSkills(cfg, proj, allSkills);
   const agentsRoot = path.join(projectPath, '.agents', 'skills');
@@ -335,9 +336,9 @@ export function takeoverProjectSkill(
 ): ProjectTakeoverResult {
   // 指定了仓库就用它；未指定则在所有已登记仓库里找同名副本
   const repos = repoId ? cfg.data.repos.filter((r) => r.id === repoId) : cfg.data.repos;
-  if (repoId && repos.length === 0) return { name, taken: false, reason: `repo 不存在: ${repoId}` };
+  if (repoId && repos.length === 0) return { name, taken: false, reason: t('takeover.repoMissing', { id: repoId }) };
   const src = repos.map((r) => path.join(repoSkillRoot(r), name)).find((p) => fs.existsSync(path.join(p, 'SKILL.md')));
-  if (!src) return { name, taken: false, reason: `仓库副本 ${name} 不存在，请先归集入库` };
+  if (!src) return { name, taken: false, reason: t('takeover.copyMissing', { name }) };
 
   const agentsRoot = path.join(proj.path, '.agents', 'skills');
   const dest = path.join(agentsRoot, name);
@@ -361,7 +362,7 @@ export function takeoverProjectSkill(
   }
 
   if (!confirm) {
-    return { name, taken: false, needConfirm: true, reason: `接管会用仓库那一版替换项目里的 ${name}，请确认` };
+    return { name, taken: false, needConfirm: true, reason: t('projects.takeoverConfirm', { name }) };
   }
 
   fs.mkdirSync(agentsRoot, { recursive: true });
@@ -397,9 +398,9 @@ export function pushProjectToRepo(
     repo: repo?.id ?? '',
     pushed: [], skipped: [], errors: [],
   };
-  if (!proj) { res.errors.push('项目未登记'); return res; }
-  if (!repo) { res.errors.push('无仓库可回写'); return res; }
-  if (!fs.existsSync(agentsRoot)) { res.errors.push('项目尚无 .agents/skills'); return res; }
+  if (!proj) { res.errors.push(t('projects.notRegistered')); return res; }
+  if (!repo) { res.errors.push(t('projects.noRepo')); return res; }
+  if (!fs.existsSync(agentsRoot)) { res.errors.push(t('projects.noAgentsDir')); return res; }
 
   const skillsRoot = repoSkillRoot(repo);
   fs.mkdirSync(skillsRoot, { recursive: true });
@@ -412,7 +413,7 @@ export function pushProjectToRepo(
     if (want && !want.has(entry.name)) continue;
     const dest = path.join(skillsRoot, entry.name);
     if (!fs.existsSync(dest)) {
-      res.skipped.push(`${entry.name}(仓库中无同名 skill，未回写)`);
+      res.skipped.push(t('projects.notInRepo', { name: entry.name }));
       continue;
     }
     try {
@@ -429,8 +430,8 @@ export function pushProjectToRepo(
 
 export function addProject(cfg: ConfigStore, projectPath: string, tags: string[]): string {
   const abs = path.resolve(projectPath);
-  if (!fs.existsSync(abs)) throw new Error(`路径不存在: ${abs}`);
-  if (cfg.data.projects.some((p) => path.resolve(p.path) === abs)) throw new Error('项目已登记');
+  if (!fs.existsSync(abs)) throw new Error(t('projects.pathMissing', { path: abs }));
+  if (cfg.data.projects.some((p) => path.resolve(p.path) === abs)) throw new Error(t('projects.alreadyRegistered'));
   cfg.data.projects.push({ path: abs, tags });
   cfg.save();
   return abs;

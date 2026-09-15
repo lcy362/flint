@@ -1,5 +1,6 @@
 import type { AgentSkillRow } from '../core/agents.js';
 import type { ProjectSkillRow } from '../core/projects.js';
+import { t } from '../i18n/index.js';
 
 /* ---------- SkillCardView（前端 api/types.ts 契约） ---------- */
 export type SkillReason = 'own' | 'preset' | 'manual' | 'external' | 'shared';
@@ -58,13 +59,13 @@ function stateOf(r: CommonRow): SkillState {
 function acts(r: CommonRow): SkillAction[] {
   if (r.reason === 'own' || r.reason === 'external') {
     return [
-      action('collect', '归集到仓库', { title: '把这个技能复制进你的仓库，之后各 Agent / 项目都能共享；本目录里的原技能保持不动' }),
-      action('delete', '删除', { title: '从本目录移除这个技能（不可撤销）' }),
+      action('collect', t('card.collect'), { title: t('card.collect.title') }),
+      action('delete', t('card.delete'), { title: t('card.delete.title') }),
     ];
   }
   // 共享标准目录里的技能由该目录自己的策略管理，本 Agent 无权开关/删除，这里不给操作
   if (r.reason === 'shared') return [];
-  return [action('toggle', r.wanted ? '停用' : '启用', { title: r.wanted ? '停用此技能（取消分发）' : '启用此技能' })];
+  return [action('toggle', r.wanted ? t('card.disable') : t('card.enable'), { title: r.wanted ? t('card.disable.title') : t('card.enable.title') })];
 }
 
 /** agent 上下文行 → SkillCardView */

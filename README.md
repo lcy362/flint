@@ -1,183 +1,188 @@
 # Flint
 
+> English | [简体中文](./README.zh-CN.md)
+
 > **Flint** · `local-skills-hub`
-> 黑曜石收藏知识,燧石点燃技能。
+> Obsidian collects knowledge; flint sparks skills.
 
-**让 skill 成为个人资产。**
+**Make skills a personal asset.**
 
-Flint 是一个本地优先的个人 AI Skills 资产管理器——集中管理你所有 Agent 使用的 skill，统一打标签、筛选、去重、投放到各 Agent 与项目目录。技能只以普通文件存在于本地磁盘，你可以用 git 或任何喜欢的方式版本化；迁移到别的工具、别的生态，这份资产照常带走、照常使用，不被 Flint 绑定。
+Flint is a local-first personal AI skills asset manager — it centralizes the skills used by all of your agents, with unified tagging, filtering, deduplication, and deployment into agent and project directories. Skills exist only as plain files on your local disk, versionable with git or whatever you prefer; if you move to another tool or ecosystem, the asset comes with you and keeps working — you are never locked in by Flint.
 
-## 为什么叫 Flint
+## Why "Flint"
 
-黑曜石（Obsidian）是一种天然锋利的火山玻璃，远古人类把它打制成刀刃，是最早的工具材料之一。知识管理软件 Obsidian 正是取意于此——愿你把沉淀的知识打磨成趁手的利器。
+Obsidian is a naturally sharp volcanic glass that early humans knapped into blades — one of the earliest tool materials. The knowledge app Obsidian takes its name from this: may you hone what you have learned into a handy edge.
 
-**Flint（燧石）** 是与黑曜石并肩的另一块「工具之石」。Flint 沿用同一套「以石喻工具」的命名脉络，只是把打磨的对象从「知识」换成「技能」，并将燧石的两层特性对应到本项目的两大动作：
+**Flint** is the other "tool stone", a companion to obsidian. Flint follows the same "stone as tool" naming lineage, only it polishes **skills** instead of knowledge, and maps flint's two properties onto the product's two core actions:
 
-- **打制（knapping）**——把一块原石敲成精确趁手的工具：把散落各处的 skill 收拢、去重、打标签，整理成可复用的个人资产。
-- **取火（spark）**——燧石与钢相击迸出火花：把技能投放 / 分发到各个 Agent 与项目目录，让它们真正被点燃、开始干活。
+- **Knapping** — striking a raw stone into a precise, handy tool: gather scattered skills, deduplicate them, tag them, and turn them into reusable personal assets.
+- **Spark** — flint striking steel produces sparks: deploy / distribute skills into agent and project directories so they are truly ignited and start doing work.
 
-> 你收藏的每一项技能，都是等待被击出火花的一块燧石。
+> Every skill you collect is a piece of flint waiting to strike a spark.
 
-## 与 Obsidian 一脉相承的理念
+## A philosophy in line with Obsidian
 
-Flint 的核心思路与 [Obsidian](https://obsidian.md/) 完全一致——只是把管理对象从「知识」换成了「技能」。Obsidian 官网对自己理念的原话是：
+Flint's core idea is exactly the same as [Obsidian](https://obsidian.md/)'s — only the object of management changes from "knowledge" to "skills". Obsidian's own words about its philosophy:
 
 > **Sharpen your thinking.** The free and flexible app for your private thoughts.
 >
-> **Your thoughts are yours.** “Obsidian stores notes privately on your device… No one else can read them, not even us.”
+> **Your thoughts are yours.** "Obsidian stores notes privately on your device… No one else can read them, not even us."
 >
-> **Your knowledge should last.** “Obsidian uses open file formats, so you’re never locked in. You own your data for the long term.”
+> **Your knowledge should last.** "Obsidian uses open file formats, so you're never locked in. You own your data for the long term."
 
-这三条，Flint 逐条对齐：
+Flint aligns with each of these:
 
-| Obsidian 的理念 | Flint 的对应 |
+| Obsidian's philosophy | Flint's counterpart |
 |------|------|
-| **本地即私有**：笔记私密地存在你的设备上，别人读不到，连官方也读不到 | 技能只以普通文件存在你的本地磁盘，无云端、无账号、无上报；元数据落在开源生态共识的位置，而非私有数据库 |
-| **开放格式、永不锁定**：用开放文件格式，你永远不被锁死，长期拥有自己的数据 | skill 本体就是磁盘上的 `SKILL.md` 目录，随时可打开、编辑、diff、用 git 提交；换工具、换生态，这份资产照常带走、照常使用，不被 Flint 绑定 |
-| **磨砺你的思考**：Obsidian 让个人知识库越用越锋利 | Flint 让个人技能库越攒越趁手——收拢、去重、打标签，再一键投放到需要它的 Agent 与项目里 |
+| **Local and private**: notes live privately on your device; no one else can read them, not even the vendor | Skills exist only as plain files on your local disk — no cloud, no account, no telemetry; metadata lives where the open ecosystem agrees on, not in a proprietary database |
+| **Open formats, never locked in**: open file formats mean you are never locked out and own your data long term | A skill's body is just a `SKILL.md` directory on disk — open, edit, diff, and commit it with git at any time; switch tools or ecosystems and the asset comes with you, never locked in by Flint |
+| **Sharpen your thinking**: Obsidian makes your personal knowledge base sharper with use | Flint makes your personal skill library handier as it grows — collect, deduplicate, tag, then deploy in one click to the agents and projects that need it |
 
-一句话：**Obsidian 让你拥有并磨砺自己的知识，Flint 让你拥有并磨砺自己的技能。** 二者共享同一套「本地优先、文件即资产、永不锁定」的底层信念。
+In one sentence: **Obsidian lets you own and sharpen your knowledge; Flint lets you own and sharpen your skills.** Both share the same underlying beliefs — local-first, files as assets, never locked in.
 
-## 文档导航
+## Documentation
 
-| 文档 | 内容 |
+| Document | Contents |
 |------|------|
-| `README.md`（本文件） | 快速上手与功能概览 |
-| [`AGENTS.md`](./AGENTS.md) | 面向 AI 编码助手 / 贡献者的开发指引（架构要点、约定、命令） |
-| [`docs/PRD.md`](./docs/PRD.md) | 产品需求（功能、规则、验收标准） |
-| [`docs/TECH.md`](./docs/TECH.md) | 技术架构（数据模型、同步引擎、API、前端） |
+| This file / [README.zh-CN.md](./README.zh-CN.md) | Quick start and feature overview |
+| [`AGENTS.md`](./AGENTS.md) | Development guide for AI coding assistants / contributors (architecture, conventions, commands) |
+| [`docs/PRD.md`](./docs/PRD.md) | Product requirements (features, rules, acceptance criteria) |
+| [`docs/TECH.md`](./docs/TECH.md) | Technical architecture (data model, sync engine, API, frontend) |
 
-## 核心理念
+## Core ideas
 
-### 让 skill 成为个人资产
+### Make skills a personal asset
 
-你的 skill 仓库是你自己的、**与任何单一系统都不强相关**的个人资产。它只存在于本地文件系统里，你可以用 git 或任何你喜欢的系统进行管理和版本控制；将来迁移到别的工具、别的生态，这份「资产」照常带走照常使用，不被本工具绑定。
+Your skill repository is your own personal asset, **not tied to any single system**. It lives only on your local filesystem; manage and version it with git or anything you like. If you later move to another tool or ecosystem, the asset comes with you and keeps working — never locked in by this tool.
 
-### 你的 skill 是你的文件
+### Your skills are your files
 
-skill 本体就是磁盘上的普通目录（`SKILL.md`），标签等元数据用开源生态认可的方式存放，而不是私有数据库。你随时可以直接打开、编辑、diff、提交这些文件——你始终握有全部数据。
+A skill's body is just an ordinary directory on disk (`SKILL.md`), and metadata such as tags is stored in ways the open ecosystem agrees on, not in a private database. You can open, edit, diff, and commit these files at any time — you always hold all of the data.
 
-### 尽量贴合开源生态
+### Stay close to the open ecosystem
 
-标签等元数据优先落在生态已有的共识位置：
+Tags and other metadata land in places the ecosystem already agrees on:
 
-- **Skill 文件顶层 `tags`（推荐）**：写在每个 `SKILL.md` 的 frontmatter 顶层，被 Claude Code、agentskills.io 等 40+ 工具原生读取，随 skill 目录和 git 一并版本化。
-- **本工具暂存 + 可迁移**：尚未回写 frontmatter 的标签暂存于本地配置；技能库的「标签迁移」或诊断页可一键写回 `SKILL.md`。
+- **Top-level `tags` in the skill file (recommended)**: written into the frontmatter of each `SKILL.md`, natively read by 40+ tools including Claude Code and agentskills.io, and versioned together with the skill directory and git.
+- **Staged here + migratable**: tags not yet written back to frontmatter are staged in local config; the Library's "tag migration" or the Health page can write them back to `SKILL.md` in one click.
 
-### 尽量降低生态碎片化
+### Reduce ecosystem fragmentation
 
-同名 skill 多来源时自动去重保留一份；重复、分歧、失效引用都集中在诊断页看清并就地处理，避免同一份 skill 在环境中以多个副本反复膨胀。
+When same-named skills come from multiple sources, deduplication keeps one copy; duplicates, divergence, and broken references are surfaced on the Health page and handled in place — avoiding the same skill ballooning into multiple copies across your environment.
 
-## 功能一览
+## Features at a glance
 
-| 模块 | 能力 |
+| Module | Capabilities |
 |------|------|
-| **技能库** | 浏览 / 搜索 / 过滤全部 skill；`SKILL.md` 预览、标签编辑、来源追溯；登记 / 编辑自有仓库与第三方仓库；从 Agent 归集、从目录导入 |
-| **智能体** | 一个实际技能目录一张卡片（同目录 Agent 合卡并共用一套策略）；设活跃、覆盖目录、手动同步、关联预设、逐个开关技能、按技能切换软链 / 复制 |
-| **预设** | 一组 skill 套餐（显式成员 ∪ 关联标签命中）；无启用开关，成员 / 标签一变即刻分发到活跃 Agent |
-| **项目** | 登记项目 + 标签 → 期望集自动派生；本体复制到 `.agents/skills`（可提交 git），各 Agent 项目目录软链共享；支持归集 / 接管 / 回写仓库 |
-| **诊断** | 6 维度体检（同步 / 重复 / 失效软链 / 配置 / 仓库 / 项目），支持一键修复（先确认再执行） |
-| **设置** | 默认安装方式（软链 / 复制）、可选复制 watcher、自定义 Agent、日志查看 / 下载 / 复制诊断 |
+| **Library** | Browse / search / filter all skills; `SKILL.md` preview, tag editing, provenance; register / edit own and third-party repositories; collect from agents, import from directories |
+| **Agents** | One card per actual skill directory (agents sharing a directory merge into one card and share one strategy); set active, override directories, manual sync, linked preset, per-skill toggles, per-skill symlink / copy |
+| **Presets** | A skill bundle (explicit members ∪ linked-tag matches); no enable switch — membership or tag changes deploy to active agents immediately |
+| **Projects** | Register a project + tags → the desired set derives automatically; bodies are copied into `.agents/skills` (git-committable) and shared by symlink into each agent's project directory; supports collect / takeover / push back to repository |
+| **Health** | 6-dimension checkup (sync / duplicates / broken links / config / repositories / projects) with one-click fixes (confirm before running) |
+| **Settings** | Interface language (English / Chinese), default install mode (symlink / copy), optional copy watcher, custom agents, log viewing / download / copy diagnostics |
 
-## 第一次使用
+## First run
 
-整个流程分「必要」与「进阶」两层。**迈出第一步，只需要四条必要步骤：安装、登记仓库、新建预设、把预设应用到 Agent。**
+The workflow has two layers — "essential" and "advanced". **Getting started takes four essential steps: install, register a repository, create a preset, and apply the preset to an agent.**
 
-### ✅ 必要流程
+### ✅ Essential workflow
 
-#### 1. 安装
+#### 1. Install
 
-环境要求：Node.js ≥ 20。
+Requires Node.js ≥ 20.
 
-一键启动（推荐）：
+One-click start (recommended):
 
 ```bash
 ./start.sh
 ```
 
-脚本会自动检查 Node.js 版本、依赖与端口占用，等前端就绪后在浏览器打开页面；终端按 `Ctrl+C` 停止服务。
+The script checks the Node.js version, dependencies, and port availability, then opens the page in your browser once the frontend is ready; press `Ctrl+C` in the terminal to stop.
 
-- 首次运行会自动执行 `npm install`
-- 端口被占用时会提示处理，`./start.sh -y` 可直接结束占用进程；参数说明见 `./start.sh -h`
-- 自定义端口：`CLIENT_PORT=5174 SERVER_PORT=8788 ./start.sh`
+- The first run runs `npm install` automatically
+- If a port is occupied you will be prompted; `./start.sh -y` kills the occupying process directly. See `./start.sh -h` for options
+- Custom ports: `CLIENT_PORT=5174 SERVER_PORT=8788 ./start.sh`
 
-或手动启动：
+Or start manually:
 
 ```bash
 npm install
 npm run dev
 ```
 
-- 前端（Web UI）：http://localhost:5173/
-- 后端（API）：http://localhost:8787/
+- Frontend (Web UI): http://localhost:5173/
+- Backend (API): http://localhost:8787/
 
-配置与日志存在 `~/.skills-hub/`（`config.json` 与 `logs/app.log`）。
+Config and logs live in `~/.skills-hub/` (`config.json` and `logs/app.log`).
 
-#### 2. 登记仓库
+#### 2. Register a repository
 
-仓库是 skill 的集合 / 事实源，对应磁盘上一个目录。在「技能库」页底部的「仓库」区点 **「登记仓库」**：
+A repository is the collection / source of truth for skills, mapped to a directory on disk. At the bottom of the **Library** page, in the "Repositories" section, click **Register repository**:
 
-- **自有仓库**：填标识 ID 与目录路径，选择布局（默认 `auto` 自动检测）。路径框右侧「选择…」可调起系统目录选择器。
-- **第三方仓库**：同样登记，作为只读来源维护（`linked`），其技能可被自有仓库「导入」收用。
+- **Own repository**: enter an ID and a directory path, choose a layout (`auto` detection by default). The "Choose…" button next to the path field opens the native system directory picker.
+- **Third-party repository**: registered the same way and maintained as a read-only source (`linked`); its skills can be "imported" into own repositories.
 
-#### 3. 新建预设
+#### 3. Create a preset
 
-在侧栏「预设」页点「新建预设」，填名称即可创建；进入详情页增删技能或关联标签。一个预设就是一份 skill 套餐。
+On the "Presets" page in the sidebar, click "New preset" and give it a name; open the detail page to add skills or link tags. A preset is a skill bundle.
 
-#### 4. 把预设应用到 Agent
+#### 4. Apply the preset to an agent
 
-打开某个 Agent 的详情页：
+Open an agent's detail page:
 
-- 先把该 Agent **「设为活跃」**（加入活跃集合，即刻同步就位）；
-- 再把「关联预设」选成刚建的预设。
+- First **set the agent as active** (joins the active set and syncs immediately);
+- Then choose your new preset under "Linked preset".
 
-此后预设增删技能 / 关联标签，已关联它的活跃 Agent 会立刻拿到这套 skill。再到项目或 Agent 里使用它们即可。
+From then on, whenever the preset gains or loses skills / linked tags, active agents linked to it receive the change immediately. Use the skills in projects or agents as needed.
 
-> 预设只发给**关联了它**的 Agent：不关联就是不关联，不会「跟随全部预设」。不关联预设的 Agent 也能用——在其详情页逐个开关 skill 即可。
+> A preset is only delivered to agents **linked to it**: no link means no follow — presets are never applied globally. Agents without a linked preset still work — toggle skills individually on their detail pages.
 >
-> 预设没有单独的开关：成员或标签一变即刻分发。未加入活跃集合的 Agent 不会自动跟随，但在其详情页的任何手动操作都会立即对账。
+> Presets have no separate enable switch: membership or tag changes deploy immediately. Agents outside the active set do not follow automatically, but any manual action on their detail page reconciles immediately.
 
-> 至此，「登记仓库 → 配 preset → 投给 Agent」的最小通路已打通，你的 skill 已经可以工作。
+> At this point the minimal path "register repository → configure preset → deliver to agent" is complete, and your skills are live.
 
-### 🔸 进阶（可选）
+### 🔸 Advanced (optional)
 
-- **归集 skill**：自有仓库卡片点「添加技能」→「从 Agent 归集」，按 Agent 分组挑选 skill（可整组全选）；确认页按名字合并候选，仓库已有同名时可选择「保持现状」或「用某个 Agent 版本覆盖」；确认后逐项展示写入路径再执行。也可在 Agent 详情页、项目详情页对单条技能「归集到仓库」。
-- **接管**：把 Agent 目录里的条目替换为**指向仓库副本的软链**（只留一份本体）；项目里则替换为**真实副本**（`.agents` 要提交、跨机器自包含）。
-- **导入外部目录**：自有仓库「添加技能」→「从目录导入」，添加数据源目录（可调起系统目录选择器，每行一个；支持扁平 / 嵌套分类 / 带索引清单三类结构）→「识别」→「开始导入」；同名自动去重，源目录仅作数据源、不登记进系统。
-- **浏览与筛选**：所有列表统一支持「卡片 / 列表」两种视图（默认卡片，偏好全局记忆）；「技能库」的搜索、来源、标签、未打标签条件集中在同一条筛选栏，条件生效时右侧出现「重置」一键清空。
-- **打标签**：「技能库」点卡片打开详情，标签区增删；详情内可直接预览 `SKILL.md`、查看来源追溯。
-- **页面状态随地址保存**：一级页面、二级详情与筛选条件都写进地址栏，刷新或分享链接都能回到同一视图。
-- **项目专属 skill**：用「项目」模块登记路径 + 标签，匹配的 skill 进入项目 `.agents/`；改动后可「回写仓库」，也可把项目技能目录投放到各 Agent 的项目级目录。
-- **诊断与修复**：「诊断」页做 6 维度体检（同步 / 重复 / 失效软链 / 配置 / 仓库 / 项目），支持一键修复（先确认再执行）。
-- **同步策略**：默认软链；在 Agent 详情页可按 Agent 或按单个技能切换为复制。复制模式如需增量同步，到「设置」按需开启 watcher（默认关闭）。
+- **Collect skills**: on an own-repository card, click "Add skills" → "Collect from agents", pick skills grouped by agent (select a whole group at once); the confirmation page merges candidates by name, and when the repository already has a same-named skill you can "keep as is" or "overwrite with an agent's version"; after confirming, each write path is shown before execution. You can also "Collect to repository" for a single skill on agent and project detail pages.
+- **Take over**: replace entries in an agent directory with **symlinks to the repository copy** (keep only one body); in projects they are replaced with **real copies** (`.agents` is committed and self-contained across machines).
+- **Import external directories**: own repository "Add skills" → "Import from folders", add source directories (system picker available, one per line; flat / nested categories / indexed catalog structures are supported) → "Detect" → "Start import"; same names are deduplicated automatically, and source directories serve as data sources only and are not registered.
+- **Browsing and filtering**: all lists support "cards / list" views (cards by default; the preference is remembered globally); the Library's search, source, tag, and untagged filters live in one filter bar, with a "Reset" button appearing when filters are active.
+- **Tagging**: click a card in the Library to open its detail; add or remove tags in the tag area; preview `SKILL.md` and view provenance right there.
+- **Page state lives in the URL**: top-level pages, detail views, and filter conditions are all encoded in the address bar, so refreshes and shared links restore the same view.
+- **Project-specific skills**: register a path + tags in the "Projects" module; matching skills enter the project's `.agents/`; changes can be "pushed back to the repository", and the project skill directory can be deployed into each agent's project-level directory.
+- **Health and fixes**: the "Health" page runs a 6-dimension checkup (sync / duplicates / broken links / config / repositories / projects) with one-click fixes (confirm before running).
+- **Sync strategy**: symlink by default; switch to copy per agent or per skill on the agent detail page. For incremental sync in copy mode, enable the watcher in "Settings" (off by default).
+- **Interface language**: switch between English and Chinese on the "Settings" page; the change applies to UI copy and to messages returned by the server, and the preference is remembered locally.
 
-## 项目结构
+## Project structure
 
 ```
 flint/  (local-skills-hub)
-├─ start.sh          # 一键启动（环境 / 依赖 / 端口检查 → 启动 → 打开浏览器）
-├─ README.md         # 本文件
-├─ AGENTS.md         # 开发指引（面向 AI 助手 / 贡献者）
+├─ start.sh          # One-click start (env / deps / port checks → start → open browser)
+├─ README.md         # English guide (default, this file)
+├─ README.zh-CN.md   # Chinese guide
+├─ AGENTS.md         # Development guide (for AI assistants / contributors)
 ├─ docs/
-│  ├─ PRD.md         # 产品需求
-│  └─ TECH.md        # 技术架构
-├─ server/           # 后端（Node + TS + Express）：扫描、同步、配置、诊断
-└─ client/           # 前端（React + TS + Vite）：技能库 / 智能体 / 预设 / 项目 / 诊断 / 设置
+│  ├─ PRD.md         # Product requirements
+│  └─ TECH.md        # Technical architecture
+├─ server/           # Backend (Node + TS + Express): scanning, sync, config, diagnostics
+└─ client/           # Frontend (React + TS + Vite): Library / Agents / Presets / Projects / Health / Settings
 ```
 
-## 开发
+## Development
 
 ```bash
-npm install            # 安装依赖（npm workspaces）
-npm run dev            # 并行启动前后端
-npm run dev:server     # 只启动后端（tsx watch）
-npm run dev:client     # 只启动前端（vite）
-npm run build          # 构建：server (tsc) + client (vite build)
-npm start              # 以构建产物启动后端
+npm install            # Install dependencies (npm workspaces)
+npm run dev            # Start frontend and backend together
+npm run dev:server     # Backend only (tsx watch)
+npm run dev:client     # Frontend only (vite)
+npm run build          # Build: server (tsc) + client (vite build)
+npm start              # Start the backend from build output
 ```
 
-- 端口：后端 `8787`（`PORT`），前端 `5173`（`CLIENT_PORT`）；Vite 将 `/api` 代理到后端。
-- 端到端 smoke（使用临时目录，不污染本机）：`cd server && npx tsx smoke.ts`。
-- 配置 / 日志位置：`~/.skills-hub/config.json`、`~/.skills-hub/logs/app.log`（可用 `SKILLS_HUB_CONFIG` 覆盖配置路径）。
+- Ports: backend `8787` (`PORT`), frontend `5173` (`CLIENT_PORT`); Vite proxies `/api` to the backend.
+- End-to-end smoke (uses a temp directory, never touches your machine): `cd server && npx tsx smoke.ts`.
+- Config / log locations: `~/.skills-hub/config.json`, `~/.skills-hub/logs/app.log` (override the config path with `SKILLS_HUB_CONFIG`).
+- Logs are always written in English for easy searching and issue reporting; the interface supports English and Chinese.
 
-更多架构与约定见 [`docs/TECH.md`](./docs/TECH.md)，开发约定见 [`AGENTS.md`](./AGENTS.md)。
+See [`docs/TECH.md`](./docs/TECH.md) for architecture and conventions, and [`AGENTS.md`](./AGENTS.md) for the development guide.

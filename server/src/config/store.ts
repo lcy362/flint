@@ -69,7 +69,7 @@ export class ConfigStore {
     } catch (e) {
       // 首次运行（文件不存在，ENOENT）属正常；存在但解析失败（SyntaxError）需提示
       const missing = (e as NodeJS.ErrnoException).code === 'ENOENT';
-      (missing ? log.info : log.warn)('config', `配置文件${missing ? '不存在，按默认值启动' : `解析失败，按默认值启动: ${(e as Error).message}`}`, { file: this.filePath });
+      (missing ? log.info : log.warn)('config', missing ? 'Config file missing, starting with defaults' : `Config file parse failed, starting with defaults: ${(e as Error).message}`, { file: this.filePath });
       parsed = {};
     }
     const cfg: HubConfig = {
@@ -89,7 +89,7 @@ export class ConfigStore {
     } as HubConfig;
     this.migrateAgentKeys(cfg);
     if (cfg.schemaVersion !== emptyConfig().schemaVersion) {
-      log.info('config', `schemaVersion 迁移 ${cfg.schemaVersion} → ${emptyConfig().schemaVersion}`, { file: this.filePath });
+      log.info('config', `schemaVersion migration ${cfg.schemaVersion} -> ${emptyConfig().schemaVersion}`, { file: this.filePath });
       cfg.schemaVersion = emptyConfig().schemaVersion;
       this.cfg = cfg;
       this.save();
@@ -102,7 +102,7 @@ export class ConfigStore {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       fs.writeFileSync(this.filePath, JSON.stringify(this.cfg, null, 2), 'utf-8');
     } catch (e) {
-      log.error('config', `保存配置失败: ${(e as Error).message}`, { file: this.filePath });
+      log.error('config', `Failed to save config: ${(e as Error).message}`, { file: this.filePath });
       throw e;
     }
   }

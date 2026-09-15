@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import { useI18n } from '../../i18n';
 
 export type BadgeTone = 'neutral' | 'accent' | 'good' | 'warn' | 'bad' | 'info';
 
@@ -23,28 +24,29 @@ export default function BadgeLegend({
   title,
   intro,
   items,
-  triggerLabel = '标签说明',
+  triggerLabel,
 }: {
   /** 弹窗标题 */
   title: string;
   /** 弹窗顶部的总说明 */
   intro: ReactNode;
   items: BadgeLegendItem[];
-  /** 入口按钮文字 */
+  /** 入口按钮文字（缺省用通用「标签说明」） */
   triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useI18n();
   return (
     <>
       <Button variant="ghost" size="sm" title={title} onClick={() => setOpen(true)}>
-        {triggerLabel}
+        {triggerLabel ?? t('badge.legend.trigger')}
       </Button>
       <Modal
         open={open}
         title={title}
         width={620}
         onClose={() => setOpen(false)}
-        footer={<Button variant="ghost" onClick={() => setOpen(false)}>知道了</Button>}
+        footer={<Button variant="ghost" onClick={() => setOpen(false)}>{t('common.ok')}</Button>}
       >
         <p className="badge-legend__intro">{intro}</p>
         <div className="badge-legend">

@@ -1,12 +1,13 @@
 import type { Tab } from '../../state/store';
+import { useI18n, type MsgKey } from '../../i18n';
 
-const ITEMS: { key: Tab; label: string; icon: string }[] = [
-  { key: 'library', label: '技能库', icon: '◈' },
-  { key: 'agents', label: '智能体', icon: '◉' },
-  { key: 'presets', label: '预设', icon: '□' },
-  { key: 'projects', label: '项目', icon: '❐' },
-  { key: 'health', label: '诊断', icon: '◎' },
-  { key: 'settings', label: '设置', icon: '⚙' },
+const ITEMS: { key: Tab; label: MsgKey; icon: string }[] = [
+  { key: 'library', label: 'nav.library', icon: '◈' },
+  { key: 'agents', label: 'nav.agents', icon: '◉' },
+  { key: 'presets', label: 'nav.presets', icon: '□' },
+  { key: 'projects', label: 'nav.projects', icon: '❐' },
+  { key: 'health', label: 'nav.health', icon: '◎' },
+  { key: 'settings', label: 'nav.settings', icon: '⚙' },
 ];
 
 export default function NavRail({
@@ -18,6 +19,7 @@ export default function NavRail({
   onSelect: (t: Tab) => void;
   counts?: Partial<Record<Tab, number>>;
 }) {
+  const { t } = useI18n();
   return (
     <nav className="rail scroll">
       <div className="rail__brand">
@@ -26,7 +28,7 @@ export default function NavRail({
         </span>
         <span className="rail__tag">local</span>
       </div>
-      <div className="rail__label">导航</div>
+      <div className="rail__label">{t('nav.label')}</div>
       {ITEMS.map((it) => (
         <button
           key={it.key}
@@ -34,12 +36,12 @@ export default function NavRail({
           onClick={() => onSelect(it.key)}
         >
           <span style={{ opacity: 0.8 }}>{it.icon}</span>
-          {it.label}
+          {t(it.label)}
           {counts?.[it.key] !== undefined && <span className="count">{counts[it.key]}</span>}
         </button>
       ))}
       <div className="rail__foot">
-        <span>本地技能资产库</span>
+        <span>{t('nav.footer')}</span>
         <span className="mono">v0.1</span>
       </div>
     </nav>

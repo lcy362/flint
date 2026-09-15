@@ -1,20 +1,24 @@
 import { log } from '../log/logger';
+import { getLang } from '../i18n';
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  // 把当前界面语言带给服务端，使返回的用户可见消息（错误 / 诊断等）与之保持一致
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept-Language': getLang(),
+    ...(init?.headers as Record<string, string> | undefined),
+  };
   try {
-    res = await fetch(`/api${path}`, {
-      headers: { 'Content-Type': 'application/json' },
-      ...init,
-    });
+    res = await fetch(`/api${path}`, { ...init, headers });
   } catch (e) {
-    log.error('api', `请求失败: ${(e as Error).message}`, { method: init?.method ?? 'GET', path });
+    log.error('api', `Request failed: ${(e as Error).message}`, { method: init?.method ?? 'GET', path });
     throw e;
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const message = (body as any)?.error ?? `HTTP ${res.status}`;
-    log.error('api', `请求失败`, { method: init?.method ?? 'GET', path, status: res.status, message });
+    log.error('api', 'Request failed', { method: init?.method ?? 'GET', path, status: res.status, message });
     throw new Error(message);
   }
   return res.json() as Promise<T>;

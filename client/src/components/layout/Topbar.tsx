@@ -1,4 +1,5 @@
 import Button from '../ui/Button';
+import { useI18n } from '../../i18n';
 
 export default function Topbar({
   title,
@@ -15,6 +16,7 @@ export default function Topbar({
   onReload?: () => void;
   reloading?: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <header className="topbar">
       <div>
@@ -26,11 +28,11 @@ export default function Topbar({
       <div className="topbar__spacer" />
       <div className="topbar__actions">
         {onReload && (
-          <Button variant="ghost" size="sm" onClick={onReload} title="刷新">
+          <Button variant="ghost" size="sm" onClick={onReload} title={t('topbar.refresh')}>
             <span className={reloading ? 'topbar__reload' : ''}>↻</span>
           </Button>
         )}
-        <Button variant="ghost" size="sm" onClick={onToggleTheme} title="切换主题" aria-label="切换主题">
+        <Button variant="ghost" size="sm" onClick={onToggleTheme} title={t('topbar.toggleTheme')} aria-label={t('topbar.toggleTheme')}>
           {theme === 'dark' ? '☾' : '☀'}
         </Button>
       </div>

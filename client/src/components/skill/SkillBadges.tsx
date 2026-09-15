@@ -1,80 +1,100 @@
 import type { SkillCardView, SkillReason, SkillStore } from '../../api/types';
 import type { BadgeLegendItem } from '../common/BadgeLegend';
 import Badge from '../ui/Badge';
+import type { TFunc } from '../../i18n';
 
-const REASON_LABEL: Record<SkillReason, string> = {
-  own: '自带',
-  preset: '预设引入',
-  external: '外部软链',
-  manual: '',
-  shared: '',
-};
+/** 来源原因徽标文字（manual / shared 不以来源徽标表达，返回空串） */
+function reasonLabel(t: TFunc, r: SkillReason): string {
+  switch (r) {
+    case 'own':
+      return t('badge.reason.own');
+    case 'preset':
+      return t('badge.reason.preset');
+    case 'external':
+      return t('badge.reason.external');
+    default:
+      return '';
+  }
+}
 
-const REASON_TITLE: Record<SkillReason, string> = {
-  own: '它是这个目录里本来就有的技能，还没纳入技能库；可执行「归集到仓库」统一管理',
-  preset: '由关联的预设组引入',
-  external: '这个软链指向仓库之外（不在任何已登记仓库内），因此不算被接管；按自带技能同样处理：可以归集入库，也可以接管（接管后本目录改为指向仓库副本）',
-  manual: '由用户手动加入',
-  shared: '它在该 Agent 额外读取的共享标准目录里：放到那里的技能它直接可用，但不由本 Agent 的分发策略管理（只读）',
-};
+/** 来源原因徽标的解释文案 */
+function reasonTitle(t: TFunc, r: SkillReason): string {
+  switch (r) {
+    case 'own':
+      return t('badge.reason.own.title');
+    case 'preset':
+      return t('badge.reason.preset.title');
+    case 'external':
+      return t('badge.reason.external.title');
+    case 'shared':
+      return t('badge.reason.shared.title');
+    default:
+      return t('badge.reason.manual.title');
+  }
+}
 
 // 全站统一用「软链 / 复制」描述装入形态（安装方式下拉、技能库接管等都用同一个词）
-const STORE_LABEL: Partial<Record<SkillStore, string>> = {
-  symlink: '软链',
-  copy: '复制',
-  pending: '待部署',
-};
+function storeLabel(t: TFunc, s: SkillStore): string | undefined {
+  switch (s) {
+    case 'symlink':
+      return t('badge.store.symlink');
+    case 'copy':
+      return t('badge.store.copy');
+    case 'pending':
+      return t('badge.store.pending');
+    default:
+      return undefined;
+  }
+}
 
-const STORE_TITLE: Partial<Record<SkillStore, string>> = {
-  symlink: '以软链接指向技能库里的本体：不复制文件、不占额外空间，技能库一改就即时生效',
-  copy: '复制了一份独立副本到这个目录：技能库的改动不会自动跟进，需要重新「同步」',
-  pending: '已列入分发名单，但还没有写入技能目录',
-};
-
-/** 状态徽标文案：只说明「本工具对该技能的处置」 */
-const STATE_LABEL = { on: '启用', off: '已停用', unmanaged: '未纳管' } as const;
-
-const STATE_TITLE: Record<keyof typeof STATE_LABEL, string> = {
-  on: '已列入该 Agent / 项目的分发名单，并且已经写入目录',
-  off: '曾由本工具分发到该目录，现在已移出分发名单',
-  unmanaged: '它存在于这个目录，但不属于本工具的分发范围（自带或外部链接），所以没有启用 / 停用开关',
-};
-
-export { REASON_LABEL, STORE_LABEL };
+function storeTitle(t: TFunc, s: SkillStore): string | undefined {
+  switch (s) {
+    case 'symlink':
+      return t('badge.store.symlink.title');
+    case 'copy':
+      return t('badge.store.copy.title');
+    case 'pending':
+      return t('badge.store.pending.title');
+    default:
+      return undefined;
+  }
+}
 
 /** 「标签说明」弹窗的数据源：与徽标本体共用同一份文案，避免两处各说各话 */
-export const SKILL_BADGE_LEGEND: BadgeLegendItem[] = [
-  { label: REASON_LABEL.own, tone: 'accent', desc: REASON_TITLE.own },
-  { label: REASON_LABEL.preset, tone: 'accent', desc: REASON_TITLE.preset },
-  { label: REASON_LABEL.external, tone: 'warn', desc: REASON_TITLE.external },
-  { label: STORE_LABEL.symlink!, tone: 'info', desc: STORE_TITLE.symlink! },
-  { label: STORE_LABEL.copy!, tone: 'info', desc: STORE_TITLE.copy! },
-  { label: STORE_LABEL.pending!, tone: 'warn', desc: STORE_TITLE.pending! },
-  { label: STATE_LABEL.on, tone: 'good', dot: 'good', desc: STATE_TITLE.on },
-  { label: STATE_LABEL.off, tone: 'neutral', dot: 'neutral', desc: STATE_TITLE.off },
-  { label: STATE_LABEL.unmanaged, tone: 'info', desc: STATE_TITLE.unmanaged },
-  { label: '只读', tone: 'info', desc: '来自该 Agent 额外读取的目录：直接可用，但不由本工具分发，这里不能开关。' },
-  { label: '已接管', tone: 'good', desc: '本目录这条是指向仓库内技能的软链：改仓库里那份，这里立刻生效，不再有第二份副本。' },
-];
+export function skillBadgeLegend(t: TFunc): BadgeLegendItem[] {
+  return [
+    { label: t('badge.reason.own'), tone: 'accent', desc: t('badge.reason.own.title') },
+    { label: t('badge.reason.preset'), tone: 'accent', desc: t('badge.reason.preset.title') },
+    { label: t('badge.reason.external'), tone: 'warn', desc: t('badge.reason.external.title') },
+    { label: t('badge.store.symlink'), tone: 'info', desc: t('badge.store.symlink.title') },
+    { label: t('badge.store.copy'), tone: 'info', desc: t('badge.store.copy.title') },
+    { label: t('badge.store.pending'), tone: 'warn', desc: t('badge.store.pending.title') },
+    { label: t('badge.state.on'), tone: 'good', dot: 'good', desc: t('badge.state.on.title') },
+    { label: t('badge.state.off'), tone: 'neutral', dot: 'neutral', desc: t('badge.state.off.title') },
+    { label: t('badge.state.unmanaged'), tone: 'info', desc: t('badge.state.unmanaged.title') },
+    { label: t('badge.readonly'), tone: 'info', desc: t('badge.readonly.title') },
+    { label: t('badge.takenOver'), tone: 'good', desc: t('badge.takenOver.title') },
+  ];
+}
 
 /** 开关的选中态：只有「在分发名单内」才算开启 */
 export function isOn(item: SkillCardView): boolean {
   return item.state === 'on';
 }
 
-export function reasonBadge(item: SkillCardView) {
-  const label = item.reasonLabel ?? REASON_LABEL[item.reason];
+export function reasonBadge(t: TFunc, item: SkillCardView) {
+  const label = item.reasonLabel ?? reasonLabel(t, item.reason);
   if (!label) return null; // manual 不再作为明显的来源标志展示
   // 外部软链不是本工具的产物（警示色）；共享目录读取只读且非本 Agent 分发（信息色）
   const tone = item.reason === 'external' ? 'warn' : item.reason === 'shared' ? 'info' : 'accent';
-  return <Badge tone={tone} title={item.reasonTitle ?? REASON_TITLE[item.reason]}>{label}</Badge>;
+  return <Badge tone={tone} title={item.reasonTitle ?? reasonTitle(t, item.reason)}>{label}</Badge>;
 }
 
-export function storeBadge(item: SkillCardView) {
-  const label = STORE_LABEL[item.store];
+export function storeBadge(t: TFunc, item: SkillCardView) {
+  const label = storeLabel(t, item.store);
   if (!label) return null; // own 不展示，避免「自建」这类含义不明徽标
   return (
-    <Badge tone={item.store === 'pending' ? 'warn' : 'info'} title={STORE_TITLE[item.store]}>
+    <Badge tone={item.store === 'pending' ? 'warn' : 'info'} title={storeTitle(t, item.store)}>
       {label}
     </Badge>
   );
@@ -86,18 +106,18 @@ export function storeBadge(item: SkillCardView) {
  * 只描述「本工具对该技能的处置」，不猜测技能本身是否被 Agent 使用 ——
  * 否则会和同一行的开关自相矛盾（例如"使用中"配一个关闭的开关）。
  */
-export function stateBadge(item: SkillCardView) {
+export function stateBadge(t: TFunc, item: SkillCardView) {
   // 共享标准目录里的技能：该 Agent 直接可用，但不由本工具分发，也不能在这里开关——用「只读」表达
   if (item.reason === 'shared') {
-    return <Badge tone="info" title="它在该 Agent 额外读取的共享标准目录里：直接可用，但不由本工具分发，这里不能开关。">只读</Badge>;
+    return <Badge tone="info" title={t('badge.readonly.title')}>{t('badge.readonly')}</Badge>;
   }
   switch (item.state) {
     case 'on':
-      return <Badge tone="good" dot="good" title={STATE_TITLE.on}>{STATE_LABEL.on}</Badge>;
+      return <Badge tone="good" dot="good" title={t('badge.state.on.title')}>{t('badge.state.on')}</Badge>;
     case 'off':
-      return <Badge tone="neutral" dot="neutral" title={STATE_TITLE.off}>{STATE_LABEL.off}</Badge>;
+      return <Badge tone="neutral" dot="neutral" title={t('badge.state.off.title')}>{t('badge.state.off')}</Badge>;
     case 'unmanaged':
-      return <Badge tone="info" title={STATE_TITLE.unmanaged}>{STATE_LABEL.unmanaged}</Badge>;
+      return <Badge tone="info" title={t('badge.state.unmanaged.title')}>{t('badge.state.unmanaged')}</Badge>;
     default:
       return null;
   }
@@ -114,34 +134,34 @@ export function dirBadge(item: SkillCardView) {
 }
 
 /** 已接管徽标：本目录这条是指向仓库内技能的软链 */
-export function takenOverBadge(item: SkillCardView) {
+export function takenOverBadge(t: TFunc, item: SkillCardView) {
   if (!item.takenOver) return null;
   return (
-    <Badge tone="good" title="已接管：本目录这条是指向仓库内技能的软链。改仓库里那份，这里立刻生效，不再有第二份副本。">
-      已接管
+    <Badge tone="good" title={t('badge.takenOver.title')}>
+      {t('badge.takenOver')}
     </Badge>
   );
 }
 
 /** 共享目录里的软链：store 徽标不适用，单独用一个中性「软链」徽标点明形态 */
-export function linkBadge(item: SkillCardView) {
+export function linkBadge(t: TFunc, item: SkillCardView) {
   if (item.reason !== 'shared' || !item.linkTarget) return null;
-  return <Badge tone="info" title={`软链，指向 ${item.linkTarget}`}>软链</Badge>;
+  return <Badge tone="info" title={t('badge.symlink.title', { target: item.linkTarget })}>{t('badge.symlink')}</Badge>;
 }
 
 /**
  * 统一渲染 reason / 目录 / store / preset 等徽标（卡片与列表行共用）。
  * 不含 state —— 状态由 EntityItem.status 单独展示在卡片右上角 / 行右侧。
  */
-export function skillBadges(item: SkillCardView) {
+export function skillBadges(t: TFunc, item: SkillCardView) {
   return (
     <>
-      {reasonBadge(item)}
+      {reasonBadge(t, item)}
       {dirBadge(item)}
-      {takenOverBadge(item)}
+      {takenOverBadge(t, item)}
       {/* 已接管本身就说清了形态，不再重复出「软链」 */}
-      {!item.takenOver && storeBadge(item)}
-      {linkBadge(item)}
+      {!item.takenOver && storeBadge(t, item)}
+      {linkBadge(t, item)}
       {item.preset && <Badge tone="accent">{item.preset}</Badge>}
     </>
   );

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import Button from './Button';
 import { useToast } from './Toast';
 import { pickDirectory, pickFile } from '../../api/picker';
+import { useI18n } from '../../i18n';
 
 interface BaseProps {
   label?: ReactNode;
@@ -25,6 +26,7 @@ export function PathField({
   disabled,
 }: BaseProps & { value: string; onChange: (v: string) => void; placeholder?: string }) {
   const toast = useToast();
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
 
   const pick = async () => {
@@ -52,7 +54,7 @@ export function PathField({
         />
         <span className="path-field__action">
           <Button type="button" size="sm" variant="ghost" loading={busy} disabled={disabled} onClick={() => void pick()}>
-            选择…
+            {t('path.pick')}
           </Button>
         </span>
       </div>
@@ -76,6 +78,7 @@ export function PathListField({
   disabled,
 }: BaseProps & { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
   const toast = useToast();
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
 
   const pick = async () => {
@@ -85,7 +88,7 @@ export function PathListField({
       if (!p) return;
       const lines = value.split('\n').map((s) => s.trim()).filter(Boolean);
       if (lines.includes(p)) {
-        toast.push('该路径已在列表中', 'bad');
+        toast.push(t('path.duplicate'), 'bad');
         return;
       }
       onChange([...lines, p].join('\n'));
@@ -102,7 +105,7 @@ export function PathListField({
         {label && <span className="field-label">{label}</span>}
         <span className="path-field__action">
           <Button type="button" size="sm" variant="ghost" loading={busy} disabled={disabled} onClick={() => void pick()}>
-            {mode === 'dir' ? '添加目录…' : '添加文件…'}
+            {mode === 'dir' ? t('path.addDir') : t('path.addFile')}
           </Button>
         </span>
       </div>

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { api, type AgentView, type PresetView, type StateView, type SkillCardView, type SkillView } from '../api/types';
 import SkillList from '../components/skill/SkillList';
 import { skillViewToCard } from '../components/skill/adapters';
-import { SKILL_BADGE_LEGEND } from '../components/skill/SkillBadges';
+import { skillBadgeLegend } from '../components/skill/SkillBadges';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
 import BadgeLegend from '../components/common/BadgeLegend';
 import FoldButton from '../components/common/FoldButton';
@@ -24,6 +24,7 @@ import { useAsync } from '../state/useAsync';
 import { useViewMode } from '../state/viewMode';
 import { useCollapsed } from '../state/collapse';
 import { navigate, useRoute } from '../state/router';
+import { useI18n } from '../i18n';
 
 /** 技能 id → 部署目录名（与后端 nameOf 一致，用于按技能名归一去重） */
 function skillDirName(id: string): string {
@@ -60,7 +61,7 @@ function effectiveSkills(preset: PresetView, skills: SkillView[]): EffectiveSkil
   if (tagSet.size > 0) {
     for (const s of skills) {
       if (seen.has(s.name)) continue;
-      if ((s.tags ?? []).some((t) => tagSet.has(t))) {
+      if ((s.tags ?? []).some((tag) => tagSet.has(tag))) {
         seen.add(s.name);
         out.push({ name: s.name, skill: s, via: 'tag' });
       }
@@ -84,6 +85,7 @@ function effectiveSkills(preset: PresetView, skills: SkillView[]): EffectiveSkil
  */
 export default function Presets() {
   const { data, loading, error, reload } = useAsync<StateView>(() => api('/state'));
+  const { t } = useI18n();
   const route = useRoute();
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -96,22 +98,22 @@ export default function Presets() {
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
-    data?.skills.forEach((s) => s.tags?.forEach((t) => set.add(t)));
+    data?.skills.forEach((s) => s.tags?.forEach((tag) => set.add(tag)));
     return [...set].sort();
   }, [data]);
 
   return (
     <>
       <PageHeader
-        title="预设"
-        sub={presets ? `共 ${presets.length} 组预设` : undefined}
-        actions={<Button onClick={() => setCreateOpen(true)}>新建预设</Button>}
+        title={t('nav.presets')}
+        sub={data ? t('presets.subtitle', { n: presets.length }) : undefined}
+        actions={<Button onClick={() => setCreateOpen(true)}>{t('presets.new')}</Button>}
       />
 
       {selectedName && !selected && (
         <LoadingBoundary
           state={{ loading, error, data }}
-          empty={{ title: '未找到该预设', hint: `没有名为「${selectedName}」的预设。`, icon: '◉' }}
+          empty={{ title: t('presets.notFound.title'), hint: t('presets.notFound.hint', { name: selectedName }), icon: '◉' }}
         >
           {() => null}
         </LoadingBoundary>
@@ -131,7 +133,7 @@ export default function Presets() {
       {!selectedName && (
         <LoadingBoundary
           state={{ loading, error, data }}
-          empty={{ title: '还没有预设', hint: '先「新建预设」填个名称，再进入详情页添加技能、关联标签。', icon: '□' }}
+          empty={{ title: t('presets.empty.title'), hint: t('presets.empty.hint'), icon: '□' }}
         >
           {(state) => (
             <EntityList
@@ -141,11 +143,11 @@ export default function Presets() {
                 return {
                   id: p.name,
                   title: p.name,
-                  sub: on.length ? `已开启 ${on.length} 个技能` : '尚未开启任何技能',
+                  sub: on.length ? t('presets.enabledCount', { n: on.length }) : t('presets.noneEnabled'),
                   onClick: () => open(p.name),
                 };
               })}
-              title={`全部预设（${presets.length}）`}
+              title={t('list.allPresets')}
             />
           )}
         </LoadingBoundary>
@@ -162,6 +164,7 @@ export default function Presets() {
 
 /** 新建预设：只填名称，创建后立即进入详情页做后续管理 */
 function CreatePresetModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (name: string) => void }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -176,7 +179,7 @@ function CreatePresetModal({ open, onClose, onCreated }: { open: boolean; onClos
     setBusy(true);
     try {
       const res = await api<PresetView>('/presets', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
-      toast.push('已创建，进入详情页添加技能', 'good');
+      toast.push(t('presets.created'), 'good');
       onCreated(res.name);
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
@@ -186,19 +189,19 @@ function CreatePresetModal({ open, onClose, onCreated }: { open: boolean; onClos
   return (
     <Modal
       open={open}
-      title="新建预设"
+      title={t('presets.new')}
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>取消</Button>
-          <Button variant="primary" loading={busy} disabled={!name.trim()} onClick={create}>创建</Button>
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={busy} disabled={!name.trim()} onClick={create}>{t('common.create')}</Button>
         </>
       }
     >
       <FieldInput
-        label="预设名称"
-        placeholder="例如：前端效能组"
-        hint="创建后进入详情页，再添加技能、关联标签"
+        label={t('presets.name')}
+        placeholder={t('presets.namePlaceholder')}
+        hint={t('presets.nameHint')}
         value={name}
         autoFocus
         onChange={(e) => setName(e.target.value)}
@@ -225,6 +228,7 @@ function PresetDetail({
   onBack: () => void;
   onChanged: () => void;
 }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [q, setQ] = useState('');
   /** 来源筛选默认只选中自有仓库 */
@@ -251,7 +255,7 @@ function PresetDetail({
   const save = async (patch: { skills?: string[]; tags?: string[] }, opts?: { silent?: boolean; noReload?: boolean }) => {
     try {
       await api(`/presets/${encodeURIComponent(preset.name)}`, { method: 'PUT', body: JSON.stringify(patch) });
-      if (!opts?.silent) toast.push('已保存', 'good');
+      if (!opts?.silent) toast.push(t('presets.saved'), 'good');
       if (!opts?.noReload) onChanged();
     } catch (e) {
       setDraftSkills(null);
@@ -262,7 +266,7 @@ function PresetDetail({
   const removePreset = async () => {
     try {
       await api(`/presets/${encodeURIComponent(preset.name)}`, { method: 'DELETE' });
-      toast.push('已删除', 'good');
+      toast.push(t('common.deleted'), 'good');
       onChanged();
       onBack();
     } catch (e) {
@@ -285,7 +289,7 @@ function PresetDetail({
     if (preset.tags.length === 0) return set;
     const ex = new Set(current);
     skills.forEach((s) => {
-      if (!ex.has(s.id) && s.tags.some((t) => preset.tags.includes(t))) set.add(s.id);
+      if (!ex.has(s.id) && s.tags.some((tag) => preset.tags.includes(tag))) set.add(s.id);
     });
     return set;
   }, [skills, preset.tags, current]);
@@ -300,12 +304,12 @@ function PresetDetail({
       card.toggleDisabled = auto;
       if (auto) {
         card.reason = 'preset';
-        card.reasonLabel = '按标签纳入';
-        card.reasonTitle = '该技能因打有本预设的关联标签而自动纳入，不可直接关闭；去掉对应标签即可停用';
+        card.reasonLabel = t('presets.autoTag');
+        card.reasonTitle = t('presets.autoTag.title');
       }
       return card;
     });
-  }, [skills, autoIds, current]);
+  }, [skills, autoIds, current, t]);
 
   const allSources = useMemo(() => {
     const set = new Set<string>();
@@ -315,7 +319,7 @@ function PresetDetail({
 
   const tagCounts = useMemo(() => {
     const m: Record<string, number> = {};
-    skills.forEach((s) => s.tags?.forEach((t) => { m[t] = (m[t] ?? 0) + 1; }));
+    skills.forEach((s) => s.tags?.forEach((tag) => { m[tag] = (m[tag] ?? 0) + 1; }));
     return m;
   }, [skills]);
 
@@ -325,10 +329,10 @@ function PresetDetail({
    */
   const tagOptions = useMemo(
     () =>
-      [...allTags, ...preset.tags.filter((t) => !allTags.includes(t))].map((t) => ({
-        label: t,
-        value: t,
-        count: tagCounts[t] ?? 0,
+      [...allTags, ...preset.tags.filter((tag) => !allTags.includes(tag))].map((tag) => ({
+        label: tag,
+        value: tag,
+        count: tagCounts[tag] ?? 0,
       })),
     [allTags, preset.tags, tagCounts]
   );
@@ -344,7 +348,7 @@ function PresetDetail({
     return cards.filter((c) => {
       // 多选条件之间为「或」：命中任一选中项即保留，与技能库一致
       if (srcs.length > 0 && !srcs.includes(c.source)) return false;
-      if (facets.length > 0 && !facets.some((t) => c.tags.includes(t))) return false;
+      if (facets.length > 0 && !facets.some((tag) => c.tags.includes(tag))) return false;
       if (kw) {
         const hay = `${c.name} ${c.title ?? ''} ${c.description ?? ''}`.toLowerCase();
         if (!hay.includes(kw)) return false;
@@ -408,11 +412,11 @@ function PresetDetail({
     badges: (
       <>
         {activeDirs.has(g.dir) ? (
-          <Badge tone="good" dot="good" title="这个技能目录有 Agent 在活跃集合里：本预设的变更会自动同步进去">已分发</Badge>
+          <Badge tone="good" dot="good" title={t('presets.deployed.title')}>{t('presets.deployed')}</Badge>
         ) : (
-          <Badge tone="neutral" dot="neutral" title="这个技能目录没有 Agent 在活跃集合里：本预设的变更不会自动同步，需到 Agent 详情页手动同步">未分发</Badge>
+          <Badge tone="neutral" dot="neutral" title={t('presets.notDeployed.title')}>{t('presets.notDeployed')}</Badge>
         )}
-        {!g.installed && notInstalledBadge()}
+        {!g.installed && notInstalledBadge(t)}
       </>
     ),
     onClick: () => openAgent(g.primary.key),
@@ -421,35 +425,37 @@ function PresetDetail({
   return (
     <>
       <div className="detail-head">
-        <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>← 返回</Button>
+        <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
         <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{preset.name}</h2>
         <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
-          已开启 {enabled.length} 个技能{enabledAuto > 0 ? `（含 ${enabledAuto} 个按标签纳入）` : ''}
+          {enabledAuto > 0
+            ? t('presets.detail.enabledWithAuto', { n: enabled.length, auto: enabledAuto })
+            : t('presets.detail.enabled', { n: enabled.length })}
         </span>
         <div className="detail-actions">
-          <Button size="sm" variant="danger" onClick={() => void removePreset()}>删除</Button>
+          <Button size="sm" variant="danger" onClick={() => void removePreset()}>{t('common.delete')}</Button>
         </div>
       </div>
 
       <section className="detail-section">
         <h3 className="section-head section-head--quiet">
-          <span className="section-head__label">当前状态</span>
+          <span className="section-head__label">{t('presets.section.current')}</span>
           <span className="section-head__rule" aria-hidden="true" />
-          <span className="section-head__note">分发结果，只读</span>
+          <span className="section-head__note">{t('presets.section.current.note')}</span>
         </h3>
 
         <div className="detail-summary">
           <div className="panel panel--quiet">
             <div className="panel__head">
-              <span className="panel__title">已开启技能</span>
+              <span className="panel__title">{t('presets.enabled.section')}</span>
               <Badge tone={enabled.length ? 'good' : 'neutral'}>{enabled.length}</Badge>
             </div>
             <p className="panel__hint">
-              本预设最终会开启以下技能：显式纳入 {enabledExplicit} 个
-              {enabledAuto > 0 ? `，按关联标签自动纳入 ${enabledAuto} 个` : ''}。
+              {t('presets.enabled.hint', { explicit: enabledExplicit })}
+              {enabledAuto > 0 ? t('presets.enabled.hintAuto', { auto: enabledAuto }) : ''}.
             </p>
             {enabled.length === 0 ? (
-              <EmptyState title="尚未开启任何技能" hint="在下方「调整方式」里打开技能开关，或添加关联标签。" />
+              <EmptyState title={t('presets.enabled.empty.title')} hint={t('presets.enabled.empty.hint')} />
             ) : (
               <div className="skill-pills">
                 {enabled.map((e) => (
@@ -459,7 +465,7 @@ function PresetDetail({
                     title={e.skill?.description ?? e.name}
                   >
                     <span className="skill-pill__name">{e.name}</span>
-                    <span className="skill-pill__via">{e.via === 'tag' ? '标签' : '显式'}</span>
+                    <span className="skill-pill__via">{e.via === 'tag' ? t('presets.via.tag') : t('presets.via.explicit')}</span>
                   </span>
                 ))}
               </div>
@@ -468,13 +474,11 @@ function PresetDetail({
 
           <div className="panel panel--quiet">
             <div className="panel__head">
-              <span className="panel__title">已应用的 Agent</span>
+              <span className="panel__title">{t('presets.applied.section')}</span>
               <Badge tone={appliedAgents.length ? 'good' : 'neutral'}>{appliedAgents.length}</Badge>
             </div>
             <p className="panel__hint">
-              在 Agent 详情页把「关联预设」选为本预设，它就会接收这些技能；共用同一个技能目录的 Agent 合为一行（它们共用同一套策略）。
-              「已分发」表示这个目录会跟随本预设的变更自动同步；没有 Agent 活跃的目录不会自动跟随，
-              可在「设置」页把它加入活跃集合，或在其详情页手动同步。
+              {t('presets.applied.hint')}
             </p>
             <EntityList
               mode="list"
@@ -482,8 +486,8 @@ function PresetDetail({
               items={agentItems}
               empty={
                 <EmptyState
-                  title="暂无 Agent 应用此预设"
-                  hint="在 Agent 详情页把「关联预设」选为本预设，技能才会分发到该 Agent。"
+                  title={t('presets.applied.empty.title')}
+                  hint={t('presets.applied.empty.hint')}
                 />
               }
             />
@@ -493,28 +497,27 @@ function PresetDetail({
 
       <section className="detail-section">
         <h3 className="section-head">
-          <span className="section-head__label">调整方式</span>
+          <span className="section-head__label">{t('presets.section.adjust')}</span>
           <span className="section-head__rule" aria-hidden="true" />
-          <span className="section-head__note">改动立即生效并同步</span>
+          <span className="section-head__note">{t('presets.section.adjust.note')}</span>
         </h3>
 
         <div className="panel">
           <div className="panel__head">
-            <span className="panel__title">按标签纳入</span>
-            <Badge tone={enabledAuto ? 'accent' : 'neutral'} title="经由关联标签自动纳入的技能数">
-              {enabledAuto} 个技能
+            <span className="panel__title">{t('presets.byTag.section')}</span>
+            <Badge tone={enabledAuto ? 'accent' : 'neutral'} title={t('presets.byTag.badge.title')}>
+              {t('common.skillCount', { n: enabledAuto })}
             </Badge>
-            <FoldButton expanded={!tagsCollapsed} label="按标签纳入" onClick={toggleTagsCollapsed} />
+            <FoldButton expanded={!tagsCollapsed} label={t('presets.byTag.section')} onClick={toggleTagsCollapsed} />
           </div>
           {!tagsCollapsed && (
             <>
               <p className="panel__hint">
-                打有这些标签的技能会自动纳入本预设，与「按技能纳入」取并集，当前关联 {preset.tags.length} 个标签。
-                点击即添加/移除，标签后的数字是全库中使用该标签的技能数（0 表示还没有技能打这个标签）。
+                {t('presets.byTag.hint', { n: preset.tags.length })}
               </p>
               {tagOptions.length === 0 ? (
                 <p className="panel__hint" style={{ marginBottom: 0 }}>
-                  技能库还没有任何标签。先去技能库给技能打上标签，这里就能勾选，命中的技能会自动纳入本预设。
+                  {t('presets.byTag.empty')}
                 </p>
               ) : (
                 <Chip size="lg" options={tagOptions} selected={preset.tags} multiple onChange={setTags} />
@@ -525,34 +528,34 @@ function PresetDetail({
 
         <div className="panel">
           <div className="panel__head">
-            <span className="panel__title">按技能纳入</span>
-            <Badge tone={enabledExplicit ? 'accent' : 'neutral'} title="显式开启的技能数">
-              {enabledExplicit} 个技能
+            <span className="panel__title">{t('presets.bySkill.section')}</span>
+            <Badge tone={enabledExplicit ? 'accent' : 'neutral'} title={t('presets.bySkill.badge.title')}>
+              {t('common.skillCount', { n: enabledExplicit })}
             </Badge>
-            <FoldButton expanded={!skillsCollapsed} label="按技能纳入" onClick={toggleSkillsCollapsed} />
+            <FoldButton expanded={!skillsCollapsed} label={t('presets.bySkill.section')} onClick={toggleSkillsCollapsed} />
           </div>
           {!skillsCollapsed && (
             <>
               <p className="panel__hint">
-                开关控制该技能是否显式纳入本预设。打「按标签纳入」标记的技能由上方标签自动纳入，开关已锁定，去掉对应标签即可停用。
+                {t('presets.bySkill.hint')}
               </p>
               <FilterBar
-                search={{ value: q, onChange: setQ, placeholder: '搜索技能名称 / 描述' }}
+                search={{ value: q, onChange: setQ, placeholder: t('filter.searchSkills') }}
                 controls={
                   <>
                     <MultiSelect
-                      label="来源"
+                      label={t('filter.source')}
                       options={allSources.map((s) => ({ label: s, value: s, count: sourceCounts[s] }))}
                       selected={srcs}
                       onChange={setSrcs}
-                      emptyHint="尚无技能来源。"
+                      emptyHint={t('presets.source.empty')}
                     />
                     <MultiSelect
-                      label="标签"
-                      options={allTags.map((t) => ({ label: t, value: t, count: tagCounts[t] }))}
+                      label={t('filter.tags')}
+                      options={allTags.map((tag) => ({ label: tag, value: tag, count: tagCounts[tag] }))}
                       selected={facets}
                       onChange={setFacets}
-                      emptyHint="技能都还没有标签。"
+                      emptyHint={t('presets.tags.empty')}
                     />
                   </>
                 }
@@ -560,23 +563,25 @@ function PresetDetail({
                 onReset={clearFilters}
                 actions={
                   <BadgeLegend
-                    title="技能上的标签是什么意思？"
+                    title={t('presets.legend.title')}
                     items={[
-                      { label: '按标签纳入', tone: 'accent', desc: '该技能因打有本预设的关联标签而自动纳入，开关已锁定；去掉对应标签即可停用。' },
-                      ...SKILL_BADGE_LEGEND,
+                      { label: t('presets.autoTag'), tone: 'accent', desc: t('presets.legend.autoTag.desc') },
+                      ...skillBadgeLegend(t),
                     ]}
-                    intro={<>开关控制该技能是否显式纳入本预设；徽标说明它的来源与装入目录的形态。</>}
+                    intro={t('presets.legend.intro')}
                   />
                 }
                 view={{ value: viewMode, onChange: setViewMode }}
               />
               <div style={{ marginTop: 'var(--sp-4)' }}>
                 <SkillList
-                  title={`${hasFilter ? '筛选结果' : '全部技能'} · ${shown.length}${hasFilter ? ` / ${cards.length}` : ''}`}
+                  title={`${hasFilter ? t('list.filtered') : t('list.allSkills')} · ${shown.length}${hasFilter ? ` / ${cards.length}` : ''}`}
                   items={shown}
                   onToggle={(item) => toggleSkill(item.id, !current.includes(item.id))}
                   hideToggle
-                  empty={hasFilter ? <EmptyState title="没有匹配的技能" /> : <EmptyState title="技能库为空" hint="先在技能库登记并导入技能。" />}
+                  empty={hasFilter
+                    ? <EmptyState title={t('agents.list.empty')} />
+                    : <EmptyState title={t('agents.libraryEmpty.title')} hint={t('agents.libraryEmpty.hint')} />}
                 />
               </div>
             </>

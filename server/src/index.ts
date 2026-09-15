@@ -6,10 +6,17 @@ import { CopyWatcher } from './core/watcher.js';
 import { scanAll } from './core/scanner.js';
 import { syncActive } from './core/sync.js';
 import { log } from './infra/logger.js';
+import { resolveLocale, withLocale } from './i18n/index.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const app = express();
 const cfg = new ConfigStore();
+
+// Per-request locale (from Accept-Language), applied to every user-facing message.
+// Out of band contexts (watcher / smoke) fall back to English, keeping logs English-only.
+app.use((req, res, next) => {
+  withLocale(resolveLocale(req.headers['accept-language']), () => next());
+});
 
 // 自动同步入口（reason 标识触发来源，便于日志排查）。
 // 只补齐缺失 / 修复失效链接，绝不删除：回收多余项只在「预设变更 / 该 Agent 策略变更 /
@@ -19,7 +26,7 @@ function resync(reason: string = 'manual') {
   try {
     return syncActive(cfg, lib.skills, undefined, reason, { prune: false });
   } catch (e) {
-    log.error('sync', `同步异常: ${(e as Error).message}`, { reason });
+    log.error('sync', `Sync error: ${(e as Error).message}`, { reason });
     return [];
   }
 }
@@ -39,7 +46,7 @@ app.use('/api', makeRouter(cfg, {
 // 兜底错误处理：express 4 只捕获同步 throw，异步错误仍需各路由 try/catch
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = err instanceof Error ? err.message : String(err);
-  log.error('http', '未处理的请求异常', { message });
+  log.error('http', 'Unhandled request error', { message });
   res.status(500).json({ error: message });
 });
 
@@ -47,7 +54,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 watcher.start(cfg, onChange);
 
 app.listen(PORT, () => {
-  log.info('server', `服务已启动`, {
+  log.info('server', 'Server started', {
     port: PORT,
     config: CONFIG_PATH,
     node: process.version,

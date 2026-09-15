@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import Button from '../ui/Button';
 import Segment from '../ui/Segment';
-import { VIEW_MODE_OPTIONS, type ViewMode } from '../../state/viewMode';
+import { useViewModeOptions, type ViewMode } from '../../state/viewMode';
+import { useI18n } from '../../i18n';
 
 export interface FilterBarProps {
   /** 搜索框（必填，作为主操作） */
@@ -33,6 +34,8 @@ export default function FilterBar({
   actions,
   view,
 }: FilterBarProps) {
+  const { t } = useI18n();
+  const viewModeOptions = useViewModeOptions();
   return (
     <div className="filterbar">
       <div className="filterbar__row">
@@ -42,8 +45,8 @@ export default function FilterBar({
             className="field"
             type="search"
             value={search.value}
-            placeholder={search.placeholder ?? '搜索'}
-            aria-label={search.placeholder ?? '搜索'}
+            placeholder={search.placeholder ?? t('common.search')}
+            aria-label={search.placeholder ?? t('common.search')}
             onChange={(e) => search.onChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Escape' && search.value !== '') {
@@ -56,8 +59,8 @@ export default function FilterBar({
             <button
               type="button"
               className="filterbar__clear"
-              aria-label="清除搜索"
-              title="清除搜索（Esc）"
+              aria-label={t('common.clear')}
+              title={t('common.clear')}
               onClick={() => search.onChange('')}
             >
               <ClearIcon />
@@ -69,7 +72,7 @@ export default function FilterBar({
           {controls}
           {hasFilters && onReset && (
             <Button variant="ghost" onClick={onReset}>
-              重置
+              {t('common.reset')}
             </Button>
           )}
           {actions}
@@ -77,7 +80,7 @@ export default function FilterBar({
 
         {view && (
           <div className="filterbar__view">
-            <Segment<ViewMode> value={view.value} onChange={view.onChange} options={VIEW_MODE_OPTIONS} />
+            <Segment<ViewMode> value={view.value} onChange={view.onChange} options={viewModeOptions} />
           </div>
         )}
       </div>

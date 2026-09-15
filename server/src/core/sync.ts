@@ -5,6 +5,7 @@ import { Skill } from './skill.js';
 import { effectiveTags } from './tags.js';
 import { findAgentDef, resolveGlobalDir, expandTilde, isManagedLinkTarget, effectiveAgentKey } from './agents.js';
 import { log } from '../infra/logger.js';
+import { t } from '../i18n/index.js';
 
 export interface SyncResult {
   agent: string;
@@ -195,14 +196,14 @@ export function deployAgent(
   const def = findAgentDef(cfg.data, agentKey);
   const result: SyncResult = { agent: agentKey, created: [], removed: [], failed: [] };
   if (!def) {
-    result.failed.push({ skill: '*', reason: `未知 agent: ${agentKey}` });
+    result.failed.push({ skill: '*', reason: t('sync.unknownAgent', { agent: agentKey }) });
     return result;
   }
   // 共享目录的 agent（cline/warp 等）与其它 agent 共用 ~/.agents/skills，采用“只清理本 agent 曾部署项”逻辑
   const agentsDir = resolveGlobalDir(def, cfg.data.agents[agentKey]?.globalDir);
   if (!fs.existsSync(agentsDir)) {
     try { fs.mkdirSync(agentsDir, { recursive: true }); }
-    catch (e) { result.failed.push({ skill: '*', reason: `无法创建目录 ${agentsDir}: ${(e as Error).message}` }); return result; }
+    catch (e) { result.failed.push({ skill: '*', reason: t('sync.mkdirFailed', { dir: agentsDir, msg: (e as Error).message }) }); return result; }
   }
 
   const seen = new Set<string>();
@@ -223,17 +224,17 @@ export function deployAgent(
         try { linkTarget = fs.readlinkSync(linkDir); } catch { /* 读不到就按外部处理 */ }
         if (!isManagedLinkTarget(cfg.data, linkTarget, agentsDir)) {
           // 外部工具 / 手工创建的软链，不归本工具管，误删会破坏用户环境
-          result.failed.push({ skill: sk.id, reason: `已存在外部软链，未自动替换：${linkDir}` });
+          result.failed.push({ skill: sk.id, reason: t('sync.externalLink', { dir: linkDir }) });
           continue;
         }
       } else if (existing.isDirectory()) {
         // 实体目录：内容与目标技能一致才视为本工具部署的副本（可安全重建）；否则是用户自有内容
         if (!dirsEqual(linkDir, target)) {
-          result.failed.push({ skill: sk.id, reason: `同名实体目录不是本工具部署的副本，未自动覆盖：${linkDir}` });
+          result.failed.push({ skill: sk.id, reason: t('sync.realDirMismatch', { dir: linkDir }) });
           continue;
         }
       } else {
-        result.failed.push({ skill: sk.id, reason: `同名文件已存在，未自动覆盖：${linkDir}` });
+        result.failed.push({ skill: sk.id, reason: t('sync.fileExists', { dir: linkDir }) });
         continue;
       }
     }
@@ -247,12 +248,12 @@ export function deployAgent(
         } catch (e) {
           // NFR-02：软链不可用（Windows 权限等）自动降级为复制
           copySkill(linkDir, target);
-          (result.warnings ??= []).push(`${sk.name}: 软链不可用，已降级为复制（${(e as Error).message}）`);
+          (result.warnings ??= []).push(t('sync.symlinkFallback', { name: sk.name, msg: (e as Error).message }));
         }
       }
       result.created.push(sk.id);
     } catch (e) {
-      log.warn('sync', `部署 ${sk.id} 失败`, { agent: agentKey, reason: (e as Error).message });
+      log.warn('sync', `Deploy failed for ${sk.id}`, { agent: agentKey, reason: (e as Error).message });
       result.failed.push({ skill: sk.id, reason: (e as Error).message });
     }
   }
@@ -273,7 +274,7 @@ export function deployAgent(
     }
   }
   if (result.created.length || result.removed.length || result.failed.length) {
-    log.info('sync', `agent 同步完成`, {
+    log.info('sync', 'Agent sync finished', {
       agent: agentKey,
       prune,
       created: result.created.length,
@@ -311,11 +312,12 @@ export function syncActive(
   const failed = results.flatMap((r) => r.failed);
   const warnings = results.flatMap((r) => r.warnings ?? []);
   if (targets.length > 0) {
-    log.info('sync', `同步完成（触发：${reason}）`, {
+    log.info('sync', `Sync finished (trigger: ${reason})`, {
       agents: targets.length, aliasesMerged: requested.length - targets.length, prune: opts.prune === true,
       created, removed,
       failed: failed.length, warnings: warnings.length,
-      failedDetail: failed.length ? failed : undefined,
+      // 日志只记失败技能名，不落本地化 reason（日志必须始终是英文）
+      failedSkills: failed.length ? failed.map((f) => f.skill) : undefined,
     });
   }
   return results;

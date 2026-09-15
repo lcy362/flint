@@ -2,8 +2,9 @@ import type { ReactNode } from 'react';
 import Segment from '../ui/Segment';
 import Tag from '../ui/Tag';
 import EmptyState from '../ui/EmptyState';
-import { useViewMode, VIEW_MODE_OPTIONS, type ViewMode } from '../../state/viewMode';
+import { useViewMode, useViewModeOptions, type ViewMode } from '../../state/viewMode';
 import { useCollapsed } from '../../state/collapse';
+import { useI18n } from '../../i18n';
 
 /**
  * 通用实体展示契约。
@@ -162,6 +163,8 @@ export default function EntityList({
   defaultCollapsed = false,
 }: EntityListProps) {
   const [globalMode, setGlobalMode] = useViewMode();
+  const { t } = useI18n();
+  const viewModeOptions = useViewModeOptions();
   const current = mode ?? globalMode;
   const showToggle = toggle && !hideToggle;
   const canCollapse = collapsible && !!title;
@@ -172,8 +175,8 @@ export default function EntityList({
       type="button"
       className="entity-toolbar__collapse"
       aria-expanded={!collapsed}
-      aria-label={collapsed ? '展开列表' : '折叠列表'}
-      title={collapsed ? '展开' : '折叠'}
+      aria-label={collapsed ? t('entity.expandList') : t('entity.collapseList')}
+      title={collapsed ? t('entity.expand') : t('entity.collapse')}
       onClick={toggleCollapsed}
     >
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -186,7 +189,7 @@ export default function EntityList({
     return (
       <>
         {title && <EntityToolbar title={title} toolbar={toolbar} collapse={collapseCtrl} />}
-        {!collapsed && (empty ?? <EmptyState title="暂无数据" />)}
+        {!collapsed && (empty ?? <EmptyState title={t('common.empty')} />)}
       </>
     );
   }
@@ -198,7 +201,7 @@ export default function EntityList({
           title={title}
           toolbar={toolbar}
           collapse={collapseCtrl}
-          toggle={showToggle ? <Segment<ViewMode> value={current} onChange={setGlobalMode} options={VIEW_MODE_OPTIONS} /> : undefined}
+          toggle={showToggle ? <Segment<ViewMode> value={current} onChange={setGlobalMode} options={viewModeOptions} /> : undefined}
         />
       )}
       {!collapsed && (

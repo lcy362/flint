@@ -131,13 +131,13 @@ function scanRoot(root: string, source: string, layout: Layout): Skill[] {
 
 export function scanRepo(repo: Repo): { source: string; path: string; skills: Skill[] } {
   const root = repo.root ? expandTilde(repo.root) : path.join(expandTilde(repo.path), 'skills');
-  if (!fs.existsSync(root)) log.warn('scanner', `仓库目录不存在，跳过`, { source: repo.id, path: root });
+  if (!fs.existsSync(root)) log.warn('scanner', 'Repository directory missing, skipped', { source: repo.id, path: root });
   return { source: repo.id, path: root, skills: scanRoot(root, repo.id, repo.layout) };
 }
 
 export function scanForeign(src: ForeignSource): { source: string; path: string; skills: Skill[] } {
   const root = expandTilde(src.path);
-  if (!fs.existsSync(root)) log.warn('scanner', `外部来源目录不存在，跳过`, { source: src.id, path: root });
+  if (!fs.existsSync(root)) log.warn('scanner', 'External source directory missing, skipped', { source: src.id, path: root });
   return { source: src.id, path: root, skills: scanRoot(root, src.id, src.layout) };
 }
 
@@ -154,6 +154,6 @@ export function scanAll(repos: Repo[], sources: ForeignSource[]) {
     bySource.set(res.source, { path: res.path, skills: res.skills });
   }
   const skills = [...bySource.values()].flatMap((x) => x.skills);
-  log.debug('scanner', '扫描完成', { sources: bySource.size, skills: skills.length, ms: Date.now() - started });
+  log.debug('scanner', 'Scan finished', { sources: bySource.size, skills: skills.length, ms: Date.now() - started });
   return { bySource, skills };
 }

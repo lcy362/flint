@@ -26,6 +26,7 @@ import { diagnose } from '../core/diagnose.js';
 import { mergeSkill } from '../core/merge.js';
 import { Repo, ForeignSource, CustomAgent } from '../config/types.js';
 import { agentCards, projectCards } from '../domain/cards.js';
+import { t } from '../i18n/index.js';
 
 /** server 版本号，/api/logs 上报给用户用于 issue 定位（优先 cwd，兼容 dev 的 src 路径） */
 const SERVER_VERSION = (() => {
@@ -113,10 +114,10 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     try {
       const result = mergeSkill(cfg, library().skills, String(name), String(keepSource));
       touch();
-      log.info('http', '技能合并仲裁', { name: String(name), keepSource: String(keepSource), merged: result.merged.length });
+      log.info('http', 'Skill merge arbitrated', { name: String(name), keepSource: String(keepSource), merged: result.merged.length });
       res.json(result);
     } catch (e) {
-      log.error('http', `技能合并仲裁失败: ${(e as Error).message}`, { name: String(name), keepSource: String(keepSource) });
+      log.error('http', `Skill merge failed: ${(e as Error).message}`, { name: String(name), keepSource: String(keepSource) });
       res.status(400).json({ error: (e as Error).message });
     }
   });
@@ -150,7 +151,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   r.post('/repos', (req, res) => {
     const { id, path: p, layout, root } = req.body as Repo;
     if (!id || !p) return res.status(400).json({ error: 'id/path required' });
-    if (cfg.data.repos.some((x) => x.id === id)) return res.status(409).json({ error: `repo ${id} 已存在` });
+    if (cfg.data.repos.some((x) => x.id === id)) return res.status(409).json({ error: t('api.repoExists', { id }) });
     // layout 缺省或 auto → 扫描期自动检测（SR-04）
     const wantLayout = layout ?? 'auto';
     cfg.data.repos.push({ id, path: p, layout: wantLayout, root: root ?? undefined });
@@ -203,10 +204,10 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (!repo) return res.status(404).json({ error: 'repo not found' });
     try {
       const result = migrateTagsToFrontmatter(cfg, repo);
-      log.info('http', '标签迁移到 SKILL.md', { repo: repo.id, migrated: result.migrated, skipped: result.skipped.length });
+      log.info('http', 'Tags migrated to SKILL.md', { repo: repo.id, migrated: result.migrated, skipped: result.skipped.length });
       res.json(result);
     } catch (e) {
-      log.error('http', `标签迁移失败: ${(e as Error).message}`, { repo: repo.id });
+      log.error('http', `Tag migration failed: ${(e as Error).message}`, { repo: repo.id });
       res.status(500).json({ error: (e as Error).message });
     }
   });
@@ -242,20 +243,20 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
             ? [String(agentKey)]
             : listAgents(cfg.data).filter((a) => a.installed).map((a) => a.key)
         ).map((k) => ({ agentKey: k, names: Array.isArray(names) ? names.map(String) : undefined }));
-    if (sel.length === 0) return res.status(400).json({ error: '无已安装 agent 可归集' });
+    if (sel.length === 0) return res.status(400).json({ error: t('api.noInstalledAgent') });
     try {
       const results = sel.map((s) => collectAgentSkill(cfg, repo, s.agentKey, s.names, repl));
       touch();
       const collected = results.flatMap((x) => x.collected);
       const skipped = results.flatMap((x) => x.skipped);
-      log.info('http', '归集技能到仓库', { repo: repo.id, collected: collected.length, skipped: skipped.length });
+      log.info('http', 'Skills collected into repository', { repo: repo.id, collected: collected.length, skipped: skipped.length });
       res.json({
         collected,
         skipped,
         byAgent: results.map((x, i) => ({ agent: sel[i].agentKey, ...x })),
       });
     } catch (e) {
-      log.error('http', `归集技能失败: ${String(e)}`, { repo: repo.id });
+      log.error('http', `Skill collection failed: ${String(e)}`, { repo: repo.id });
       res.status(500).json({ error: String(e) });
     }
   });
@@ -266,10 +267,10 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (!agentKey || !name) return res.status(400).json({ error: 'agentKey/name required' });
     try {
       const result = takeover(cfg, String(agentKey), String(name), req.params.id, confirm === true);
-      log.info('http', '接管 agent 技能', { repo: req.params.id, agentKey: String(agentKey), name: String(name), confirm: confirm === true });
+      log.info('http', 'Agent skill taken over', { repo: req.params.id, agentKey: String(agentKey), name: String(name), confirm: confirm === true });
       res.json(result);
     } catch (e) {
-      log.error('http', `接管失败: ${(e as Error).message}`, { repo: req.params.id, agentKey: String(agentKey), name: String(name) });
+      log.error('http', `Takeover failed: ${(e as Error).message}`, { repo: req.params.id, agentKey: String(agentKey), name: String(name) });
       res.status(500).json({ error: (e as Error).message });
     }
   });
@@ -327,7 +328,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       return res.status(400).json({ error: 'key/name/globalDir required' });
     }
     if (cfg.data.customAgents.some((a) => a.key === body.key) || listAgents(cfg.data).some((a) => a.key === body.key)) {
-      return res.status(409).json({ error: `agent ${body.key} 已存在` });
+      return res.status(409).json({ error: t('api.agentExists', { key: body.key }) });
     }
     cfg.data.customAgents.push({
       key: body.key,
@@ -399,13 +400,13 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     cfg.data.agents[target] = over;
     // 别名自己那份策略永远不生效，清掉避免配置里留下看似有效、实则被忽略的旧值
     const cleared = pruneAliasStrategies(cfg.data, target);
-    if (cleared.length > 0) log.info('http', '清理别名无效策略', { primary: target, aliases: cleared });
+    if (cleared.length > 0) log.info('http', 'Cleared ignored alias strategies', { primary: target, aliases: cleared });
     cfg.save();
     if (findAgentDef(cfg.data, key)) {
       // 用户显式改了这个 Agent 的分发策略：只对「它自己」允许回收多余的软链（prune）。
       // 非活跃 Agent 不跟随预设 / 仓库等间接变更自动同步，但用户在这里的手动操作立即落盘。
       const result = syncActive(cfg, library().skills, [key], 'route:agent-op', { prune: true })[0];
-      log.info('http', 'Agent 策略变更后同步', {
+      log.info('http', 'Synced after agent strategy change', {
         agent: key,
         active: cfg.data.activeAgents.includes(key),
         created: result?.created.length ?? 0,
@@ -446,7 +447,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (!fs.existsSync(target)) return res.status(404).json({ error: 'skill not found' });
     const ctx = desiredContext(cfg, library().skills, key);
     const wanted = [...ctx.desired.values()].some((s) => s.name === name);
-    if (wanted) return res.status(400).json({ error: '该技能正处于启用状态；请先关闭（移除期望）再删除' });
+    if (wanted) return res.status(400).json({ error: t('api.skillEnabled') });
     fs.rmSync(target, { recursive: true, force: true });
     res.json({ ok: true, removed: name });
   });
@@ -456,7 +457,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const keys = Array.isArray(req.body) ? req.body : req.body?.agents;
     const out = active.set(cfg, keys ?? []);
     touch();
-    log.info('http', '更新活跃 agent 集合', { agents: out.length });
+    log.info('http', 'Active agent set updated', { agents: out.length });
     res.json(out);
   });
 
@@ -465,7 +466,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   r.patch('/skills/:id', (req, res) => {
     const id = decodeURIComponent(req.params.id);
     // 防御：skill id 不应含控制字符（如换行），避免 config 再次出现损坏 key
-    if (/[\u0000-\u001f]/.test(id)) return res.status(400).json({ error: '非法 skill id（含控制字符）' });
+    if (/[\u0000-\u001f]/.test(id)) return res.status(400).json({ error: 'Invalid skill id (contains control characters)' });
     if (!Array.isArray(req.body?.tags)) return res.status(400).json({ error: 'tags required' });
     // 归一化：仅收字符串、按换行拆分、trim、去空、去重，保证落库标签始终干净
     const seen = new Set<string>();
@@ -482,7 +483,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     cfg.data.skillMeta[id] = meta;
     cfg.save();
     touch();
-    log.info('http', '保存技能标签', { id, tags: tags.length });
+    log.info('http', 'Skill tags saved', { id, tags: tags.length });
     res.json(meta);
   });
 
@@ -498,10 +499,10 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       if (Array.isArray(req.body?.tags)) p.tags = req.body.tags;
       cfg.save();
       touch();
-      log.info('http', '创建预设', { name, skills: p.skills.length, tags: p.tags.length });
+      log.info('http', 'Preset created', { name, skills: p.skills.length, tags: p.tags.length });
       res.json(p);
     } catch (e) {
-      log.error('http', `创建预设失败: ${(e as Error).message}`, { name: String(req.body?.name ?? '') });
+      log.error('http', `Preset creation failed: ${(e as Error).message}`, { name: String(req.body?.name ?? '') });
       res.status(400).json({ error: (e as Error).message });
     }
   });
@@ -514,17 +515,17 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       const results = syncActive(cfg, lib.skills, undefined, 'route', { prune: true });
       const created = results.reduce((n, r) => n + r.created.length, 0);
       const removed = results.reduce((n, r) => n + r.removed.length, 0);
-      log.info('http', '更新预设', { name: req.params.name, skills: p.skills.length, tags: p.tags.length, created, removed });
+      log.info('http', 'Preset updated', { name: req.params.name, skills: p.skills.length, tags: p.tags.length, created, removed });
       res.json(p);
     } catch (e) {
-      log.error('http', `更新预设失败: ${(e as Error).message}`, { name: req.params.name });
+      log.error('http', `Preset update failed: ${(e as Error).message}`, { name: req.params.name });
       res.status(400).json({ error: (e as Error).message });
     }
   });
   r.delete('/presets/:name', (req, res) => {
     presets.remove(cfg, req.params.name);
     touch();
-    log.info('http', '删除预设', { name: req.params.name });
+    log.info('http', 'Preset deleted', { name: req.params.name });
     res.json({ ok: true });
   });
 
@@ -564,10 +565,10 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const { repoId, names } = req.body ?? {};
     try {
       const result = pushProjectToRepo(cfg, proj.path, repoId ? String(repoId) : undefined, Array.isArray(names) ? names : undefined);
-      log.info('http', '项目技能回写仓库', { repo: repoId ? String(repoId) : undefined, names: Array.isArray(names) ? names.length : undefined });
+      log.info('http', 'Project skills pushed back to repository', { repo: repoId ? String(repoId) : undefined, names: Array.isArray(names) ? names.length : undefined });
       res.json(result);
     } catch (e) {
-      log.error('http', `项目技能回写失败: ${(e as Error).message}`, { proj: proj.path });
+      log.error('http', `Project push-back failed: ${(e as Error).message}`, { proj: proj.path });
       res.status(500).json({ error: (e as Error).message });
     }
   });
@@ -615,13 +616,13 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const st = fs.lstatSync(target, { throwIfNoEntry: false });
     if (!st) return res.status(404).json({ error: 'skill not found' });
     if (!st.isDirectory() || st.isSymbolicLink()) {
-      return res.status(400).json({ error: '只能删除项目目录里的真实技能目录' });
+      return res.status(400).json({ error: t('api.onlyRealDir') });
     }
     const lib = library();
     const row = projectSkillRows(cfg, proj, lib.skills).find((r) => r.name === name);
-    if (row?.wanted) return res.status(400).json({ error: '该技能正处于启用状态；请先关闭（移除期望）再删除' });
+    if (row?.wanted) return res.status(400).json({ error: t('api.skillEnabled') });
     fs.rmSync(target, { recursive: true, force: true });
-    log.info('http', '删除项目技能', { project: id, name });
+    log.info('http', 'Project skill deleted', { project: id, name });
     res.json({ ok: true, removed: name });
   });
 
@@ -649,7 +650,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (!proj) return res.status(404).json({ error: 'project not found' });
     const { repoId, name, names, replaceNames } = req.body ?? {};
     const repo = cfg.data.repos.find((x) => x.id === String(repoId ?? '')) ?? cfg.data.repos[0];
-    if (!repo) return res.status(400).json({ error: '无仓库可归集' });
+    if (!repo) return res.status(400).json({ error: t('api.noRepoToCollect') });
     const want = name ? [String(name)] : Array.isArray(names) ? names.map(String) : undefined;
     try {
       const result = collectFromSource(
@@ -657,10 +658,10 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
         Array.isArray(replaceNames) ? replaceNames.map(String) : undefined,
       );
       touch();
-      log.info('http', '项目技能归集到仓库', { project: proj.path, repo: repo.id, collected: result.collected.length, skipped: result.skipped.length });
+      log.info('http', 'Project skills collected into repository', { project: proj.path, repo: repo.id, collected: result.collected.length, skipped: result.skipped.length });
       res.json(result);
     } catch (e) {
-      log.error('http', `项目技能归集失败: ${(e as Error).message}`, { proj: proj.path });
+      log.error('http', `Project skill collection failed: ${(e as Error).message}`, { proj: proj.path });
       res.status(500).json({ error: (e as Error).message });
     }
   });
@@ -675,12 +676,12 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (!name) return res.status(400).json({ error: 'name required' });
     try {
       const result = takeoverProjectSkill(cfg, proj, repoId ? String(repoId) : undefined, String(name), confirm === true);
-      log.info('http', '项目技能接管（副本）', {
+      log.info('http', 'Project skill taken over (copy)', {
         project: proj.path, name: String(name), repo: repoId ? String(repoId) : undefined, taken: result.taken,
       });
       res.json(result);
     } catch (e) {
-      log.error('http', `项目技能接管失败: ${(e as Error).message}`, { proj: proj.path });
+      log.error('http', `Project skill takeover failed: ${(e as Error).message}`, { proj: proj.path });
       res.status(500).json({ error: (e as Error).message });
     }
   });
@@ -721,10 +722,10 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       touch();
       const imported = result.reduce((n, x) => n + x.imported.length, 0);
       const skipped = result.reduce((n, x) => n + x.skipped.length, 0);
-      log.info('http', '批量导入技能', { dirs: dirs.length, repo: repoId ?? undefined, imported, skipped });
+      log.info('http', 'Skills batch-imported', { dirs: dirs.length, repo: repoId ?? undefined, imported, skipped });
       res.json(result);
     } catch (e) {
-      log.error('http', `批量导入失败: ${(e as Error).message}`, { dirs: dirs.length, repo: repoId ?? undefined });
+      log.error('http', `Batch import failed: ${(e as Error).message}`, { dirs: dirs.length, repo: repoId ?? undefined });
       res.status(500).json({ error: (e as Error).message });
     }
   });
@@ -746,10 +747,10 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       const lib = library();
       const result = applyFix(cfg, { lib }, String(key));
       touch();
-      log.info('http', '诊断项就地修复', { key: String(key) });
+      log.info('http', 'Diagnostic item fixed in place', { key: String(key) });
       res.json(result);
     } catch (e) {
-      log.error('http', `诊断项修复失败: ${(e as Error).message}`, { key: String(key) });
+      log.error('http', `Diagnostic fix failed: ${(e as Error).message}`, { key: String(key) });
       res.status(500).json({ error: (e as Error).message });
     }
   });
@@ -767,10 +768,10 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       const results = syncActive(cfg, lib.skills, only, 'route:manual', { prune: true });
       const created = results.reduce((n, r) => n + r.created.length, 0);
       const removed = results.reduce((n, r) => n + r.removed.length, 0);
-      log.info('http', '手动同步', { agents: results.length, created, removed });
+      log.info('http', 'Manual sync', { agents: results.length, created, removed });
       res.json(results);
     } catch (e) {
-      log.error('http', `手动同步失败: ${(e as Error).message}`);
+      log.error('http', `Manual sync failed: ${(e as Error).message}`);
       res.status(500).json({ error: (e as Error).message });
     }
   });
@@ -787,7 +788,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
         lines = fs.readFileSync(logPath, 'utf-8').split('\n').filter(Boolean).slice(-tail);
       }
     } catch (e) {
-      log.error('http', `读取日志失败: ${(e as Error).message}`);
+      log.error('http', `Failed to read log file: ${(e as Error).message}`);
       return res.status(500).json({ error: (e as Error).message });
     }
     res.json({ path: logPath, size, lines, version: SERVER_VERSION });

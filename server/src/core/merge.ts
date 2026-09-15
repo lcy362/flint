@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import type { Skill } from './skill.js';
 import { expandTilde, repoSkillRoot } from './agents.js';
+import { t } from '../i18n/index.js';
 
 /**
  * 合并仲裁（IM-02）：同名 skill 多来源重合时，由用户裁决保留哪个来源。
@@ -12,7 +13,7 @@ import { expandTilde, repoSkillRoot } from './agents.js';
 export function mergeSkill(cfg: ConfigStore, allSkills: Skill[], name: string, keepSource: string) {
   const cands = allSkills.filter((s) => s.name === name);
   const winner = cands.find((s) => s.source === keepSource) ?? cands[0];
-  if (!winner) throw new Error(`skill 不存在: ${name}`);
+  if (!winner) throw new Error(t('merge.skillNotFound', { name }));
   const primary = cfg.data.repos[0];
   if (primary && !cfg.data.repos.some((r) => r.id === winner.source)) {
     const skillsRoot = repoSkillRoot(primary);

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { t } from '../i18n/index.js';
 
 const exec = promisify(execFile);
 
@@ -13,12 +14,12 @@ const TIMEOUT = 120_000;
  *
  * 支持：macOS（osascript）、Windows（PowerShell）、Linux（zenity / kdialog）。
  */
-export async function pickDirectory(title = 'Skills Hub — 选择目录'): Promise<string | null> {
+export async function pickDirectory(title = t('picker.title.dir')): Promise<string | null> {
   return runPicker(title, 'dir');
 }
 
 /** 打开系统原生文件选择器，返回所选文件绝对路径（用于仓库外标签文件等）。其余同 pickDirectory。 */
-export async function pickFile(title = 'Skills Hub — 选择文件'): Promise<string | null> {
+export async function pickFile(title = t('picker.title.file')): Promise<string | null> {
   return runPicker(title, 'file');
 }
 
@@ -59,7 +60,7 @@ function isCanceled(e: unknown): boolean {
 }
 
 function unavailable(kind: Kind, err: NodeJS.ErrnoException): Error {
-  return new Error(`无法调起系统${kind === 'dir' ? '目录' : '文件'}选择器：${err.message}。请手动输入路径。`);
+  return new Error(t(kind === 'dir' ? 'picker.unavailableDir' : 'picker.unavailableFile', { msg: err.message }));
 }
 
 async function runDarwin(title: string, kind: Kind): Promise<string | null> {
@@ -142,6 +143,6 @@ async function runLinux(title: string, kind: Kind): Promise<string | null> {
     }
   }
   throw last
-    ? new Error(`无法调起系统${kind === 'dir' ? '目录' : '文件'}选择器：${last.message}。请手动输入路径。`)
-    : new Error('当前环境未找到可用的原生选择器（zenity / kdialog），请手动输入路径。');
+    ? new Error(t(kind === 'dir' ? 'picker.unavailableDir' : 'picker.unavailableFile', { msg: last.message }))
+    : new Error(t('picker.notFound'));
 }
