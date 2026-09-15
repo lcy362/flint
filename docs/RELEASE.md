@@ -147,27 +147,62 @@ CI 里没有「push 即发布」的路径。
 发布**不使用任何 NPM_TOKEN 密钥**。GitHub Actions 通过 OIDC 向 npm 换取一次性的
 发布凭证，密钥不落任何地方，也不会因为忘记轮换而失效。
 
-需要在 npm 侧做**一次性配置**（仅第一次发版前）：
+需要在 npm 侧做**一次性配置**（仅第一次发版前）。
 
-1. 登录 <https://www.npmjs.com>，进入 `flint-skills-hub` 包的 **Settings ▸ Trusted Publisher**。
-2. 若包尚未创建，先手工发布一次首版（见下），或先在 npm 上创建占位包。
-3. 填写：
+### 5.1 前提条件（官方硬性要求，任一不满足都只会在「真正发布那一刻」才失败）
+
+| 要求 | 本仓库现状 |
+|---|---|
+| npm CLI **≥ 11.5.1**、Node **≥ 22.14.0** | ✅ `release.yml` 用 Node 22 + `npm install -g npm@latest` |
+| 必须是 **GitHub 托管 runner**（自托管 runner 不支持） | ✅ 使用 `ubuntu-latest` |
+| `package.json` 的 `repository.url` 与 GitHub 仓库**一致** | ✅ 已配 `git+https://github.com/lcy362/flint.git` |
+| 需要 `id-token: write` 权限 | ✅ 已授予发布 job |
+
+### 5.2 配置步骤
+
+1. 登录 <https://www.npmjs.com>，进入 `flint-skills-hub` 包的 **Settings ▸ Trusted Publisher**
+   （入口在**你的包**的设置页 —— 包不存在就没有这个入口，见 §5.3）。
+2. 填写：
    - Publisher: **GitHub Actions**
    - Repository owner: `lcy362`
    - Repository name: `flint`
    - Workflow filename: `release.yml` ← **必须与 `.github/workflows/release.yml` 完全一致**
    - Environment name: 留空（工作流未使用 GitHub Environment）
-4. 保存。之后 `release.yml` 里的 `npm publish` 自动使用 OIDC，无需再配 secret。
+3. 🔴 **显式勾选允许的动作 `npm publish`。**
+   自 **2026-09-03** 起创建的配置**默认只允许 `npm stage publish`**；不勾 `npm publish`，
+   本工作流会在发布那一刻报权限错误。⚠️ npm **保存配置时不做任何校验**，填错的代价就是「发布时才炸」。
+4. 保存。之后 `release.yml` 里的 `npm publish` 自动使用 OIDC，无需任何 secret。
 
-### 首版（v0.1.0）的特殊性
+> ⚠️ **配置创建后不可修改**（publisher 与必填字段固定），填错只能删除后重建；每个包最多 10 条配置。
+> npm 文档建议的迁移顺序是：先用 OIDC 验证发布可用 → 再收紧 token 策略 → 最后撤销不再需要的 automation token。
 
-包在 npm 上还不存在时无法配置 Trusted Publisher。首版需要二选一：
+### 5.3 首版（v0.1.0）发布不了 OIDC —— 必须先「引导」一次
 
-- **手工首发**：本地 `npm run build` 后，在仓库根执行
-  `npm pkg delete private workspaces devDependencies && npm pkg set version=0.1.0 && npm publish --access public`
-  （本地需已 `npm login`）。发布后再按上面配置 Trusted Publisher。
-- **改用临时 token**：先给仓库加 `NPM_TOKEN` secret，本版用 token 发布，
-  配置好 Trusted Publisher 后再删掉该 secret。
+Trusted Publisher 是**包级**配置，而 `flint-skills-hub` 目前在 npm 上还不存在（注册表返回 404），
+所以**首版必须用传统认证方式发布**，让包名先在注册表上诞生，之后才能配 OIDC。
+
+两条路，任选其一：
+
+**A. 本地手工首发（推荐，最省事）**
+
+```bash
+cd /path/to/flint
+npm login                                  # 浏览器 / 2FA 认证
+npm run build
+# 临时改写「发布用 manifest」，发完立刻还原；仓库里的 package.json 始终是开发形态
+npm pkg delete private workspaces devDependencies
+npm pkg set version=0.1.0
+npm publish --access public
+git checkout package.json
+```
+
+**B. 用临时 `NPM_TOKEN` 走工作流**
+
+1. npm → Access Tokens → 新建 **Automation** token（需有发布权限）；
+2. 仓库 Settings ▸ Secrets and variables ▸ Actions 添加 `NPM_TOKEN`；
+3. 触发 `release.yml` —— 工作流检测到该 secret 时会以「bootstrap 模式」用 token 发布，
+   并在日志里打出 warning；
+4. 首版发完后，按 §5.2 配好 Trusted Publisher，**然后删掉这个 secret**（否则长期留着一把长效钥匙，正是 OIDC 想消除的风险）。
 
 首版之后，后续发版一律走 OIDC。
 

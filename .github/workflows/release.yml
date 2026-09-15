@@ -153,13 +153,23 @@ jobs:
       - name: Show package contents
         run: npm pack --dry-run
 
-      - name: Publish to npm (Trusted Publishing / OIDC)
+      # 认证方式：默认走 OIDC，不需要任何 secret。
+      # 唯一例外是首版引导——Trusted Publisher 是「包级」配置，包还没发布过时无处可配，
+      # 所以允许用临时 NPM_TOKEN 先发一次；配好 OIDC 后必须删掉该 secret（见 docs/RELEASE.md §5）。
+      - name: Publish to npm
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ "${{ inputs.dry-run }}" = "true" ]; then
             echo "dry-run: skipping npm publish (version ${VERSION})."
             exit 0
+          fi
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "::warning::Publishing with the temporary NPM_TOKEN secret (first-release bootstrap). Configure Trusted Publishing and remove this secret afterwards — see docs/RELEASE.md §5."
+            printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > "$HOME/.npmrc"
+          else
+            echo "Publishing via OIDC trusted publishing (no NPM_TOKEN secret configured)."
           fi
           npm publish --provenance
 
