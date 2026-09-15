@@ -422,8 +422,12 @@ export interface AgentSkillRow {
   reason: 'preset' | 'manual' | 'own' | 'external' | 'shared';
   /** 软链目标不在任何自有仓库内：由本工具之外的来源创建，本工具既不分发它也不清理它 */
   externalLink?: boolean;
-  /** 软链目标落在某个「已登记库」内（自有仓库 / 第三方来源 / 共享标准目录）：已有归属，不再提供「归集」 */
-  linkInLibrary?: boolean;
+  /**
+   * 已有归属：软链的这条技能已经在库里了，不再提供「归集」。两种成立方式——
+   * 目标落在某个「已登记库」内（自有仓库 / 第三方来源 / 共享标准目录），
+   * 或该名字在自有仓库里已有同名副本（`repo` 即那个仓库）。
+   */
+  alreadyInLibrary?: boolean;
   /** 该技能物理所在的可读目录（自身目录，或额外读取的共享标准目录） */
   fromDir?: string;
   /**
@@ -474,6 +478,8 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
   const isOff = (name: string) => ctx.offIds.has(name) || ctx.offNames.has(name);
   const linkTo = (p: string) => { try { return fs.readlinkSync(p); } catch { return undefined; } };
   const metaOf = (name: string) => allSkills.find((s) => s.name === name);
+  /** 已登记自有仓库的 id：技能行的 `repo` 落在其中即说明该技能在仓库里已有同名副本 */
+  const repoIds = new Set(cfg.repos.map((r) => r.id));
 
   // 1) 扫描自身目录，记录是否存在及各目录项类型（隐藏项不算技能）
   if (fs.existsSync(ownDir)) {
@@ -523,9 +529,15 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
       const p = path.join(ownDir, name);
       const target = linkTo(p);
       const externalLink = !isManagedLinkTarget(cfg, target, ownDir);
-      const linkInLibrary = isLinkInRegisteredLibrary(cfg, target, ownDir);
       const offOverride = !externalLink && ctx.baselineNames.has(name) && isOff(name);
       const src = metaOf(name);
+      // 已有归属＝这条软链的技能已经在库里了，行内「归集」没有意义（只会多复制一份重复本体
+      // 或直接被去重跳过）。两种成立方式：
+      // ① 目标就落在某个已登记库内（自有仓库 / 第三方来源 / 共享标准目录）；
+      // ② 该名字在自有仓库里已有副本（`repo` 字段的回填来源，也就是列表上展示的那个来源）。
+      // 要拿来源版本覆盖仓库副本请走技能库的归集确认页——那里才有并列候选可比。
+      const alreadyInLibrary =
+        isLinkInRegisteredLibrary(cfg, target, ownDir) || (!!src && repoIds.has(src.source));
       rows.push({
         name, title: name,
         description: readSkill(p)?.description, // readSkill 顺着软链读到目标
@@ -534,7 +546,7 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
         // 残留的来源按基准归属判断：来自预设的记 preset，其余（如接管后停用）记 manual，
         // 不再一律记成「预设引入」——那会让已接管的技能被误标成预设带来的。
         reason: externalLink ? 'external' : (ctx.baselineNames.has(name) ? 'preset' : 'manual'),
-        offOverride, externalLink, linkInLibrary,
+        offOverride, externalLink, alreadyInLibrary,
         preset: ctx.presetOf.get(name),
         skillId: src?.id, repo: src?.source,
         dir: p, link: true, fromDir: ownDir, readVia: 'own',

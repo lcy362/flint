@@ -18,12 +18,12 @@ function row(over: Partial<AgentSkillRow> = {}): AgentSkillRow {
 const kinds = (over: Partial<AgentSkillRow>) => agentCards([row(over)])[0].actions.map((a) => a.kind);
 
 describe('Agent 技能行的操作推导（acts）', () => {
-  it('指向库外的外部软链：提供「归集到仓库」与「移除」', () => {
-    expect(kinds({ linkInLibrary: false })).toEqual(['collect', 'delete']);
+  it('指向库外且仓库没有同名副本的软链：提供「归集到仓库」与「移除」', () => {
+    expect(kinds({ alreadyInLibrary: false })).toEqual(['collect', 'delete']);
   });
 
-  it('软链已指向某个已登记库（自有仓库 / 第三方来源 / 共享标准目录）：不再提供归集，只保留移除', () => {
-    expect(kinds({ linkInLibrary: true })).toEqual(['delete']);
+  it('已有归属的软链（目标落在已登记库内，或仓库里已有同名副本）：不再提供归集，只保留移除', () => {
+    expect(kinds({ alreadyInLibrary: true })).toEqual(['delete']);
   });
 
   it('自带真实目录不受影响：本体在本地，收进仓库才有意义', () => {
@@ -36,6 +36,6 @@ describe('Agent 技能行的操作推导（acts）', () => {
   });
 
   it('共享标准目录读取不给任何操作', () => {
-    expect(kinds({ reason: 'shared', store: 'own', linkInLibrary: true })).toEqual([]);
+    expect(kinds({ reason: 'shared', store: 'own', alreadyInLibrary: true })).toEqual([]);
   });
 });

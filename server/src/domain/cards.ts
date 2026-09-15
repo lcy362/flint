@@ -37,8 +37,8 @@ interface CommonRow {
   store: SkillStore;
   reason: SkillReason;
   offOverride?: boolean;
-  /** 软链目标落在某个「已登记库」内（自有仓库 / 第三方来源 / 共享标准目录） */
-  linkInLibrary?: boolean;
+  /** 已有归属：软链目标落在某个「已登记库」内，或该名字在自有仓库里已有同名副本 */
+  alreadyInLibrary?: boolean;
 }
 
 const action = (kind: SkillActionKind, label: string, extra: Partial<SkillAction> = {}): SkillAction => ({ kind, label, ...extra });
@@ -61,16 +61,17 @@ function stateOf(r: CommonRow): SkillState {
  *
  * - 「归集到仓库」= 把该目录里的技能复制进自有仓库（源目录保持不动，PRD 流程二-A）。
  *   Agent 全局目录与项目 .agents/skills 共用同一条链路：归集后可再「接管」（源位置改为指向仓库副本的软链）。
- *   只在技能**尚无归属**时出现：本体是自带真实目录，或软链指向任何「已登记库」之外。
- *   软链已指向自有仓库 / 第三方来源 / 共享标准目录时技能已有归属，再归集只会复制出重复本体，
- *   因此不提供该操作（这类技能要收进仓库请走技能库「添加技能 → 从 Agent 归集」）。
+ *   只在技能**尚无归属**时出现：本体是自带真实目录，或软链指向任何「已登记库」之外、且仓库里还没有同名副本。
+ *   软链已有归属时（目标落在自有仓库 / 第三方来源 / 共享标准目录内，或该名字在仓库里已有副本——
+ *   后者就是列表上展示的那个来源），再归集只会复制出重复本体或被去重跳过，因此不提供该操作
+ *   （这类技能要覆盖仓库副本请走技能库「添加技能 → 从 Agent 归集」，那里才有并列候选可比）。
  * - 不再单出「合并保留」：合并是「同一技能名有多个来源」时的仲裁，只有在技能库的
  *   归集确认页里才有齐全的候选（并列各版本 / 来源）可比，单独一颗按钮既没有可比对象也容易误解。
  */
 function acts(r: CommonRow): SkillAction[] {
   if (r.reason === 'own' || r.reason === 'external') {
     return [
-      ...(r.linkInLibrary ? [] : [action('collect', t('card.collect'), { title: t('card.collect.title') })]),
+      ...(r.alreadyInLibrary ? [] : [action('collect', t('card.collect'), { title: t('card.collect.title') })]),
       action('delete', t('card.delete'), { title: t('card.delete.title') }),
     ];
   }
@@ -84,7 +85,7 @@ export function agentCard(row: AgentSkillRow): SkillCardView {
   const reason = normReason(row.reason);
   const r: CommonRow = {
     wanted: row.wanted, present: row.present, store: row.store, reason,
-    offOverride: row.offOverride, linkInLibrary: row.linkInLibrary,
+    offOverride: row.offOverride, alreadyInLibrary: row.alreadyInLibrary,
   };
   return {
     id: row.skillId ?? `${row.name}@${row.repo ?? ''}`,

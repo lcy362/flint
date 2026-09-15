@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  agentSkillRows,
   effectiveAgentKey,
   expandTilde,
   findAgentDef,
@@ -17,8 +18,11 @@ import {
   setPrimary,
   sharedStandardDir,
 } from '../src/core/agents.js';
+import { scanAll } from '../src/core/scanner.js';
+import { desiredContext } from '../src/core/sync.js';
+import { agentCards } from '../src/domain/cards.js';
 import { emptyConfig, HubConfig, Repo } from '../src/config/types.js';
-import { makeStore, tmpDir } from './helpers.js';
+import { makeStore, tmpDir, writeSkill } from './helpers.js';
 
 describe('expandTilde', () => {
   it('展开 ~ 与 ~/ 前缀', () => {
@@ -283,5 +287,45 @@ describe('isLinkInRegisteredLibrary（软链是否已指向某个「已登记库
     const { cfg, base, agentDir } = fixture();
     expect(isLinkInRegisteredLibrary(cfg, path.join(base, 'outside', 'gamma'), agentDir)).toBe(false);
     expect(isLinkInRegisteredLibrary(cfg, undefined, agentDir)).toBe(false);
+  });
+});
+
+describe('agentSkillRows：是否有「归集到仓库」入口', () => {
+  /** 建一个含自有仓库的沙箱：agent 目录里的 alpha 按 kind 决定形态 */
+  function actionsFor(kind: 'link-with-repo-copy' | 'link-without-repo-copy' | 'owned-dir') {
+    const base = tmpDir('flint-collect-entry-');
+    const repoDir = path.join(base, 'repo');
+    if (kind !== 'link-without-repo-copy') writeSkill(path.join(repoDir, 'skills'), 'alpha');
+    const agentDir = path.join(base, 'agent');
+    fs.mkdirSync(agentDir, { recursive: true });
+    if (kind === 'owned-dir') {
+      writeSkill(agentDir, 'alpha');
+    } else {
+      const outside = path.join(base, 'outside', 'alpha');
+      fs.mkdirSync(outside, { recursive: true });
+      fs.symlinkSync(outside, path.join(agentDir, 'alpha'), 'dir');
+    }
+    const store = makeStore({
+      repos: [{ id: 'default', path: repoDir }],
+      agents: { codebuddy: { globalDir: agentDir } },
+    });
+    const lib = scanAll(store.data.repos, store.data.foreignSources);
+    const ctx = desiredContext(store, lib.skills);
+    const card = agentCards(agentSkillRows('codebuddy', store.data, lib.skills, ctx)).find((c) => c.name === 'alpha')!;
+    return { card, kinds: card.actions.map((a) => a.kind) };
+  }
+
+  it('软链指向库外，但仓库已有同名副本（列表上展示的来源就是这个仓库）→ 不显示归集', () => {
+    const { card, kinds } = actionsFor('link-with-repo-copy');
+    expect(card.source).toBe('default');
+    expect(kinds).toEqual(['delete']);
+  });
+
+  it('软链指向库外，仓库里也没有同名副本 → 仍可归集', () => {
+    expect(actionsFor('link-without-repo-copy').kinds).toEqual(['collect', 'delete']);
+  });
+
+  it('自带真实目录：即使仓库已有同名，也保留归集（它是把本目录版本写进仓库的常规入口）', () => {
+    expect(actionsFor('owned-dir').kinds).toEqual(['collect', 'delete']);
   });
 });
