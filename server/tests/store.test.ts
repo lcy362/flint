@@ -78,6 +78,24 @@ describe('ConfigStore.load（加载与迁移）', () => {
     expect(JSON.parse(fs.readFileSync(file, 'utf-8')).schemaVersion).toBe(emptyConfig().schemaVersion);
   });
 
+  it('剔除历史遗留的 repos[].layout（自有仓库已收敛为扁平）', () => {
+    const file = writeConfig({
+      schemaVersion: 3,
+      repos: [{ id: 'own', path: '/tmp/own', layout: 'nested' }],
+    });
+    const store = new ConfigStore(file);
+    expect(store.data.repos[0]).toEqual({ id: 'own', path: '/tmp/own' });
+    expect('layout' in store.data.repos[0]).toBe(false);
+  });
+
+  it('第三方来源的 layout 保留（只读来源仍支持分类组织）', () => {
+    const file = writeConfig({
+      schemaVersion: 3,
+      foreignSources: [{ id: 'ume', name: 'ume', path: '/tmp/ume', layout: 'nested', linked: true }],
+    });
+    expect(new ConfigStore(file).data.foreignSources[0].layout).toBe('nested');
+  });
+
   it('watchers 只有显式 true 才算开启（历史配置一律按关闭处理）', () => {
     expect(new ConfigStore(writeConfig({ schemaVersion: 3, watchers: true })).data.watchers).toBe(true);
     expect(new ConfigStore(writeConfig({ schemaVersion: 3, watchers: 'yes' })).data.watchers).toBe(false);

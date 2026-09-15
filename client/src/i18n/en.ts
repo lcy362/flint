@@ -128,6 +128,8 @@ export const en = {
   'repo.layout.auto': 'auto (detect automatically)',
   'repo.layout.nested': 'nested (categorised)',
   'repo.layout.flat': 'flat',
+  'repo.flatOnly': 'flat only',
+  'repo.flatOnlyHint': 'Own repositories are flat-only: skills are read from the direct subdirectories of {root}. To keep category folders, register that folder as a read-only source instead.',
   'repo.root': 'root (optional)',
   'repo.rootHint': 'Skills root directory; defaults to <path>/skills',
   'repo.scanRoot': 'Skill scan root:',

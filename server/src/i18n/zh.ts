@@ -20,6 +20,7 @@ export const zh: Record<MsgKey, string> = {
   'diag.noRepos': '未配置 skill 仓库',
   'diag.repoMissing': '仓库 {id} 目录缺失: {path}',
   'diag.repoOk': '仓库 {id} @ {path}',
+  'diag.repoNestedSkills': '仓库 {id}: 有 {n} 个技能位于分类子目录里，不会被识别（{names}）。自有仓库仅支持扁平布局——请把它们移到根下，或把该目录登记为只读来源',
   'diag.fsrc': '外部源 {id}: {path}',
   'diag.noProjects': '未登记项目（无需校验）',
   'diag.projectMissing': '项目路径缺失: {path}',

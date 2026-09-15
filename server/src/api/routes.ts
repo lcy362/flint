@@ -149,12 +149,11 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   // ---- repos ----
   r.get('/repos', (_req, res) => res.json(cfg.data.repos));
   r.post('/repos', (req, res) => {
-    const { id, path: p, layout, root } = req.body as Repo;
+    const { id, path: p, root } = req.body as Partial<Repo>;
     if (!id || !p) return res.status(400).json({ error: 'id/path required' });
     if (cfg.data.repos.some((x) => x.id === id)) return res.status(409).json({ error: t('api.repoExists', { id }) });
-    // layout 缺省或 auto → 扫描期自动检测（SR-04）
-    const wantLayout = layout ?? 'auto';
-    cfg.data.repos.push({ id, path: p, layout: wantLayout, root: root ?? undefined });
+    // 自有仓库恒为扁平：没有 layout 可配。按分类组织请用第三方来源（只读）或标签。
+    cfg.data.repos.push({ id, path: p, root: root ?? undefined });
     cfg.save();
     touch();
     res.json(cfg.data.repos);
@@ -172,8 +171,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   r.put('/repos/:id', (req, res) => {
     const repo = cfg.data.repos.find((x) => x.id === req.params.id);
     if (!repo) return res.status(404).json({ error: 'repo not found' });
-    const { layout, path: p, root, name, kind } = req.body ?? {};
-    if (layout) repo.layout = layout;
+    const { path: p, root, name, kind } = req.body ?? {};
     if (p) repo.path = p;
     if (name !== undefined) repo.name = name || undefined;
     if (root !== undefined) repo.root = root || undefined;
@@ -184,7 +182,8 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
         id: repo.id,
         name: repo.name ?? repo.id,
         path: repo.path,
-        layout: repo.layout,
+        // 自有仓库没有布局概念，转为只读来源后按 auto 探测（分类目录此时才有意义）
+        layout: 'auto',
         linked: true,
       });
     }
@@ -312,7 +311,6 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
         id: src.id,
         name: src.name && src.name !== src.id ? src.name : undefined,
         path: src.path,
-        layout: src.layout,
         root: root || undefined,
       });
     }

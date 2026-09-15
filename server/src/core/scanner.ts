@@ -50,14 +50,15 @@ export function detectLayoutAbs(absPath: string): { layout: 'flat' | 'nested'; c
   const skillsChild = path.join(absPath, 'skills');
   if (dirs.length && fs.existsSync(skillsChild) && fs.statSync(skillsChild).isDirectory()) dirs.push(skillsChild);
   for (const root of dirs) {
-    let direct = 0;
-    for (const name of fs.readdirSync(root, { withFileTypes: true })) {
-      const child = path.join(root, name.name);
-      try { if (name.isDirectory() && hasSkill(child)) direct++; } catch { /* ignore */ }
-    }
-    if (direct > 0) return { layout: 'flat', count: direct, root };
+    // 判定以「技能实际落在哪一层」为准，而不是「根下有没有技能」。
+    // nested 扫描是 flat 的超集：两者结果一致 ⇒ 技能全在根下（扁平）；
+    // nested 更多 ⇒ 有技能落在分类子目录里，必须按嵌套读，否则它会静默消失。
+    const flat = scanDir(root, 'probe', 'flat');
     const deep = scanDir(root, 'probe', 'nested');
-    if (deep.length > 0) return { layout: 'nested', count: deep.length, root };
+    if (deep.length === 0) continue;
+    return deep.length === flat.length
+      ? { layout: 'flat', count: flat.length, root }
+      : { layout: 'nested', count: deep.length, root };
   }
   return { layout: 'flat', count: 0, root: skillsChild };
 }
@@ -132,7 +133,11 @@ function scanRoot(root: string, source: string, layout: Layout): Skill[] {
 export function scanRepo(repo: Repo): { source: string; path: string; skills: Skill[] } {
   const root = repo.root ? expandTilde(repo.root) : path.join(expandTilde(repo.path), 'skills');
   if (!fs.existsSync(root)) log.warn('scanner', 'Repository directory missing, skipped', { source: repo.id, path: root });
-  return { source: repo.id, path: root, skills: scanRoot(root, repo.id, repo.layout) };
+  // 自有仓库恒为扁平：只认根下的技能目录，不递归分类子目录。
+  // 读写两边共用「位置 = 根 / 名字」这一套规则（归集 / 导入 / 项目回写也都落在根下）。
+  // 需要分类组织请放第三方来源（只读）或用标签；误放进自有仓库分类目录的技能
+  // 不会静默消失——diagnose 会报出来并给出处置建议。
+  return { source: repo.id, path: root, skills: scanRoot(root, repo.id, 'flat') };
 }
 
 export function scanForeign(src: ForeignSource): { source: string; path: string; skills: Skill[] } {

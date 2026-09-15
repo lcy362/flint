@@ -122,6 +122,8 @@ export const zh: Record<MsgKey, string> = {
   'repo.layout.auto': 'auto（自动检测）',
   'repo.layout.nested': 'nested（嵌套分类）',
   'repo.layout.flat': 'flat（扁平）',
+  'repo.flatOnly': '仅扁平',
+  'repo.flatOnlyHint': '自有仓库恒为扁平：只识别 {root} 的直接子目录。想保留分类目录，请把该目录登记为只读来源。',
   'repo.root': 'root（可选）',
   'repo.rootHint': 'skills 根目录，缺省 <路径>/skills',
   'repo.scanRoot': '技能扫描根：',

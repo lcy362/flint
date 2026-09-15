@@ -83,7 +83,7 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 | 模块 | 职责 |
 |------|------|
 | `core/skill.ts` | 读取 / 解析 `SKILL.md` frontmatter（name / description / version / tags，兼容顶层 `tags` 与 `metadata.tags`）。 |
-| `core/scanner.ts` | 扫描仓库 / 外部源：布局识别（flat / nested / auto）、带索引清单（catalog）读取、聚合 `scanAll`。 |
+| `core/scanner.ts` | 扫描仓库 / 外部源：自有仓库**恒按扁平**读取，外部源支持布局识别（flat / nested / auto，深层存在技能即判 nested）、带索引清单（catalog）读取、聚合 `scanAll`。 |
 | `core/tags.ts` | `effectiveTags`：`config.skillMeta` 覆盖优先，回落 frontmatter。 |
 | `core/repo-tags.ts` | 把 `skillMeta` 标签写回 `SKILL.md` frontmatter（保留其它字段与正文）。 |
 | `core/agents.ts` | 内置 Agent 清单、路径解析、同目录归并与**主 Agent** 判定、`agentSkillRows`（某 Agent 的完整技能行并集）。 |
@@ -124,8 +124,8 @@ interface HubConfig {
 
 | 类型 | 关键字段 |
 |------|---------|
-| `Repo` | `id`（参与 `name@id`，不可变）、`name?`、`path`、`root?`（skills 根，缺省 `<path>/skills`）、`layout`（flat / nested / auto） |
-| `ForeignSource` | `id`、`name`、`path`、`layout`、`linked`（true=只读关联） |
+| `Repo` | `id`（参与 `name@id`，不可变）、`name?`、`path`、`root?`（skills 根，缺省 `<path>/skills`）。**无 `layout`：自有仓库恒为扁平** |
+| `ForeignSource` | `id`、`name`、`path`、`layout`（flat / nested / auto；只有只读来源才需要它）、`linked`（true=只读关联） |
 | `CustomAgent` | `key`、`name`、`globalDir`（绝对路径或 `~/`）、`projectDir?`、`recursive?` |
 | `AgentOverride` | `globalDir?`、`projectDir?`、`sync?`、`skillSync?: Record<skillName, SyncMode>`、`preset?`、`explicitOn?`、`explicitOff?`、`primary?` |
 | `Preset` | `name`、`skills: string[]`（`name@来源`）、`tags: string[]` |
@@ -416,7 +416,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 ### 生态兼容类
 
 - **C14 标签落在生态共识位置**：优先 `SKILL.md` frontmatter 顶层 `tags`（社区 40+ 工具原生读取、随 git 版本化）；本工具对暂未回写的标签以 `skillMeta` 暂存并提供迁移。
-- **C15 多布局宽容读取**：flat / nested / 带索引清单都能读；发现**以 `SKILL.md` 存在为准**，不以目录深度为准。
+- **C15 多布局宽容读取**：外部源支持 flat / nested / 带索引清单；**自有仓库恒为扁平**（只认根下的 `SKILL.md`，分类子目录里的技能由诊断报出、不静默丢弃）。发现一律**以 `SKILL.md` 存在为准**，不以目录深度为准。
 
 ### 边界类
 

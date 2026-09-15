@@ -18,6 +18,7 @@ export const en = {
   'diag.noRepos': 'No skill repository configured',
   'diag.repoMissing': 'Repository {id} directory missing: {path}',
   'diag.repoOk': 'Repository {id} @ {path}',
+  'diag.repoNestedSkills': 'Repository {id}: {n} skill(s) sit in category subdirectories and are not recognised ({names}). Own repositories are flat-only — move them to the root, or register that folder as a read-only source',
   'diag.fsrc': 'External source {id}: {path}',
   'diag.noProjects': 'No project registered (nothing to check)',
   'diag.projectMissing': 'Project path missing: {path}',

@@ -14,13 +14,14 @@ import * as active from './src/core/active.js';
 const store = new ConfigStore();
 const cfg = store.data;
 
-// Temporary repo: skills/alpha (flat) + skills/category/beta (nested), testing the auto layout
+// Temporary repo: skills/alpha is a recognised skill; skills/devops/beta sits in a category
+// directory. Own repositories are flat-only, so beta must NOT be picked up — it is asserted below.
 const repoDir = path.join(base, 'repo');
 const mkSkill = (d, name) => { fs.mkdirSync(path.join(d, name), { recursive: true }); fs.writeFileSync(path.join(d, name, 'SKILL.md'), `---\nname: ${name}\ndescription: Test skill ${name}\nversion: 1.0.0\n---\nBody`); };
 mkSkill(path.join(repoDir, 'skills'), 'alpha');
 mkSkill(path.join(repoDir, 'skills', 'devops'), 'beta');
 
-cfg.repos.push({ id: 'default', path: repoDir, layout: 'auto' });
+cfg.repos.push({ id: 'default', path: repoDir });
 
 // External source: nested categories (mimics ume-skills)
 const extDir = path.join(base, 'ext');
@@ -35,6 +36,13 @@ store.save();
 
 const lib = scanAll(cfg.repos, cfg.foreignSources);
 console.log('Discovered skills =', lib.skills.map((s) => s.id).sort());
+
+// 自有仓库恒扁平：skills/devops/beta 位于分类子目录，不应被识别（只收根下直接子目录）
+console.log(
+  lib.skills.some((s) => s.name === 'beta')
+    ? 'FAIL: flat-only own repository picked up a skill from a category directory'
+    : 'PASS: own repository is flat-only (category directory ignored)',
+);
 
 const alpha = lib.skills.find((s) => s.name === 'alpha');
 presets.create(store, 'demo');

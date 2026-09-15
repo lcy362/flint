@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
-import { listAgents, expandTilde } from './agents.js';
+import { listAgents, expandTilde, repoSkillRoot } from './agents.js';
 import { diffSync } from './sync.js';
-import { Skill } from './skill.js';
+import { Skill, hasSkill } from './skill.js';
 import { Candidate } from './integrate.js';
 import { CONFIG_PATH } from '../config/defaults.js';
 import { log } from '../infra/logger.js';
@@ -50,6 +50,39 @@ interface Deps {
 const DIMS: DiagDimension[] = ['sync', 'dup', 'durability', 'config', 'repo', 'project'];
 
 /**
+ * 找出自有仓库里「落在分类子目录、因而不会被识别」的技能名。
+ *
+ * 自有仓库恒为扁平：只有技能根的**直接**子目录才算技能。这里沿目录树走一遍，
+ * 把更深层带 SKILL.md 的目录名收集起来交给诊断提示——目的是不让用户面对
+ * 「技能莫名少了」而毫无线索。深度限制 3 层，避免挂进大目录时翻整棵树。
+ */
+function misplacedSkillsInRepo(skillsRoot: string): string[] {
+  if (!fs.existsSync(skillsRoot)) return [];
+  const found: string[] = [];
+  const walk = (dir: string, depth: number): void => {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue;
+      const child = path.join(dir, e.name);
+      let isDir: boolean;
+      try {
+        if (e.isSymbolicLink() && !fs.existsSync(child)) continue; // 失效软链
+        isDir = fs.statSync(child).isDirectory();
+      } catch { continue; }
+      if (!isDir) continue;
+      if (hasSkill(child)) {
+        if (depth > 0) found.push(e.name); // 第 1 层之上才算「放错位置」
+        continue;                          // 技能目录本身不再向下探
+      }
+      if (depth < 3) walk(child, depth + 1);
+    }
+  };
+  walk(skillsRoot, 0);
+  return found;
+}
+
+/**
  * 纯只读体检，覆盖 6 维度：sync / dup / durability / config / repo / project。
  *
  * 不含「Agent」维度：Agent 侧没有能独立成立的健康问题——
@@ -75,8 +108,24 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
       groups.repo.push({ key: `repo:${r.id}`, status: 'error', message: t('diag.repoMissing', { id: r.id, path: home }) });
       continue;
     }
-    const p = path.join(home, 'skills');
+    const p = repoSkillRoot(r);
     groups.repo.push({ key: `repo:${r.id}`, status: fs.existsSync(p) ? 'ok' : 'error', message: t('diag.repoOk', { id: r.id, path: p }) });
+
+    // 自有仓库恒扁平：落在分类子目录里的技能不会被识别。必须显式报出，
+    // 否则用户只会看到「技能少了」却找不到原因（这正是多布局时代静默丢弃的老毛病）。
+    const misplaced = misplacedSkillsInRepo(p);
+    if (misplaced.length > 0) {
+      groups.repo.push({
+        key: `repo:${r.id}:nested`,
+        status: 'warn',
+        message: t('diag.repoNestedSkills', {
+          id: r.id,
+          n: misplaced.length,
+          names: misplaced.slice(0, 5).join(', '),
+        }),
+        detail: { names: misplaced },
+      });
+    }
   }
   for (const f of cfg.data.foreignSources) {
     const home = expandTilde(f.path);

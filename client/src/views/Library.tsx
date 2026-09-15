@@ -205,7 +205,8 @@ function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; source
       title: repo.name || repo.id,
       sub: <span className="mono">{repo.path}{repo.root ? ` · ${repo.root}` : ''}</span>,
       status: <Badge tone="info">{t('repo.kind.own')}</Badge>,
-      badges: <Badge tone="neutral">{repo.layout}</Badge>,
+      // 自有仓库恒为扁平、没有布局可配：徽标把这条契约显式说出来，避免用户以为漏配了
+      badges: <Badge tone="neutral">{t('repo.flatOnly')}</Badge>,
       actions: (
         <>
           <Button size="sm" variant="ghost" onClick={() => setEditTarget({ ...repo, kind: 'repo' })}>{t('common.edit')}</Button>
@@ -678,7 +679,8 @@ function draftFrom(target: WarehouseTarget | null | undefined): WarehouseDraft {
   if (target.kind === 'source') {
     return { kind: 'source', id: target.id, name: target.name ?? '', path: target.path, layout: target.layout, root: '' };
   }
-  return { kind: 'repo', id: target.id, name: target.name ?? '', path: target.path, layout: target.layout, root: target.root ?? '' };
+  // 自有仓库没有布局可配，草稿里的 layout 只服务于第三方来源分支
+  return { kind: 'repo', id: target.id, name: target.name ?? '', path: target.path, layout: 'auto', root: target.root ?? '' };
 }
 
 /**
@@ -737,7 +739,8 @@ function WarehouseModal({
       if (!d.id.trim() || !d.path.trim()) throw new Error(t('repo.idPathRequired'));
       const id = d.id.trim();
       if (d.kind === 'repo') {
-        const body = { name: d.name.trim() || undefined, path: d.path.trim(), layout: d.layout, root: d.root.trim() || undefined };
+        // 自有仓库不接受 layout：恒为扁平，按分类组织请走第三方来源或标签
+        const body = { name: d.name.trim() || undefined, path: d.path.trim(), root: d.root.trim() || undefined };
         if (editing) {
           await api(`/repos/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ ...body, kind: 'repo' }) });
         } else {
@@ -816,11 +819,18 @@ function WarehouseModal({
 
         <PathField label={t('repo.path')} placeholder="/path/to/library" value={d.path} onChange={(v) => set('path', v)} />
 
-        <FieldSelect label={t('repo.layout')} value={d.layout} onChange={(e) => set('layout', e.target.value)}>
-          <option value="auto">{t('repo.layout.auto')}</option>
-          <option value="nested">{t('repo.layout.nested')}</option>
-          <option value="flat">{t('repo.layout.flat')}</option>
-        </FieldSelect>
+        {d.kind === 'source' ? (
+          <FieldSelect label={t('repo.layout')} value={d.layout} onChange={(e) => set('layout', e.target.value)}>
+            <option value="auto">{t('repo.layout.auto')}</option>
+            <option value="nested">{t('repo.layout.nested')}</option>
+            <option value="flat">{t('repo.layout.flat')}</option>
+          </FieldSelect>
+        ) : (
+          // 自有仓库没有布局选项：把实际扫描根摊开说清楚，避免用户以为漏配了什么
+          <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', lineHeight: 1.6 }}>
+            {t('repo.flatOnlyHint', { root: scanRoot })}
+          </div>
+        )}
 
         {d.kind === 'repo' && (
           <FieldInput

@@ -3,7 +3,18 @@ export type Layout = 'flat' | 'nested' | 'auto';
 /** 安装方式 */
 export type SyncMode = 'symlink' | 'copy';
 
-/** 自有仓库：个人 skill 资产库本体 */
+/**
+ * 自有仓库：个人 skill 资产库本体。
+ *
+ * **恒为扁平布局**（`<root>/<name>/SKILL.md`，root 缺省 `<path>/skills`），没有 layout 概念。
+ * 原因：本工具对自有仓库的所有写入（归集 / 导入 / 项目回写）都落在根下，读取也按
+ * 「位置 = 根 / 名字」定位副本；若允许分类子目录，读写两边就会各按一套位置理解，
+ * 结果是同名技能在同一来源里出现两份（归集会认为"仓库里没有"而再复制一份），
+ * 违反「name 物理唯一」。收敛为扁平后，读写共用同一套位置规则。
+ *
+ * 需要按分类组织的场景走两条路：分类目录放在**第三方来源**（只读关联），
+ * 或用**标签**给自有仓库的技能分类。
+ */
 export interface Repo {
   id: string;
   /** 显示名称，缺省回落到 id。id 参与 skill 标识（name@id），不可变 */
@@ -11,10 +22,12 @@ export interface Repo {
   path: string;
   /** 真实 skills 根目录，缺省 <path>/skills */
   root?: string;
-  layout: Layout;
 }
 
-/** 第三方仓库：外部 / 上游的开放内容库 */
+/**
+ * 第三方仓库：外部 / 上游的开放内容库。
+ * 只读，因此可以保留分类组织 —— `layout` 在这里才有意义（自有仓库恒为扁平）。
+ */
 export interface ForeignSource {
   id: string;
   name: string;

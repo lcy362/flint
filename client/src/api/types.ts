@@ -67,7 +67,7 @@ export interface StateView {
   home: string;
 }
 /** 自有仓库；id 参与 skill 标识（name@id）不可变，name 仅作显示、缺省回落 id */
-export interface RepoView { id: string; name?: string; path: string; layout: string; root?: string }
+export interface RepoView { id: string; name?: string; path: string; root?: string }
 /** 第三方仓库 */
 export interface SourceView { id: string; name: string; path: string; layout: string; linked: boolean }
 

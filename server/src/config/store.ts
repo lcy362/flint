@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { HubConfig, AgentOverride, Preset, emptyConfig } from './types.js';
+import { HubConfig, AgentOverride, Preset, Repo, emptyConfig } from './types.js';
 import { CONFIG_PATH } from './defaults.js';
 import { log } from '../infra/logger.js';
 
@@ -43,6 +43,18 @@ function stripLegacyAgentFields(agents: Record<string, AgentOverride>): Record<s
   );
 }
 
+/**
+ * 自有仓库已收敛为「恒扁平」，历史配置里的 `layout` 不再参与任何推导。
+ * 留着会让用户以为设置仍有效（C5：只存有效决策），故加载时剔除。
+ */
+function stripLegacyRepoLayout(repos: Repo[]): Repo[] {
+  return repos.map((r) => {
+    const next = { ...r } as Repo & { layout?: unknown };
+    delete next.layout;
+    return next;
+  });
+}
+
 export class ConfigStore {
   private cfg: HubConfig;
 
@@ -75,7 +87,7 @@ export class ConfigStore {
     const cfg: HubConfig = {
       ...emptyConfig(),
       ...parsed,
-      repos: parsed.repos ?? [],
+      repos: stripLegacyRepoLayout(parsed.repos ?? []),
       foreignSources: parsed.foreignSources ?? [],
       customAgents: parsed.customAgents ?? [],
       agents: stripLegacyAgentFields(parsed.agents ?? {}),
