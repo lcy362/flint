@@ -135,6 +135,12 @@ export function expandTilde(p: string): string {
   return p.startsWith('~/') || p === '~' ? path.join(os.homedir(), p.slice(2)) : p;
 }
 
+/** 展示用：把 home 前缀压成 ~（与 Agent 页的目录展示口径一致）；不在 home 下的路径原样返回 */
+export function abbrevTilde(p: string): string {
+  const home = os.homedir();
+  return p === home || p.startsWith(`${home}${path.sep}`) ? `~${p.slice(home.length)}` : p;
+}
+
 /** 单个自有仓库的 skill 根目录（与 scanner.scanRepo 的换算保持一致） */
 export function repoSkillRoot(repo: Repo): string {
   return repo.root ? expandTilde(repo.root) : path.join(expandTilde(repo.path), 'skills');
@@ -159,16 +165,24 @@ export function sharedStandardDirs(): string[] {
 }
 
 /**
+ * 带 id 的「已登记库」（自有仓库 / 第三方来源）及其根目录。
+ * 用于按**路径**判定某个软链目标实际属于哪个库——不能拿技能名去猜：
+ * 「同名技能恰好也在仓库里」与「这条软链就指向那个仓库」是两件事，混起来会把来源说错。
+ */
+function registeredLibraryEntries(cfg: HubConfig): { id: string; root: string }[] {
+  return [
+    ...cfg.repos.map((r) => ({ id: r.id, root: repoSkillRoot(r) })),
+    ...cfg.foreignSources.map((s) => ({ id: s.id, root: expandTilde(s.path) })),
+  ];
+}
+
+/**
  * 「已登记库」的根目录集合：自有仓库 skill 根 ∪ 第三方来源目录 ∪ 共享标准目录。
  * 软链目标落在其中任一之下 ⇒ 技能已经有归属（自己的仓库 / 已关联的只读来源 / 共享标准目录），
  * 不需要再从 Agent 目录把它「归集」进仓库。
  */
 function registeredLibraryRoots(cfg: HubConfig): string[] {
-  return [
-    ...repoSkillRoots(cfg),
-    ...cfg.foreignSources.map((s) => expandTilde(s.path)),
-    ...sharedStandardDirs(),
-  ];
+  return [...registeredLibraryEntries(cfg).map((e) => e.root), ...sharedStandardDirs()];
 }
 
 /** 解析真实路径；目标不存在时退回字面绝对路径 */
@@ -216,6 +230,15 @@ export function isLinkInRepo(repo: Repo, target: string | undefined, baseDir?: s
  */
 export function isLinkInRegisteredLibrary(cfg: HubConfig, target: string | undefined, baseDir?: string): boolean {
   return registeredLibraryRoots(cfg).some((root) => underRoot(root, target, baseDir));
+}
+
+/**
+ * 软链目标实际落在哪个「已登记库」（自有仓库 / 第三方来源）：按路径判定，命中首个即返回。
+ * 目标不在任何已登记库内时返回 undefined —— 此时调用方不给出任何来源，
+ * 交由展示层直接呈现真实路径（共享标准目录没有来源 id，故不参与本判定）。
+ */
+export function libraryOfLinkTarget(cfg: HubConfig, target: string | undefined, baseDir?: string): { id: string } | undefined {
+  return registeredLibraryEntries(cfg).find((e) => underRoot(e.root, target, baseDir));
 }
 
 export interface AgentView extends AgentDef {
@@ -416,7 +439,7 @@ export interface AgentSkillRow {
   present: boolean;
   /** 存储/部署方式：软链 / 复制到目录 / 本体(自带) / 待部署(pending) */
   store: 'symlink' | 'copy' | 'own' | 'pending';
-  /** 软链目标路径（store=symlink 时） */
+  /** 软链目标的真实路径（绝对化；store=symlink 时才有） */
   linkTarget?: string;
   /** 来源原因：套餐基准 / 手动覆盖 / 自带(本地目录) / 外部软链 / 共享标准目录读取 */
   reason: 'preset' | 'manual' | 'own' | 'external' | 'shared';
@@ -442,7 +465,10 @@ export interface AgentSkillRow {
   offOverride?: boolean;
   /** 来源套餐名（reason=preset 时） */
   preset?: string;
-  /** 来源资产库 id；自带时为空 */
+  /**
+   * 来源资产库 id（自有仓库 / 第三方来源）。判定口径是**软链目标实际落在哪个库**，
+   * 因此自带目录、目标不在任何已登记库内的软链都为空——不按技能名回填。
+   */
   repo?: string;
   skillId?: string;
   dir?: string;
@@ -476,10 +502,19 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
   const presentLstat = new Map<string, fs.Dirent>();
 
   const isOff = (name: string) => ctx.offIds.has(name) || ctx.offNames.has(name);
-  const linkTo = (p: string) => { try { return fs.readlinkSync(p); } catch { return undefined; } };
-  const metaOf = (name: string) => allSkills.find((s) => s.name === name);
-  /** 已登记自有仓库的 id：技能行的 `repo` 落在其中即说明该技能在仓库里已有同名副本 */
+  /**
+   * 读软链目标并归一为**绝对路径**：readlink 可能给出相对路径（如 `../../.agents/skills/x`），
+   * 列表要展示、归属要判定的是「实际指向哪里」，相对路径两者都说不清。
+   */
+  const linkTo = (p: string) => {
+    try {
+      const raw = fs.readlinkSync(p);
+      return path.isAbsolute(raw) ? raw : path.resolve(path.dirname(p), raw);
+    } catch { return undefined; }
+  };
+  /** 自有仓库里是否已有同名副本（按名字查仓库，与行的展示来源无关） */
   const repoIds = new Set(cfg.repos.map((r) => r.id));
+  const repoHasCopy = (name: string) => allSkills.some((s) => s.name === name && repoIds.has(s.source));
 
   // 1) 扫描自身目录，记录是否存在及各目录项类型（隐藏项不算技能）
   if (fs.existsSync(ownDir)) {
@@ -530,14 +565,15 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
       const target = linkTo(p);
       const externalLink = !isManagedLinkTarget(cfg, target, ownDir);
       const offOverride = !externalLink && ctx.baselineNames.has(name) && isOff(name);
-      const src = metaOf(name);
+      // 展示口径：来源 = 这条软链**实际指向**的已登记库；目标不在任何已登记库内就不给来源，
+      // 由展示层直接呈现真实路径（绝不拿同名技能去回填来源，那样会把「同名」说成「来自」）。
+      const owner = libraryOfLinkTarget(cfg, target, ownDir);
       // 已有归属＝这条软链的技能已经在库里了，行内「归集」没有意义（只会多复制一份重复本体
       // 或直接被去重跳过）。两种成立方式：
       // ① 目标就落在某个已登记库内（自有仓库 / 第三方来源 / 共享标准目录）；
-      // ② 该名字在自有仓库里已有副本（`repo` 字段的回填来源，也就是列表上展示的那个来源）。
+      // ② 该名字在自有仓库里已有副本（按名字查仓库，与来源展示各算各的）。
       // 要拿来源版本覆盖仓库副本请走技能库的归集确认页——那里才有并列候选可比。
-      const alreadyInLibrary =
-        isLinkInRegisteredLibrary(cfg, target, ownDir) || (!!src && repoIds.has(src.source));
+      const alreadyInLibrary = isLinkInRegisteredLibrary(cfg, target, ownDir) || repoHasCopy(name);
       rows.push({
         name, title: name,
         description: readSkill(p)?.description, // readSkill 顺着软链读到目标
@@ -548,7 +584,7 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
         reason: externalLink ? 'external' : (ctx.baselineNames.has(name) ? 'preset' : 'manual'),
         offOverride, externalLink, alreadyInLibrary,
         preset: ctx.presetOf.get(name),
-        skillId: src?.id, repo: src?.source,
+        skillId: owner ? `${name}@${owner.id}` : undefined, repo: owner?.id,
         dir: p, link: true, fromDir: ownDir, readVia: 'own',
         takenOver: !externalLink,
       });
@@ -578,16 +614,18 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
       // 共享目录里同样只认「软链」或「真正的技能目录」，避免把无关文件当技能
       if (!isLink && !isSkillDir(p)) continue;
       seen.add(name);
-      const src = metaOf(name);
+      const target = isLink ? linkTo(p) : undefined;
+      // 与自身目录同一口径：来源只按目标实际落在哪个已登记库判定，猜不到就不给来源
+      const owner = libraryOfLinkTarget(cfg, target, sharedDir);
       rows.push({
         name, title: isLink ? name : (readSkill(p)?.name ?? name),
         description: readSkill(p)?.description,
         source: 'owned', wanted: false, present: true,
         store: isLink ? 'symlink' : 'own',
-        linkTarget: isLink ? linkTo(p) : undefined,
+        linkTarget: target,
         reason: 'shared',
         preset: ctx.presetOf.get(name),
-        skillId: src?.id, repo: src?.source,
+        skillId: owner ? `${name}@${owner.id}` : undefined, repo: owner?.id,
         dir: p, link: isLink, fromDir: sharedDir, readVia: 'shared',
       });
     }

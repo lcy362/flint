@@ -1,4 +1,5 @@
 import type { AgentSkillRow } from '../core/agents.js';
+import { abbrevTilde } from '../core/agents.js';
 import type { ProjectSkillRow } from '../core/projects.js';
 import { t } from '../i18n/index.js';
 
@@ -29,6 +30,12 @@ export interface SkillCardView {
   readVia?: 'own' | 'shared';
   /** 已接管：本目录这条是指向仓库内技能的软链（系统口径，任一自有仓库；指向仓库外的不算） */
   takenOver?: boolean;
+  /**
+   * 未纳管行（本地自有目录 / 外部软链 / 共享目录读取）的**实际位置**，软链再带上真实目标；
+   * 路径已把 home 压成 `~`。这些行不由本工具按来源分发，`name@来源` 对它们没有意义，
+   * 列表直接展示这个标签，保证「看到的就是真实路径」。
+   */
+  pathLabel?: string;
 }
 
 interface CommonRow {
@@ -54,6 +61,20 @@ function stateOf(r: CommonRow): SkillState {
   // 本地自有目录、外部软链、共享标准目录读取都不由本 Agent 管理，开关对它们没有意义
   if (r.reason === 'own' || r.reason === 'external' || r.reason === 'shared') return 'unmanaged';
   return r.wanted ? 'on' : 'off';
+}
+
+/**
+ * 未纳管行的展示位置：直接给真实路径，软链再带上真实目标（home 压成 `~`）。
+ *
+ * 受管行表达的是「本工具按哪条策略把它放到这里」，`name@来源` 才是准确身份；
+ * 未纳管行（本地自有目录 / 外部软链 / 共享目录读取）没有这层身份，路径就是它的全部事实，
+ * 所以这里不做任何猜测，指向哪里就展示哪里。
+ */
+function pathLabelOf(row: { dir?: string; linkTarget?: string }, reason: SkillReason): string | undefined {
+  if (reason !== 'own' && reason !== 'external' && reason !== 'shared') return undefined;
+  if (!row.dir) return undefined;
+  const dir = abbrevTilde(row.dir);
+  return row.linkTarget ? `${dir} → ${abbrevTilde(row.linkTarget)}` : dir;
 }
 
 /**
@@ -97,6 +118,7 @@ export function agentCard(row: AgentSkillRow): SkillCardView {
     state: stateOf(r),
     offOverride: row.offOverride, linkTarget: row.linkTarget, preset: row.preset,
     fromDir: row.fromDir, readVia: row.readVia, takenOver: row.takenOver,
+    pathLabel: pathLabelOf(row, reason),
     actions: acts(r),
   };
 }
@@ -112,6 +134,7 @@ export function projectCard(row: ProjectSkillRow): SkillCardView {
     source: row.repo ?? '', dir: row.dir, tags: [],
     reason: r.reason, store: row.store, state: stateOf(r),
     offOverride: row.offOverride, takenOver: row.takenOver,
+    pathLabel: pathLabelOf(row, r.reason),
     actions: acts(r),
   };
 }

@@ -290,42 +290,74 @@ describe('isLinkInRegisteredLibrary（软链是否已指向某个「已登记库
   });
 });
 
-describe('agentSkillRows：是否有「归集到仓库」入口', () => {
-  /** 建一个含自有仓库的沙箱：agent 目录里的 alpha 按 kind 决定形态 */
-  function actionsFor(kind: 'link-with-repo-copy' | 'link-without-repo-copy' | 'owned-dir') {
-    const base = tmpDir('flint-collect-entry-');
+describe('agentSkillRows：来源展示与「归集到仓库」入口', () => {
+  /** 沙箱：自有仓库（含 alpha）+ 第三方来源（含 beta）+ 一个 Agent 目录 */
+  function sandbox() {
+    const base = tmpDir('flint-row-');
     const repoDir = path.join(base, 'repo');
-    if (kind !== 'link-without-repo-copy') writeSkill(path.join(repoDir, 'skills'), 'alpha');
+    writeSkill(path.join(repoDir, 'skills'), 'alpha');
+    const foreignDir = path.join(base, 'foreign');
+    writeSkill(path.join(foreignDir, 'nested'), 'beta');
     const agentDir = path.join(base, 'agent');
     fs.mkdirSync(agentDir, { recursive: true });
-    if (kind === 'owned-dir') {
-      writeSkill(agentDir, 'alpha');
-    } else {
-      const outside = path.join(base, 'outside', 'alpha');
-      fs.mkdirSync(outside, { recursive: true });
-      fs.symlinkSync(outside, path.join(agentDir, 'alpha'), 'dir');
-    }
     const store = makeStore({
       repos: [{ id: 'default', path: repoDir }],
+      foreignSources: [{ id: 'foreign', name: 'foreign', path: foreignDir, layout: 'nested', linked: true }],
       agents: { codebuddy: { globalDir: agentDir } },
     });
-    const lib = scanAll(store.data.repos, store.data.foreignSources);
-    const ctx = desiredContext(store, lib.skills);
-    const card = agentCards(agentSkillRows('codebuddy', store.data, lib.skills, ctx)).find((c) => c.name === 'alpha')!;
-    return { card, kinds: card.actions.map((a) => a.kind) };
+    /** 渲染该 Agent 的技能卡片 */
+    const cards = () => {
+      const lib = scanAll(store.data.repos, store.data.foreignSources);
+      const ctx = desiredContext(store, lib.skills);
+      return agentCards(agentSkillRows('codebuddy', store.data, lib.skills, ctx));
+    };
+    /** 在 Agent 目录里放一条软链（target 可为相对路径，模拟手工软链的形态） */
+    const link = (name: string, target: string) => fs.symlinkSync(target, path.join(agentDir, name), 'dir');
+    const cardOf = (name: string) => cards().find((c) => c.name === name)!;
+    const kindsOf = (name: string) => cardOf(name).actions.map((a) => a.kind);
+    return { base, foreignDir, agentDir, link, cardOf, kindsOf };
   }
 
-  it('软链指向库外，但仓库已有同名副本（列表上展示的来源就是这个仓库）→ 不显示归集', () => {
-    const { card, kinds } = actionsFor('link-with-repo-copy');
-    expect(card.source).toBe('default');
-    expect(kinds).toEqual(['delete']);
+  it('软链指向未登记目录 → 不给来源；真实目标与位置标签都绝对化（相对软链也一样）', () => {
+    const { base, agentDir, link, cardOf } = sandbox();
+    const outside = path.join(base, 'outside', 'gamma');
+    fs.mkdirSync(outside, { recursive: true });
+    link('gamma', path.relative(agentDir, outside)); // 相对软链，如 ~/.reasonix/skills 的形态
+    const card = cardOf('gamma');
+    expect(card.source).toBe(''); // 不再拿同名技能回填来源
+    expect(card.linkTarget).toBe(outside); // 相对目标解析为绝对路径
+    expect(card.pathLabel).toBe(`${path.join(agentDir, 'gamma')} → ${outside}`);
   });
 
-  it('软链指向库外，仓库里也没有同名副本 → 仍可归集', () => {
-    expect(actionsFor('link-without-repo-copy').kinds).toEqual(['collect', 'delete']);
+  it('软链指向第三方来源 → 来源按目标路径判定为该来源（不是按名字猜）', () => {
+    const { foreignDir, link, cardOf, kindsOf } = sandbox();
+    link('beta', path.join(foreignDir, 'nested', 'beta'));
+    expect(cardOf('beta').source).toBe('foreign');
+    expect(cardOf('beta').id).toBe('beta@foreign');
+    expect(kindsOf('beta')).toEqual(['delete']); // 目标已在已登记来源内 → 无需归集
   });
 
-  it('自带真实目录：即使仓库已有同名，也保留归集（它是把本目录版本写进仓库的常规入口）', () => {
-    expect(actionsFor('owned-dir').kinds).toEqual(['collect', 'delete']);
+  it('软链指向未登记目录、仓库里已有同名副本 → 不显示归集，但来源仍为空（不谎报来自仓库）', () => {
+    const { base, link, cardOf, kindsOf } = sandbox();
+    const outside = path.join(base, 'outside', 'alpha');
+    fs.mkdirSync(outside, { recursive: true });
+    link('alpha', outside); // alpha 在自有仓库里已有副本
+    expect(cardOf('alpha').source).toBe('');
+    expect(kindsOf('alpha')).toEqual(['delete']);
+  });
+
+  it('软链指向未登记目录、仓库里也没有同名副本 → 仍可归集', () => {
+    const { base, link, kindsOf } = sandbox();
+    const outside = path.join(base, 'outside', 'gamma');
+    fs.mkdirSync(outside, { recursive: true });
+    link('gamma', outside);
+    expect(kindsOf('gamma')).toEqual(['collect', 'delete']);
+  });
+
+  it('自带真实目录：即使仓库已有同名也保留归集，位置标签就是它自己的目录', () => {
+    const { agentDir, cardOf, kindsOf } = sandbox();
+    writeSkill(agentDir, 'alpha');
+    expect(cardOf('alpha').pathLabel).toBe(path.join(agentDir, 'alpha'));
+    expect(kindsOf('alpha')).toEqual(['collect', 'delete']);
   });
 });

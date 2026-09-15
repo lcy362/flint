@@ -95,6 +95,7 @@ export interface SkillCardView {
   reasonLabel?: string;
   reasonTitle?: string;
   offOverride?: boolean;
+  /** 软链的真实目标（绝对路径） */
   linkTarget?: string;
   preset?: string;
   /** 该技能物理所在的可读目录（多目录 Agent 用于说明「来自哪个目录」） */
@@ -103,6 +104,8 @@ export interface SkillCardView {
   readVia?: 'own' | 'shared';
   /** 已接管：本目录这条是指向仓库内技能的软链（系统口径，任一自有仓库；指向仓库外的不算） */
   takenOver?: boolean;
+  /** 未纳管行的实际位置（软链附带真实目标，home 已压成 ~）：由服务端给好，列表直接展示 */
+  pathLabel?: string;
   /** 客户端派生：直接展示来源目录的徽标文案，仅多目录 Agent 需要 */
   dirLabel?: string;
   dirTitle?: string;

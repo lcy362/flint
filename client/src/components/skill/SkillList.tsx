@@ -38,10 +38,14 @@ export function skillToEntity(
 ): EntityItem {
   const { onToggle, onAction, onTag, onOpen } = opts;
   const on = item.toggleOn ?? isOn(item);
+  // 未纳管的行没有「本工具按来源分发」这层身份，展示服务端给好的真实位置
+  // （软链时形如 `~/x/skills/a → ~/y/skills/a`），避免把 name@来源 摆在那里误导；
+  // 受管行仍以 name@来源 表达身份。
+  const sub = item.pathLabel ?? item.id;
   return {
     id: item.id,
     title: item.title || item.name,
-    sub: <span className="mono">{item.id}</span>,
+    sub: <span className="mono" title={sub}>{sub}</span>,
     desc: item.description,
     status: stateBadge(t, item),
     badges: skillBadges(t, item),
