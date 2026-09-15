@@ -105,6 +105,20 @@ flint
 
 Then open **http://localhost:8787**. Handy flags: `flint --port 9000`, `flint --no-open`, `flint --help`.
 
+**Updating, and checking the version:**
+
+```bash
+npm install -g flint-skills-hub@latest     # update the global install (pin it with @1.0.0 if you prefer)
+flint -v                                   # print the version in use
+npm ls -g --depth=0 flint-skills-hub       # what is installed globally
+```
+
+- A running instance is **not hot-updated** — stop it (`Ctrl+C`) and start it again.
+- `npx` caches packages, so ask for the version explicitly: `npx flint-skills-hub@latest`.
+- Running from a source checkout instead: `git pull && npm install && npm run build`.
+- Updating never touches your data — `~/.skills-hub/config.json`, your repositories and your agents' skill directories are left as they are.
+- With nvm, every Node version keeps its own global packages: reinstall under the Node version you actually run `flint` with (`which -a flint` shows where the command comes from).
+
 **From source — one-click start (recommended):**
 
 ```bash

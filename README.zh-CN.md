@@ -105,6 +105,20 @@ flint
 
 然后打开 **http://localhost:8787**。常用参数：`flint --port 9000`、`flint --no-open`、`flint --help`。
 
+**更新与查看版本：**
+
+```bash
+npm install -g flint-skills-hub@latest     # 更新全局安装（想锁版本就写 @1.0.0）
+flint -v                                   # 打印当前生效的版本
+npm ls -g --depth=0 flint-skills-hub       # 查看全局装的是哪个版本
+```
+
+- **正在运行的实例不会热更新** —— 先 `Ctrl+C` 停掉，再重新启动。
+- `npx` 会缓存包，必须显式指定版本：`npx flint-skills-hub@latest`。
+- 从源码跑的话：`git pull && npm install && npm run build`。
+- 更新**不动你的数据** —— `~/.skills-hub/config.json`、仓库目录、各 Agent 技能目录都原样保留。
+- 用 nvm 时，每个 Node 版本有各自的全局包：请在真正运行 `flint` 的那个 Node 版本下重装（`which -a flint` 可看命令来自哪份）。
+
 **从源码起步 —— 一键启动（推荐）：**
 
 ```bash
