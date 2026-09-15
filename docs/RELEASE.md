@@ -228,15 +228,16 @@ git checkout package.json
 
 首版之后，后续发版一律走 OIDC。
 
-> ℹ️ **发布后校验：直接查 registry API，且必须阻断（v1.0.0 起）**。`release.yml` 在 `npm publish`
-> 之后会确认新版本真的能从 registry 解析，最多重试 8 次 × 15s：
+> ℹ️ **发布后校验：只告警，不阻断**。`release.yml` 在 `npm publish` 之后会确认新版本能从 registry
+> 解析，最多重试 8 次 × 15s；确认不到只打 `::warning::`，**tag / Release 照建**。两条边界：
 >
 > 1. **不要用 `npm view`**：它读本地 npm 缓存，而紧邻的上一步「未发布探测」刚把 404 写进缓存，
 >    于是后续重试 60s 全都在读同一个缓存（v0.1.1 实录：runner 上六次全 404，本机却早已可见）。
->    这就是当初改用 registry API（带 `Cache-Control: no-cache`）的原因。
-> 2. **不能只告警**：v0.1.0 / v0.1.1 曾因「包发成功了却跳过建 tag / Release」把这一步降级成
->    `continue-on-error` 的告警；但 v1.0.0 证明那个前提不成立——npm 会**受理发布却暂不公开**（见 §5.4）。
->    于是校验恢复为阻断式：确认不到就不建 tag / Release，**宁可红掉，也不发出指向不存在版本的 Release**。
+>    这就是改用 registry API（带 `Cache-Control: no-cache`）的原因。
+> 2. **也不能做成阻断**：npm 从「接单成功」到「公开可见」之间有传播延迟，**v1.0.0 实测约 8 分钟**
+>    （发布步骤 07:11:50 跑完，registry 时间戳是 07:20:03）。任何「两分钟不出现就判死」的校验都会把
+>    正常发版判红、反而拦住 tag / Release。真正被拒的发布（重复版本 / 权限不足）会让 `npm publish`
+>    以非 0 退出，那一步已经拦住了，这里不需要第二道拦截 —— 校验超时只提示「稍后自行确认」（见 §5.4）。
 >
 > 万一仍然遇到「已发布但没建 tag/Release」（例如用旧版工作流发的），手工补一条即可：
 >
@@ -249,21 +250,24 @@ git checkout package.json
 > `GITHUB_TOKEN` 创建，不会递归触发）。该运行会在「版本解析」的已发布校验处**正确地**拦下并失败 ——
 > 这是守卫在起作用，不是故障。
 
-### 5.4 发布被「暂存待批准」时怎么办
+### 5.4 「npm publish 成功但版本还查不到」怎么办
 
-npm 可能**受理发布但暂不公开**：CLI 打印
+`npm publish` 会打印
 `npm notice Your package is being processed and may take a few minutes to become available.`
-随后以 0 退出，而 registry 上查不到该版本（`https://registry.npmjs.org/flint-skills-hub/<version>`
-返回 404、`dist-tags` 也不变）。常见原因是账号 / 包的**发布审批策略**：发布需要维护者批准。
+随后以 0 退出；此时立刻去查 registry 很可能仍是 404 —— **这是正常的传播延迟，不是失败**：
+v1.0.0 实测从发布步骤跑完（07:11:50）到 registry 上出现该版本的时间戳（07:20:03）**约 8 分钟**。
 
-处理步骤：
+因此：
 
-1. 到 npmjs.com 的包页面批准这次发布（该版本此时显示为待批准状态）。
-2. 再看是否需要补 tag / Release：
-   - 那次运行按现在的口径**失败了**（确认不到就会红，且**不会**建 tag / Release）→ **重跑工作流**即可：
-     自动模式会认到「版本已在 npm、但 tag 缺失」，于是只补 tag / Release，不重发；
-   - tag / Release **已经存在**（旧版工作流发的，v1.0.0 就是这种）→ 批准后什么都不用做；
-   - 若 npm 上**根本没有待批准的发布**，那就不是审批问题：删掉 tag / Release 后重跑工作流排查。
+- **不要据此判断发版失败，也不用重跑工作流**：tag / Release 会在同一次运行里照常创建；
+- 想确认就直查 `https://registry.npmjs.org/flint-skills-hub/<version>`
+  （**别用 `npm view`**，它读本地缓存），或看
+  <https://www.npmjs.com/package/flint-skills-hub?activeTab=versions>；
+- **超过约 15 分钟**仍查不到，才按真问题处理：
+  - 到 npmjs.com 看是否有**待批准的发布**（发布审批策略成立时）——有就批准；
+  - 或看那次运行里 `npm publish` 的完整输出：重复版本 / 权限不足会以非 0 退出，那种情况工作流本来就是红的；
+  - 若版本确实没上去、而 tag / Release 已建出来（触发过工作流重跑），删掉 tag / Release 后重跑工作流即可
+    （自动模式会认到「已在 npm、但 tag 缺失」时只补 tag，不会重发）。
 
 ---
 

@@ -13,8 +13,8 @@ name: Release
 #   - 自动触发遇到「已发布但 tag 缺失」（例如上次卡在发布审批、没走到建 tag）→ 只补 tag / Release，不重发；
 #   - 显式指定（dispatch / tag）遇到已发布版本 → 直接失败，拦住误操作。
 #
-# 发布后必须确认版本真的可见（阻断式）：npm 可能在维护者批准前「受理但不公开」，
-# 那种情况下绝不能建 tag / Release（见 docs/RELEASE.md §5.4 的实例）。
+# 发布后校验版本是否已公开可见：**只告警**。npm 从接单到公开可见有传播延迟（v1.0.0 实测约 8 分钟），
+# 因此校验超时不拦 tag / Release；真正被拒的发布会让 `npm publish` 自己以非 0 退出。
 #
 # npm 发布走 Trusted Publishing（OIDC），不需要配置任何 NPM_TOKEN。
 on:
@@ -266,17 +266,18 @@ jobs:
           fi
           npm publish --provenance
 
-      # 发布后**必须**确认新版本真的能从 registry 解析，否则不建 tag / Release。
-      # 教训：
-      # 1. **不要用 `npm view`**：它读本地 npm 缓存，而上一步「未发布探测」刚把 404 缓存下来，
-      #    于是重试 60s 全在读同一个缓存（v0.1.1 实录：runner 上六次全部 404，本地却早已可见）。
+      # 发布后确认新版本能从 registry 解析——**只告警，不阻断**。
+      # 教训（两条方向相反的坑，都被踩过）：
+      # 1. **不要用 `npm view`**：它读本地 npm 缓存，而紧邻的上一步「未发布探测」刚把 404 写进缓存，
+      #    于是重试 60s 全在读同一个缓存（v0.1.1 实录：runner 上六次全 404，本机却早已可见）。
       #    这里直接查 registry API，并带 no-cache 头。
-      # 2. **必须是阻断式**：npm 会在「维护者批准前」受理发布并成功退出——v1.0.0 就踩过：
-      #    CLI 打印 "Your package is being processed and may take a few minutes to become available."
-      #    且退出码为 0，但版本在批准前对所有人不可见。若这里继续放行，就会建出一个
-      #    「指向不存在版本」的 tag / Release。所以确认不到就红掉，把人叫来处理。
+      # 2. **不能阻断**：npm 接单成功到公开可见之间有一段传播延迟，v1.0.0 实测约 8 分钟
+      #    （发布步骤 07:11:50 跑完，registry 上的时间戳是 07:20:03）。任何「等两分钟还不出现就判死」
+      #    的校验都会把正常发版判红，反而拦住 tag / Release。真正被拒的发布会让 `npm publish`
+      #    以非 0 退出（重复版本 / 权限不足），那一步就已经拦住了，这里不需要再兜第二道。
       - name: Verify the published version resolves
         if: ${{ steps.version.outputs.skip != 'true' && steps.version.outputs.publish == 'true' && inputs.dry-run != true }}
+        continue-on-error: true
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -289,8 +290,9 @@ jobs:
             echo "Attempt ${attempt}: not resolvable yet; retrying in 15s..."
             sleep 15
           done
-          echo "::error::The npm CLI accepted the publish, but flint-skills-hub@${VERSION} is still not visible on the registry after ~2min — refusing to create the tag / Release."
-          echo "::error::Most likely the publish is waiting for maintainer approval on npmjs.com (see docs/RELEASE.md §5.4). Approve it, then re-run this workflow: the tag / Release are created in that run."
+          echo "::warning::flint-skills-hub@${VERSION} is not publicly resolvable yet (~2min after publish)."
+          echo "::warning::This is normal propagation lag (v1.0.0 took about 8 minutes) and does not block the release; the tag / Release are still created."
+          echo "::warning::If it is still missing after ~15 minutes, check for a publish awaiting approval or a duplicate-version rejection: https://www.npmjs.com/package/flint-skills-hub?activeTab=versions"
 
       # 建 tag / Release：publish=false 时也走这里（补 tag 的场景），因此只看 skip / dry-run
       - name: Create GitHub Release
