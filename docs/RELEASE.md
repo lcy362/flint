@@ -219,12 +219,17 @@ git checkout package.json
 
 首版之后，后续发版一律走 OIDC。
 
-> ℹ️ **registry 传播延迟（v0.1.0 实录）**：`release.yml` 在发布后会校验新版本可从 registry 解析。
-> 刚 `publish` 完的几秒到几十秒内查询可能返回 **404** —— v0.1.0 首次发布就踩到了，后果是
-> **包其实发成功了，却因为这一步判死而跳过了建 tag / 建 GitHub Release**。
-> 工作流已改为失败重试 6 次（约 60s）；若重试后仍失败，才说明包名或权限确有问题。
+> ℹ️ **发布后校验的坑（v0.1.0 / v0.1.1 各踩一次）**：`release.yml` 发布后会确认新版本能从 registry 解析。
+> 两次都出现「**包发成功了，却因为这一步判死而跳过建 tag / 建 GitHub Release**」。真实原因有两个：
 >
-> 万一还是遇到「已发布但没建 tag/Release」，手工补一条即可：
+> 1. **`npm view` 读的是本地 npm 缓存**：紧邻的上一步「未发布探测」刚把 404 写进缓存，
+>    于是后续重试 60s 全都在读同一个缓存（v0.1.1 实录：runner 上六次全 404，本机却早已可见）。
+> 2. 首版还存在真实的 registry 传播延迟。
+>
+> 现已改为**直接查 registry API**（带 `Cache-Control: no-cache`）并加 `continue-on-error`。
+> `npm publish` 成功本身已证明发布落地，这一步只是兜底确认，因此**失败只告警、不再阻断**建 tag / Release。
+>
+> 万一仍然遇到「已发布但没建 tag/Release」（例如用旧版工作流发的），手工补一条即可：
 >
 > ```bash
 > gh release create vX.Y.Z --target master --title vX.Y.Z \
@@ -232,7 +237,8 @@ git checkout package.json
 > ```
 >
 > 注意：手工建 tag 会以**你的身份**触发 `push: tags v*` 那次 `Release` 运行（正常路径下 tag 由
-> `GITHUB_TOKEN` 创建，不会递归触发）。该运行会在「已发布校验」处正确地拦下，可直接取消。
+> `GITHUB_TOKEN` 创建，不会递归触发）。该运行会在「已发布校验」处**正确地**拦下并失败 ——
+> 这是守卫在起作用，不是故障。
 
 ---
 

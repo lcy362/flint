@@ -173,24 +173,29 @@ jobs:
           fi
           npm publish --provenance
 
-      # 刚发布完 registry 存在传播延迟，立刻查询可能拿到 404 —— v0.1.0 首次发布实测踩到过，
-      # 结果是包明明发成功了，却因为这一步判死而跳过了建 tag / 建 Release。
-      # 因此改为重试若干次：只有始终查不到才判失败（那才是包名 / 权限真有问题）。
+      # 发布后确认新版本能从 registry 解析。
+      # 两条教训（v0.1.0 与 v0.1.1 各踩一次，两次都是包发成功了却跳过建 tag / 建 Release）：
+      # 1. **不要用 `npm view`**：它读本地 npm 缓存，而上一步「未发布探测」刚把 404 缓存下来，
+      #    于是重试 60s 全在读同一个缓存（v0.1.1 实录：runner 上六次全部 404，本地却早已可见）。
+      #    这里改为直接查 registry API，并带 no-cache 头。
+      # 2. **不阻断发布流程**：`npm publish` 成功本身已证明发布落地，这里只是兜底确认，
+      #    因此失败只告警，绝不阻断后续建 tag / 建 Release。
       - name: Verify the published version resolves
         if: ${{ inputs.dry-run != true }}
+        continue-on-error: true
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           for attempt in 1 2 3 4 5 6; do
-            if npm view "flint-skills-hub@${VERSION}" version dist.tarball 2>/dev/null; then
+            if curl -fsS -H 'Cache-Control: no-cache' \
+              "https://registry.npmjs.org/flint-skills-hub/${VERSION}" -o /dev/null; then
               echo "flint-skills-hub@${VERSION} resolves on the registry."
               exit 0
             fi
-            echo "Attempt ${attempt}: not resolvable yet (registry propagation lag); retrying in 10s..."
+            echo "Attempt ${attempt}: not resolvable yet; retrying in 10s..."
             sleep 10
           done
-          echo "::error::flint-skills-hub@${VERSION} is still not resolvable after ~60s; the publish may not have landed."
-          exit 1
+          echo "::warning::Could not confirm flint-skills-hub@${VERSION} on the registry within ~60s. npm publish reported success, so the release proceeds — confirm manually: https://www.npmjs.com/package/flint-skills-hub?activeTab=versions"
 
       - name: Create GitHub Release
         if: ${{ inputs.dry-run != true }}
