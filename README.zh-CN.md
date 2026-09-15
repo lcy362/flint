@@ -48,6 +48,7 @@ Flint 的核心思路与 [Obsidian](https://obsidian.md/) 完全一致——只�
 | [`AGENTS.md`](./AGENTS.md) | 面向 AI 编码助手 / 贡献者的开发指引（架构要点、约定、命令） |
 | [`docs/PRD.md`](./docs/PRD.md) | 产品需求（功能、规则、验收标准） |
 | [`docs/TECH.md`](./docs/TECH.md) | 技术架构（数据模型、同步引擎、API、前端） |
+| [`docs/RELEASE.md`](./docs/RELEASE.md) | 发版流程（版本号规则、release notes 规范、npm 发布） |
 
 ## 核心理念
 
@@ -91,7 +92,20 @@ skill 本体就是磁盘上的普通目录（`SKILL.md`），标签等元数据�
 
 环境要求：Node.js ≥ 20。
 
-一键启动（推荐）：
+**从 npm 安装 —— 不需要 clone：**
+
+```bash
+# 一次性运行：
+npx flint-skills-hub
+
+# 或全局安装；两个命令名都已注册：
+npm install -g flint-skills-hub
+flint
+```
+
+然后打开 **http://localhost:8787**。常用参数：`flint --port 9000`、`flint --no-open`、`flint --help`。
+
+**从源码起步 —— 一键启动（推荐）：**
 
 ```bash
 ./start.sh
@@ -178,10 +192,14 @@ npm run dev:server     # 只启动后端（tsx watch）
 npm run dev:client     # 只启动前端（vite）
 npm run build          # 构建：server (tsc) + client (vite build)
 npm start              # 以构建产物启动后端
+npm test               # 单元测试（vitest）
+npm run smoke -w server  # 端到端 smoke
+node bin/flint.mjs --no-open   # 按 npm 包的方式启动一次
 ```
 
 - 端口：后端 `8787`（`PORT`），前端 `5173`（`CLIENT_PORT`）；Vite 将 `/api` 代理到后端。
-- 端到端 smoke（使用临时目录，不污染本机）：`cd server && npx tsx smoke.ts`。
+- 单元测试与端到端 smoke 都在临时目录里运行，不污染本机。
+- 发版流程见 [`docs/RELEASE.md`](./docs/RELEASE.md)。
 - 配置 / 日志位置：`~/.skills-hub/config.json`、`~/.skills-hub/logs/app.log`（可用 `SKILLS_HUB_CONFIG` 覆盖配置路径）。
 - 日志统一为英文输出，便于检索与 issue 上报；界面文案支持中英双语。
 

@@ -48,6 +48,7 @@ In one sentence: **Obsidian lets you own and sharpen your knowledge; Flint lets 
 | [`AGENTS.md`](./AGENTS.md) | Development guide for AI coding assistants / contributors (architecture, conventions, commands) |
 | [`docs/PRD.md`](./docs/PRD.md) | Product requirements (features, rules, acceptance criteria) |
 | [`docs/TECH.md`](./docs/TECH.md) | Technical architecture (data model, sync engine, API, frontend) |
+| [`docs/RELEASE.md`](./docs/RELEASE.md) | Release process (versioning, release notes, npm publishing) |
 
 ## Core ideas
 
@@ -91,7 +92,20 @@ The workflow has two layers — "essential" and "advanced". **Getting started ta
 
 Requires Node.js ≥ 20.
 
-One-click start (recommended):
+**From npm — no clone needed:**
+
+```bash
+# One-shot run:
+npx flint-skills-hub
+
+# Or install globally; both command names are registered:
+npm install -g flint-skills-hub
+flint
+```
+
+Then open **http://localhost:8787**. Handy flags: `flint --port 9000`, `flint --no-open`, `flint --help`.
+
+**From source — one-click start (recommended):**
 
 ```bash
 ./start.sh
@@ -178,10 +192,14 @@ npm run dev:server     # Backend only (tsx watch)
 npm run dev:client     # Frontend only (vite)
 npm run build          # Build: server (tsc) + client (vite build)
 npm start              # Start the backend from build output
+npm test               # Unit tests (vitest)
+npm run smoke -w server  # End-to-end smoke
+node bin/flint.mjs --no-open   # Run the CLI the way the npm package does
 ```
 
 - Ports: backend `8787` (`PORT`), frontend `5173` (`CLIENT_PORT`); Vite proxies `/api` to the backend.
-- End-to-end smoke (uses a temp directory, never touches your machine): `cd server && npx tsx smoke.ts`.
+- Unit tests run in a temp sandbox; the end-to-end smoke also uses a temp directory and never touches your machine.
+- Release process: see [`docs/RELEASE.md`](./docs/RELEASE.md).
 - Config / log locations: `~/.skills-hub/config.json`, `~/.skills-hub/logs/app.log` (override the config path with `SKILLS_HUB_CONFIG`).
 - Logs are always written in English for easy searching and issue reporting; the interface supports English and Chinese.
 
