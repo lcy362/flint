@@ -53,6 +53,7 @@ export const zh: Record<MsgKey, string> = {
   /* ---------- topbar ---------- */
   'topbar.refresh': '刷新',
   'topbar.toggleTheme': '切换主题',
+  'topbar.toggleLang': '切换为 English',
 
   /* ---------- page subtitles ---------- */
   'app.library.sub': '统一技能资产库',

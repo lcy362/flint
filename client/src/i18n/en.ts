@@ -57,6 +57,7 @@ export const en = {
   /* ---------- topbar ---------- */
   'topbar.refresh': 'Refresh',
   'topbar.toggleTheme': 'Toggle theme',
+  'topbar.toggleLang': 'Switch to Chinese',
 
   /* ---------- page subtitles ---------- */
   'app.library.sub': 'Unified skill vault',

@@ -16,7 +16,7 @@ export default function Topbar({
   onReload?: () => void;
   reloading?: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, lang, setLang } = useI18n();
   return (
     <header className="topbar">
       <div>
@@ -34,6 +34,15 @@ export default function Topbar({
         )}
         <Button variant="ghost" size="sm" onClick={onToggleTheme} title={t('topbar.toggleTheme')} aria-label={t('topbar.toggleTheme')}>
           {theme === 'dark' ? '☾' : '☀'}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+          title={t('topbar.toggleLang')}
+          aria-label={t('topbar.toggleLang')}
+        >
+          <span className="mono">{lang === 'zh' ? 'EN' : '中'}</span>
         </Button>
       </div>
     </header>
