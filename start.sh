@@ -82,13 +82,24 @@ port_pids() {
   lsof -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true
 }
 
-# 判断进程是否属于本项目（用于区分“本项目已在运行”与“端口被其他程序占用”）
+# 取进程工作目录（macOS/Linux lsof 均支持；取不到时为 空）
+proc_cwd() {
+  lsof -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1
+}
+
+# 判断进程是否属于本项目（用于区分“本项目已在运行”与“端口被其他程序占用”）。
+# 命中条件：命令行含项目路径 / 项目名，或 进程工作目录落在项目根内——
+# 后者让 `npm start`（node dist/index.js，命令行不含项目名）也能被正确识别。
 is_project_proc() {
-  local cmd
+  local cmd cwd
   cmd="$(ps -o command= -p "$1" 2>/dev/null || true)"
   case "$cmd" in
     *"$ROOT_DIR"*) return 0 ;;
     *"$PROJECT_NAME"*) return 0 ;;
+  esac
+  cwd="$(proc_cwd "$1")"
+  case "$cwd" in
+    "$ROOT_DIR"*) return 0 ;;
   esac
   return 1
 }
