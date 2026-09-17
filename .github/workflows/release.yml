@@ -295,6 +295,12 @@ jobs:
           echo "::warning::If it is still missing after ~15 minutes, check for a publish awaiting approval or a duplicate-version rejection: https://www.npmjs.com/package/flint-skills-hub?activeTab=versions"
 
       # 建 tag / Release：publish=false 时也走这里（补 tag 的场景），因此只看 skip / dry-run
+      # 打包排在「Prepare publish manifest」之后，保证 tarball 用的是发布版版本号。
+      # files 用通配符：补 tag（publish=false）场景下不存在 tarball，glob 匹配不到即跳过，不会报错。
+      - name: Pack npm tarball for Release asset
+        if: ${{ steps.version.outputs.skip != 'true' && steps.version.outputs.publish == 'true' }}
+        run: npm pack --silent
+
       - name: Create GitHub Release
         if: ${{ steps.version.outputs.skip != 'true' && inputs.dry-run != true }}
         uses: softprops/action-gh-release@v2
@@ -302,5 +308,7 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
           body_path: docs/releases/release_notes_v${{ steps.version.outputs.version }}.md
+          files: |
+            flint-skills-hub-${{ steps.version.outputs.version }}.tgz
           draft: false
           prerelease: false

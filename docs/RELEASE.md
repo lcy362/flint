@@ -127,7 +127,8 @@
    「已写 notes 但尚未发布」的最高版本；若都已发布、但最高版本缺 tag，则只补 tag / Release）→
    检查 release notes 存在 → 改写发布用 manifest → `npm publish --provenance`（OIDC）→
    **确认该版本已在 registry 可见**（看不到就红掉，不建 tag / Release，见 §5.4）→
-   创建 tag `vX.Y.Z` → 创建 GitHub Release。
+   `npm pack` 打包该版本 tarball → 创建 tag `vX.Y.Z` → 创建 GitHub Release
+   （正文来自 release notes，tarball 作为下载资产一并挂载）。
 
 ### 兜底触发方式
 
