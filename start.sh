@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# Skills Hub 一键启动脚本
+# Flint 一键启动脚本
 #
 # 用法：
-#   ./start.sh          启动（端口被占用时会交互询问）
-#   ./start.sh -y       端口被占用时直接结束占用进程并启动
-#   ./start.sh -h       查看帮助
+#   ./start.sh         后台启动 Flint；若进程已存在，仅提示并打开浏览器
+#   ./start.sh -y      已有 Flint 进程时强制重启（杀掉后重新后台启动）
+#   ./start.sh -h      查看帮助
 #
 # 可选环境变量：
-#   CLIENT_PORT   前端端口（默认 5173）
-#   SERVER_PORT   后端端口（默认 8787）
+#   CLIENT_PORT        前端端口（默认 5173）
+#   SERVER_PORT        后端端口（默认 8787）
+#   FLINT_LOGS         运行日志目录（默认 ~/.flint/logs）
 #
-# 流程：环境检查 → 依赖检查 → 端口检测 → 启动 → 等待就绪 → 自动打开浏览器 → Ctrl+C 停止
-# 说明：脚本输出（即启动日志）统一为英文，便于检索与上报。
+# 流程：环境检查 → 已有进程检测 → 依赖检查 → 后台启动 → 等待就绪 → 打开浏览器 → 脚本退出
+# 说明：运行日志写入 FLINT_LOGS（dev.log 及 server 的 app.log），不在控制台刷屏；
+#       控制台仅保留必需的启动信息（FLINT 图案、就绪地址、进程 PID、停止 / 重启提示）。
+#       脚本完成启动后即退出，进程驻留后台。
+# 脚本输出（即启动日志）统一为英文。
 
 set -euo pipefail
 
@@ -24,28 +28,50 @@ SERVER_PORT="${SERVER_PORT:-8787}"
 CLIENT_URL="http://localhost:${CLIENT_PORT}/"
 SERVER_URL="http://localhost:${SERVER_PORT}/"
 
-AUTO_YES=0
-DEV_PID=""
-CLEANED=0
+LOG_DIR="${FLINT_LOGS:-$HOME/.flint/logs}"
+DEV_LOG="$LOG_DIR/dev.log"
+PID_FILE="$LOG_DIR/dev.pid"
+mkdir -p "$LOG_DIR"
 
-info()  { printf '[info] %s\n' "$*"; }
-warn()  { printf '[warn] %s\n' "$*"; }
+AUTO_YES=0
+
+info()  { printf '[info]  %s\n' "$*"; }
+warn()  { printf '[warn]  %s\n' "$*"; }
 error() { printf '[error] %s\n' "$*" >&2; }
+
+banner() {
+  cat <<'EOF'
+ ███████╗██╗     ██╗███╗   ██╗████████╗
+ ██╔════╝██║     ██║████╗  ██║╚══██╔══╝
+ ████╗   ██║     ██║██╔██╗ ██║   ██║
+ ██╔══╝  ██║     ██║██║╚██╗██║   ██║
+ ███████╗███████╗██║██║ ╚████║   ██║
+ ╚══════╝╚══════╝╚═╝╚═╝  ╚═══╝   ╚═╝
+ local-first personal AI skills asset manager
+EOF
+}
+
+restart_hints() {
+  info "Restart (direct): ./start.sh -y         # kill the running instance and start in background again"
+  info "Restart (npm):    npm start             # run the built server (server/dist)"
+}
 
 usage() {
   cat <<'EOF'
-Skills Hub launcher
+Flint launcher
 
 Usage:
-  ./start.sh          Start (asks interactively when a port is occupied)
-  ./start.sh -y       Kill the processes occupying the ports, then start
+  ./start.sh          Start (opens the browser once ready, then exits; processes stay in background)
+  ./start.sh -y       If already running, kill the old instance and restart
   ./start.sh -h       Show this help
 
 Environment variables:
-  CLIENT_PORT   Frontend port (default 5173)
-  SERVER_PORT   Backend port (default 8787)
+  CLIENT_PORT         Frontend port (default 5173)
+  SERVER_PORT         Backend port (default 8787)
+  FLINT_LOGS          Log directory (default ~/.flint/logs)
 
-The frontend page is opened in your browser once it is ready. Press Ctrl+C to stop.
+Logs are written to FLINT_LOGS; only essential startup info is printed on the console.
+When the frontend is ready, your browser is opened and the script exits.
 EOF
 }
 
@@ -54,7 +80,7 @@ port_pids() {
   lsof -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true
 }
 
-# 判断进程是否属于本项目
+# 判断进程是否属于本项目（用于区分“本项目已在运行”与“端口被其他程序占用”）
 is_project_proc() {
   local cmd
   cmd="$(ps -o command= -p "$1" 2>/dev/null || true)"
@@ -69,11 +95,13 @@ is_project_proc() {
 open_url() {
   if command -v open >/dev/null 2>&1; then
     open "$1"
-  elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$1" >/dev/null 2>&1
-  else
-    return 1
+    return 0
   fi
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$1" >/dev/null 2>&1
+    return 0
+  fi
+  return 1
 }
 
 # 探测某个地址是否已可用
@@ -94,16 +122,9 @@ probe_ready() {
   ' "$1" >/dev/null 2>&1
 }
 
-# 停止服务：先终止父进程，再按端口兜底清理本项目残留进程
-cleanup() {
-  if [ "$CLEANED" -eq 1 ]; then
-    return 0
-  fi
-  CLEANED=1
-  info "Stopping Skills Hub ..."
-  if [ -n "$DEV_PID" ]; then
-    kill "$DEV_PID" 2>/dev/null || true
-  fi
+# 停止指定端口上的项目进程（-y 强制重启用）
+kill_project() {
+  local pid
   for port in "$CLIENT_PORT" "$SERVER_PORT"; do
     for pid in $(port_pids "$port"); do
       if is_project_proc "$pid"; then
@@ -111,10 +132,14 @@ cleanup() {
       fi
     done
   done
-  if [ -n "$DEV_PID" ]; then
-    wait "$DEV_PID" 2>/dev/null || true
-  fi
-  info "Stopped."
+  for _ in $(seq 1 10); do
+    local remain=""
+    for port in "$CLIENT_PORT" "$SERVER_PORT"; do
+      remain="${remain}$(port_pids "$port")"
+    done
+    [ -z "$remain" ] && break
+    sleep 0.5
+  done
 }
 
 # ---------- 参数解析 ----------
@@ -144,83 +169,43 @@ if ! command -v lsof >/dev/null 2>&1; then
   exit 1
 fi
 
-# ---------- 2. 端口占用检测 ----------
+# ---------- 2. 已有进程检测 ----------
+banner
+PROJECT_PIDS=""
 CONFLICT_PIDS=""
-PROJECT_RUNNING=0
 for port in "$CLIENT_PORT" "$SERVER_PORT"; do
   for pid in $(port_pids "$port"); do
-    cmd_line="$(ps -o command= -p "$pid" 2>/dev/null | cut -c1-90 || true)"
-    warn "Port ${port} is already in use: PID ${pid}  ${cmd_line}"
-    CONFLICT_PIDS="${CONFLICT_PIDS} ${pid}"
     if is_project_proc "$pid"; then
-      PROJECT_RUNNING=1
+      PROJECT_PIDS="${PROJECT_PIDS} ${pid}"
+    else
+      CONFLICT_PIDS="${CONFLICT_PIDS} ${pid}"
+      cmd_line="$(ps -o command= -p "$pid" 2>/dev/null | cut -c1-90 || true)"
+      warn "Port ${port} is in use by another process: PID ${pid}  ${cmd_line}"
     fi
   done
 done
 
-KILL_NEEDED=0
 if [ -n "$CONFLICT_PIDS" ]; then
-  if [ "$AUTO_YES" -eq 1 ]; then
-    warn "Port conflict detected; killing the occupying processes because -y was given."
-    KILL_NEEDED=1
-  elif [ -t 0 ]; then
-    if [ "$PROJECT_RUNNING" -eq 1 ]; then
-      warn "Skills Hub seems to already be running."
-      printf '  [y] Kill the old processes and start again\n  [r] Do not restart; just open the existing page\n  [N] Cancel\n'
-    else
-      warn "The processes above do not belong to this project; killing them may affect other programs."
-      printf '  [y] Kill these processes and continue\n  [N] Cancel\n'
-    fi
-    read -r -p 'Choose [y/r/N]: ' answer || answer=""
-    case "$answer" in
-      [Yy]*)
-        KILL_NEEDED=1
-        ;;
-      [Rr]*)
-        if [ "$PROJECT_RUNNING" -eq 1 ]; then
-          if open_url "$CLIENT_URL"; then
-            info "Opened the existing page: $CLIENT_URL"
-          else
-            warn "Failed to open the browser. Please visit $CLIENT_URL manually."
-          fi
-          exit 0
-        fi
-        error "The processes occupying the ports do not belong to this project; cannot reuse them."
-        exit 1
-        ;;
-      *)
-        info "Cancelled."
-        exit 0
-        ;;
-    esac
-  else
-    error "Ports ${CLIENT_PORT}/${SERVER_PORT} are in use and this is not an interactive shell."
-    error "Free the ports first, or run ./start.sh -y to kill the occupying processes automatically."
-    exit 1
-  fi
+  error "Port(s) are occupied by other, non-Flint processes — Flint will NOT kill them."
+  error "Please free port ${CLIENT_PORT} / ${SERVER_PORT} yourself, then re-run ./start.sh."
+  exit 1
 fi
 
-if [ "$KILL_NEEDED" -eq 1 ]; then
-  info "Killing the processes occupying the ports ..."
-  for pid in $CONFLICT_PIDS; do
-    kill "$pid" 2>/dev/null || true
-  done
-  for _ in $(seq 1 10); do
-    remain=""
-    for port in "$CLIENT_PORT" "$SERVER_PORT"; do
-      remain="${remain}$(port_pids "$port")"
-    done
-    if [ -z "$remain" ]; then
-      break
+if [ -n "$PROJECT_PIDS" ]; then
+  if [ "$AUTO_YES" -eq 1 ]; then
+    warn "Flint is already running; restarting because -y was given."
+    kill_project
+  else
+    info "Flint is already running (PID:${PROJECT_PIDS})."
+    if open_url "$CLIENT_URL"; then
+      info "Opened the existing page: $CLIENT_URL"
+    else
+      warn "Failed to open the browser. Please visit $CLIENT_URL manually."
     fi
-    sleep 0.5
-  done
-  for pid in $CONFLICT_PIDS; do
-    if kill -0 "$pid" 2>/dev/null; then
-      kill -9 "$pid" 2>/dev/null || true
-    fi
-  done
-  sleep 0.5
+    info "No need to restart; the running instance keeps working."
+    restart_hints
+    exit 0
+  fi
 fi
 
 # ---------- 3. 依赖检查 ----------
@@ -229,20 +214,20 @@ if [ ! -x node_modules/.bin/concurrently ]; then
   npm install
 fi
 
-# ---------- 4. 启动服务 ----------
-info "Starting Skills Hub (frontend ${CLIENT_PORT} / backend ${SERVER_PORT}) ..."
-PORT="$SERVER_PORT" CLIENT_PORT="$CLIENT_PORT" npm run dev < /dev/null &
+# ---------- 4. 后台启动 ----------
+info "Starting Flint (frontend ${CLIENT_PORT} / backend ${SERVER_PORT}) in background ..."
+info "Dev logs: $DEV_LOG"
+PORT="$SERVER_PORT" CLIENT_PORT="$CLIENT_PORT" nohup npm run dev </dev/null >"$DEV_LOG" 2>&1 &
 DEV_PID=$!
-
-trap 'exit 130' INT TERM
-trap cleanup EXIT
+disown "$DEV_PID" 2>/dev/null || true
+echo "$DEV_PID" >"$PID_FILE" 2>/dev/null || true
 
 # ---------- 5. 等待服务就绪 ----------
 info "Waiting for services to be ready ..."
 READY=0
 for _ in $(seq 1 60); do
   if ! kill -0 "$DEV_PID" 2>/dev/null; then
-    error "The dev process exited; startup failed. Please check the logs above."
+    error "The dev process exited; startup failed. See the log: $DEV_LOG"
     exit 1
   fi
   if probe_ready "$CLIENT_URL"; then
@@ -252,18 +237,16 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-# ---------- 6. 打开浏览器 ----------
+# ---------- 6. 打印启动信息并退出 ----------
 if [ "$READY" -eq 1 ]; then
   info "Frontend is ready: $CLIENT_URL"
-  if open_url "$CLIENT_URL"; then
-    info "Opened the frontend page in your browser."
-  else
-    warn "Failed to open the browser automatically. Please visit $CLIENT_URL manually."
-  fi
+  open_url "$CLIENT_URL" >/dev/null 2>&1 || warn "Failed to open the browser. Please visit $CLIENT_URL manually."
 else
-  warn "Timed out while waiting for the frontend; please check the logs above."
+  warn "Timed out while waiting for the frontend. See the log: $DEV_LOG"
 fi
 info "Backend API: $SERVER_URL"
-info "Press Ctrl+C to stop."
-
-wait "$DEV_PID" 2>/dev/null || true
+info "Process PID: $DEV_PID"
+info "Logs: dev=$DEV_LOG  app=$LOG_DIR/app.log"
+info "Stop:  kill $DEV_PID"
+restart_hints
+info "Started. The script exits now; Flint keeps running in the background."
