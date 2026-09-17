@@ -42,7 +42,6 @@ export default function NavRail({
       ))}
       <div className="rail__foot">
         <span>{t('nav.footer')}</span>
-        <span className="mono">v0.1</span>
       </div>
     </nav>
   );
