@@ -41,12 +41,12 @@ error() { printf '[error] %s\n' "$*" >&2; }
 
 banner() {
   cat <<'EOF'
- ███████╗██╗     ██╗███╗   ██╗████████╗
- ██╔════╝██║     ██║████╗  ██║╚══██╔══╝
- ████╗   ██║     ██║██╔██╗ ██║   ██║
- ██╔══╝  ██║     ██║██║╚██╗██║   ██║
- ███████╗███████╗██║██║ ╚████║   ██║
- ╚══════╝╚══════╝╚═╝╚═╝  ╚═══╝   ╚═╝
+ █████  █      █████  █   █  █████
+ █      █        █    ██  █    █
+ █████  █        █    █ █ █    █
+ █      █        █    █  ██    █
+ █      █        █    █   █    █
+ █████  ██████  █████  █   █    █
  local-first personal AI skills asset manager
 EOF
 }
@@ -193,16 +193,21 @@ fi
 
 if [ -n "$PROJECT_PIDS" ]; then
   if [ "$AUTO_YES" -eq 1 ]; then
-    warn "Flint is already running; restarting because -y was given."
+    warn "Flint appears to be running; restarting because -y was given."
     kill_project
   else
-    info "Flint is already running (PID:${PROJECT_PIDS})."
-    if open_url "$CLIENT_URL"; then
-      info "Opened the existing page: $CLIENT_URL"
-    else
-      warn "Failed to open the browser. Please visit $CLIENT_URL manually."
+    if probe_ready "$CLIENT_URL"; then
+      info "Flint is already running (PID:${PROJECT_PIDS}); the frontend is reachable."
+      open_url "$CLIENT_URL" || warn "Failed to open the browser. Please visit $CLIENT_URL manually."
+      info "No need to restart; the running instance keeps working."
+      exit 0
     fi
-    info "No need to restart; the running instance keeps working."
+    if probe_ready "$SERVER_URL"; then
+      warn "A Flint backend is running on port ${SERVER_PORT}, but the frontend (port ${CLIENT_PORT}) is not reachable."
+      open_url "$SERVER_URL" || warn "Failed to open the browser. Please visit $SERVER_URL manually."
+    else
+      warn "A Flint process holds these ports, but neither the frontend nor the backend is reachable (stale process)."
+    fi
     restart_hints
     exit 0
   fi
