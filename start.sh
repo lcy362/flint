@@ -41,19 +41,21 @@ error() { printf '[error] %s\n' "$*" >&2; }
 
 banner() {
   cat <<'EOF'
-FFFFFF  L      IIIII  N   N  TTTTT
-F       L        I    NN  N    T
-FFFFF   L        I    N N N    T
-F       L        I    N  NN    T
-F       L        I    N   N    T
-F       LLLLL  IIIII  N   N    T
+████████╗     ██╗         ██╗         ███╗   ██╗  ████████╗
+██╔════╝      ██║         ██║         ████╗  ██║  ╚══██╔══╝
+█████╗        ██║         ██║         ██╔██╗ ██║     ██║
+██╔══╝        ██║         ██║         ██║╚██╗██║     ██║
+██║           ██║         ██║         ██║ ╚████║     ██║
+╚═╝           ╚██████╗    ╚═╝         ╚═╝  ╚═══╝     ╚═╝
 local-first personal AI skills asset manager
 EOF
 }
 
 restart_hints() {
-  info "Restart (direct): ./start.sh -y         # kill the running instance and start in background again"
-  info "Restart (npm):    npm start             # run the built server (server/dist)"
+  info "Restart (use only if you really need to):"
+  info "  Direct:  ./start.sh -y      # stop the running instance, then start again in the background"
+  info "  npm:     npm start          # run the built server (server/dist)"
+  info "Logs:      $DEV_LOG    (server app log: $LOG_DIR/app.log)"
 }
 
 usage() {
@@ -197,19 +199,21 @@ if [ -n "$PROJECT_PIDS" ]; then
     kill_project
   else
     if probe_ready "$CLIENT_URL"; then
-      info "Flint is already running (PID:${PROJECT_PIDS}); the frontend is reachable."
+      info "Flint is already running (PID:${PROJECT_PIDS}); the page is open — no restart needed."
       open_url "$CLIENT_URL" || warn "Failed to open the browser. Please visit $CLIENT_URL manually."
-      info "No need to restart; the running instance keeps working."
+      info "Keep using the running instance as-is; restarting only helps if it behaves incorrectly."
       restart_hints
       exit 0
     fi
     if probe_ready "$SERVER_URL"; then
       warn "A Flint backend is running on port ${SERVER_PORT}, but the frontend (port ${CLIENT_PORT}) is not reachable."
-      open_url "$SERVER_URL" || warn "Failed to open the browser. Please visit $SERVER_URL manually."
+      warn "Restart once to bring the frontend back up (it restarts both frontend and backend):"
+      restart_hints
     else
-      warn "A Flint process holds these ports, but neither the frontend nor the backend is reachable (stale process)."
+      warn "A Flint process holds these ports, but neither the frontend nor the backend responds (stale process)."
+      warn "Restart to recover a healthy instance:"
+      restart_hints
     fi
-    restart_hints
     exit 0
   fi
 fi
@@ -254,5 +258,4 @@ info "Backend API: $SERVER_URL"
 info "Process PID: $DEV_PID"
 info "Logs: dev=$DEV_LOG  app=$LOG_DIR/app.log"
 info "Stop:  kill $DEV_PID"
-restart_hints
 info "Started. The script exits now; Flint keeps running in the background."
