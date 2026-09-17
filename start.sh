@@ -41,13 +41,13 @@ error() { printf '[error] %s\n' "$*" >&2; }
 
 banner() {
   cat <<'EOF'
- █████  █      █████  █   █  █████
- █      █        █    ██  █    █
- █████  █        █    █ █ █    █
- █      █        █    █  ██    █
- █      █        █    █   █    █
- █████  ██████  █████  █   █    █
- local-first personal AI skills asset manager
+FFFFFF  L      IIIII  N   N  TTTTT
+F       L        I    NN  N    T
+FFFFF   L        I    N N N    T
+F       L        I    N  NN    T
+F       L        I    N   N    T
+F       LLLLL  IIIII  N   N    T
+local-first personal AI skills asset manager
 EOF
 }
 
@@ -200,6 +200,7 @@ if [ -n "$PROJECT_PIDS" ]; then
       info "Flint is already running (PID:${PROJECT_PIDS}); the frontend is reachable."
       open_url "$CLIENT_URL" || warn "Failed to open the browser. Please visit $CLIENT_URL manually."
       info "No need to restart; the running instance keeps working."
+      restart_hints
       exit 0
     fi
     if probe_ready "$SERVER_URL"; then
