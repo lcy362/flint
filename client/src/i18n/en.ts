@@ -585,7 +585,6 @@ export const en = {
   'settings.logs.noContent': '(no log content)',
   'settings.logs.downloaded': 'Logs downloaded',
   'settings.diag.title': '# flint diagnostics',
-  'settings.diag.version': '- Version: {v}',
   'settings.diag.platform': '- Platform: {v}',
   'settings.diag.browser': '- Browser: {v}',
   'settings.diag.logPath': '- Server log path: {v}',

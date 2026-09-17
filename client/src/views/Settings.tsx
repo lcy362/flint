@@ -60,7 +60,6 @@ export default function Settings() {
     const md = [
       t('settings.diag.title'),
       '',
-      t('settings.diag.version', { v: logs?.version ?? '?' }),
       t('settings.diag.platform', { v: navigator.platform }),
       t('settings.diag.browser', { v: navigator.userAgent }),
       t('settings.diag.logPath', { v: logs?.path ?? '?' }),
@@ -175,7 +174,7 @@ export default function Settings() {
           {(lg) => (
             <>
               <div className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-2)', marginBottom: 'var(--sp-2)' }}>
-                {lg.path} · {lg.size} bytes · v{lg.version}
+                {lg.path} · {lg.size} bytes
               </div>
               <pre style={{
                 maxHeight: 360,

@@ -561,7 +561,6 @@ export const zh: Record<MsgKey, string> = {
   'settings.logs.noContent': '（暂无日志内容）',
   'settings.logs.downloaded': '日志已下载',
   'settings.diag.title': '# flint 诊断信息',
-  'settings.diag.version': '- 版本：{v}',
   'settings.diag.platform': '- 平台：{v}',
   'settings.diag.browser': '- 浏览器：{v}',
   'settings.diag.logPath': '- 服务端日志路径：{v}',
