@@ -91,11 +91,11 @@ const server = app.listen(PORT, () => {
     platform: `${process.platform}/${process.arch}`,
     env: process.env.NODE_ENV ?? 'development',
   });
-  console.log(`[skills-hub] server  http://localhost:${PORT}`);
-  console.log(`[skills-hub] config  ${CONFIG_PATH}`);
-  console.log(`[skills-hub] logs    ${log.getPath()}`);
+  console.log(`[flint] server  http://localhost:${PORT}`);
+  console.log(`[flint] config  ${CONFIG_PATH}`);
+  console.log(`[flint] logs    ${log.getPath()}`);
   if (!clientDist) {
-    console.log('[skills-hub] client  not built — Web UI is served by the vite dev server on 5173');
+    console.log('[flint] client  not built — Web UI is served by the vite dev server on 5173');
   }
 });
 
@@ -103,7 +103,7 @@ const server = app.listen(PORT, () => {
 server.on('error', (e: NodeJS.ErrnoException) => {
   if (e.code === 'EADDRINUSE') {
     log.error('server', `Port ${PORT} is already in use`, { port: PORT });
-    console.error(`[skills-hub] port ${PORT} is already in use. Free it, or pick another one: PORT=8788 npx flint-skills-hub`);
+    console.error(`[flint] port ${PORT} is already in use. Free it, or pick another one: PORT=8788 npx flint-skills-hub`);
     process.exit(1);
   }
   throw e;

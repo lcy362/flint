@@ -116,7 +116,7 @@ npm ls -g --depth=0 flint-skills-hub       # what is installed globally
 - A running instance is **not hot-updated** — stop it (`Ctrl+C`) and start it again.
 - `npx` caches packages, so ask for the version explicitly: `npx flint-skills-hub@latest`.
 - Running from a source checkout instead: `git pull && npm install && npm run build`.
-- Updating never touches your data — `~/.skills-hub/config.json`, your repositories and your agents' skill directories are left as they are.
+- Updating never touches your data — `~/.flint/config.json`, your repositories and your agents' skill directories are left as they are.
 - With nvm, every Node version keeps its own global packages: reinstall under the Node version you actually run `flint` with (`which -a flint` shows where the command comes from).
 
 **From source — one-click start (recommended):**
@@ -141,7 +141,7 @@ npm run dev
 - Frontend (Web UI): http://localhost:5173/
 - Backend (API): http://localhost:8787/
 
-Config and logs live in `~/.skills-hub/` (`config.json` and `logs/app.log`).
+Config and logs live in `~/.flint/` (`config.json` and `logs/app.log`).
 
 #### 2. Register a repository
 
@@ -214,7 +214,7 @@ node bin/flint.mjs --no-open   # Run the CLI the way the npm package does
 - Ports: backend `8787` (`PORT`), frontend `5173` (`CLIENT_PORT`); Vite proxies `/api` to the backend.
 - Unit tests run in a temp sandbox; the end-to-end smoke also uses a temp directory and never touches your machine.
 - Release process: see [`docs/RELEASE.md`](./docs/RELEASE.md).
-- Config / log locations: `~/.skills-hub/config.json`, `~/.skills-hub/logs/app.log` (override the config path with `SKILLS_HUB_CONFIG`).
+- Config / log locations: `~/.flint/config.json`, `~/.flint/logs/app.log` (override the config path with `FLINT_CONFIG`).
 - Logs are always written in English for easy searching and issue reporting; the interface supports English and Chinese.
 
 See [`docs/TECH.md`](./docs/TECH.md) for architecture and conventions, and [`AGENTS.md`](./AGENTS.md) for the development guide.

@@ -794,7 +794,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   r.get('/logs/download', (_req, res) => {
     const logPath = log.getPath();
     if (!fs.existsSync(logPath)) return res.status(404).json({ error: 'no log file' });
-    res.download(logPath, 'skills-hub.log');
+    res.download(logPath, 'flint.log');
   });
 
   return r;

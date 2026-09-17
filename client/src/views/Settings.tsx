@@ -46,7 +46,7 @@ export default function Settings() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'skills-hub.log';
+      a.download = 'flint.log';
       a.click();
       URL.revokeObjectURL(url);
       toast.push(t('settings.logs.downloaded'), 'good');

@@ -13,8 +13,8 @@ import { CONFIG_PATH } from '../config/defaults.js';
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 const LEVELS: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
-const MIN_LEVEL: LogLevel = (process.env.SKILLS_HUB_LOG_LEVEL as LogLevel) || 'info';
-const THRESHOLD = Number(process.env.SKILLS_HUB_LOG_MAX_MB ?? 5) * 1024 * 1024;
+const MIN_LEVEL: LogLevel = (process.env.FLINT_LOG_LEVEL as LogLevel) || 'info';
+const THRESHOLD = Number(process.env.FLINT_LOG_MAX_MB ?? 5) * 1024 * 1024;
 
 const LOG_DIR = path.join(path.dirname(CONFIG_PATH), 'logs');
 const LOG_PATH = path.join(LOG_DIR, 'app.log');

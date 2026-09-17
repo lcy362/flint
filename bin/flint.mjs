@@ -30,7 +30,7 @@ Options:
 
 Environment:
   PORT                Same as --port
-  SKILLS_HUB_CONFIG   Config file path (default: ~/.skills-hub/config.json)
+  FLINT_CONFIG        Config file path (default: ~/.flint/config.json)
   FLINT_CLIENT_DIST   Override the built Web UI directory
 
 Then open http://localhost:<port> in your browser.`;
@@ -157,7 +157,7 @@ async function main() {
   const url = `http://localhost:${opts.port}`;
   const ready = await waitReady(opts.port);
   if (!ready) {
-    console.warn(`[flint] server did not respond within 20s — check the log at ~/.skills-hub/logs/app.log`);
+    console.warn(`[flint] server did not respond within 20s — check the log at ~/.flint/logs/app.log`);
     return;
   }
   // 只在交互式终端里自动开浏览器：CI / 管道 / 服务器环境里开浏览器只会添乱

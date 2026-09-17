@@ -116,7 +116,7 @@ npm ls -g --depth=0 flint-skills-hub       # 查看全局装的是哪个版本
 - **正在运行的实例不会热更新** —— 先 `Ctrl+C` 停掉，再重新启动。
 - `npx` 会缓存包，必须显式指定版本：`npx flint-skills-hub@latest`。
 - 从源码跑的话：`git pull && npm install && npm run build`。
-- 更新**不动你的数据** —— `~/.skills-hub/config.json`、仓库目录、各 Agent 技能目录都原样保留。
+- 更新**不动你的数据** —— `~/.flint/config.json`、仓库目录、各 Agent 技能目录都原样保留。
 - 用 nvm 时，每个 Node 版本有各自的全局包：请在真正运行 `flint` 的那个 Node 版本下重装（`which -a flint` 可看命令来自哪份）。
 
 **从源码起步 —— 一键启动（推荐）：**
@@ -141,7 +141,7 @@ npm run dev
 - 前端（Web UI）：http://localhost:5173/
 - 后端（API）：http://localhost:8787/
 
-配置与日志存在 `~/.skills-hub/`（`config.json` 与 `logs/app.log`）。
+配置与日志存在 `~/.flint/`（`config.json` 与 `logs/app.log`）。
 
 #### 2. 登记仓库
 
@@ -214,7 +214,7 @@ node bin/flint.mjs --no-open   # 按 npm 包的方式启动一次
 - 端口：后端 `8787`（`PORT`），前端 `5173`（`CLIENT_PORT`）；Vite 将 `/api` 代理到后端。
 - 单元测试与端到端 smoke 都在临时目录里运行，不污染本机。
 - 发版流程见 [`docs/RELEASE.md`](./docs/RELEASE.md)。
-- 配置 / 日志位置：`~/.skills-hub/config.json`、`~/.skills-hub/logs/app.log`（可用 `SKILLS_HUB_CONFIG` 覆盖配置路径）。
+- 配置 / 日志位置：`~/.flint/config.json`、`~/.flint/logs/app.log`（可用 `FLINT_CONFIG` 覆盖配置路径）。
 - 日志统一为英文输出，便于检索与 issue 上报；界面文案支持中英双语。
 
 更多架构与约定见 [`docs/TECH.md`](./docs/TECH.md)，开发约定见 [`AGENTS.md`](./AGENTS.md)。

@@ -22,7 +22,7 @@ export function writeSkill(root: string, name: string, frontmatterExtra = ''): s
   return dir;
 }
 
-/** 构造一个落在临时路径上的 ConfigStore（避免读写真实 ~/.skills-hub） */
+/** 构造一个落在临时路径上的 ConfigStore（避免读写真实 ~/.flint） */
 export function makeStore(overrides: Partial<HubConfig> = {}): ConfigStore {
   const store = new ConfigStore(path.join(tmpDir('flint-cfg-'), 'config.json'));
   store.replace({ ...emptyConfig(), ...overrides });

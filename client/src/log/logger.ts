@@ -5,7 +5,7 @@
 type Level = 'debug' | 'info' | 'warn' | 'error';
 
 const RING_MAX = 500;
-const LS_KEY = 'skills-hub.log.v1';
+const LS_KEY = 'flint.log.v1';
 const LS_LIMIT = 50 * 1024; // 50KB，超出截断保留尾部
 
 interface Entry {

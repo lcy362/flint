@@ -14,12 +14,12 @@
 | 文件监听 | chokidar（复制模式可选 watcher） |
 | YAML | `yaml`（解析 / 回写 `SKILL.md` frontmatter） |
 | 编排 | npm workspaces（`server` / `client`）+ concurrently |
-| 配置 | JSON 文件 `~/.skills-hub/config.json`（可由 `SKILLS_HUB_CONFIG` 覆盖） |
-| 日志 | `~/.skills-hub/logs/app.log`（结构化单行，按大小轮转） |
+| 配置 | JSON 文件 `~/.flint/config.json`（可由 `FLINT_CONFIG` 覆盖） |
+| 日志 | `~/.flint/logs/app.log`（结构化单行，按大小轮转） |
 
 - 根 `package.json` 定义 workspaces 与脚本：`dev`（并行起前后端）、`dev:server`、`dev:client`、`build`、`start`。
 - 端口：后端默认 `8787`（`PORT`），前端默认 `5173`（`CLIENT_PORT`）；Vite 将 `/api` 代理到后端。
-- `start.sh`：一键启动（检查 Node ≥ 20 / 依赖 / 端口占用 → 启动 → 等待就绪 → 打开浏览器 → Ctrl+C 停止）。支持 `-y`（自动结束占用进程）、`-h`。
+- `start.sh`：一键启动（检查 Node ≥ 20 / 依赖 / 端口占用 → 后台启动 → 等待就绪 → 打开浏览器 → 脚本退出，进程驻留后台）。支持 `-y`（强制重启）、`-h`；日志写 `~/.flint/logs/`。
 
 ---
 
@@ -104,7 +104,7 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 
 ---
 
-## 5. 数据模型（`~/.skills-hub/config.json`）
+## 5. 数据模型（`~/.flint/config.json`）
 
 ```ts
 interface HubConfig {
@@ -438,14 +438,14 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 ## 14. 日志与可观测
 
-- 结构化单行日志：`时间 [级别] [模块] 消息 {meta}`，同时输出 console 与落盘 `~/.skills-hub/logs/app.log`。
-- 级别由 `SKILLS_HUB_LOG_LEVEL`（默认 `info`）控制；写入前把 homedir 前缀脱敏为 `~`。
-- 轮转：超过阈值（`SKILLS_HUB_LOG_MAX_MB`，默认 5MB）时 `app.log → app.1.log → app.2.log`，保留 3 份。
+- 结构化单行日志：`时间 [级别] [模块] 消息 {meta}`，同时输出 console 与落盘 `~/.flint/logs/app.log`。
+- 级别由 `FLINT_LOG_LEVEL`（默认 `info`）控制；写入前把 homedir 前缀脱敏为 `~`。
+- 轮转：超过阈值（`FLINT_LOG_MAX_MB`，默认 5MB）时 `app.log → app.1.log → app.2.log`，保留 3 份。
 - 请求日志记录 method / path / status / 耗时与 body 字段名（不记值）。
 
 ---
 
 ## 15. 测试与脚本
 
-- `server/smoke.ts`：使用临时目录（`SKILLS_HUB_CONFIG` 指向 mkdtemp），覆盖最小闭环（扫描 → 预设 → 活跃同步）、项目级同步、回写仓库、批量导入 + 诊断、预设标签命中、同目录共用、显式指定主 Agent 等批次；不污染真实 `~/.xxx` 目录。
+- `server/smoke.ts`：使用临时目录（`FLINT_CONFIG` 指向 mkdtemp），覆盖最小闭环（扫描 → 预设 → 活跃同步）、项目级同步、回写仓库、批量导入 + 诊断、预设标签命中、同目录共用、显式指定主 Agent 等批次；不污染真实 `~/.xxx` 目录。
 - `npm run build`：先构建 server（`tsc`）再构建 client（`tsc && vite build`）。

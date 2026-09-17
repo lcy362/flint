@@ -38,7 +38,7 @@ node bin/flint.mjs --no-open    # 按 npm 包的方式启一次（等价 npx fli
 ```
 
 - 端口：后端 `8787`（`PORT`），前端 `5173`（`CLIENT_PORT`）；Vite 代理 `/api` → 后端。
-- 配置：`~/.skills-hub/config.json`（`SKILLS_HUB_CONFIG` 可覆盖）；日志：`~/.skills-hub/logs/app.log`。
+- 配置：`~/.flint/config.json`（`FLINT_CONFIG` 可覆盖）；日志：`~/.flint/logs/app.log`。
 - 发布包名 `flint-skills-hub`，注册命令 `flint` 与 `flint-skills-hub`；发布流程见 `docs/RELEASE.md`。
 
 ## 3. 仓库结构

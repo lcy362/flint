@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-'));
-process.env.SKILLS_HUB_CONFIG = path.join(base, 'config.json');
+process.env.FLINT_CONFIG = path.join(base, 'config.json');
 
 const { ConfigStore } = await import('./src/config/store.js');
 const { scanAll } = await import('./src/core/scanner.js');
