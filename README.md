@@ -1,5 +1,44 @@
 # Flint
 
+<!--
+schema.org structured data for SEO/GEO indexing. GitHub does not execute this script, but the raw JSON-LD is visible to search engines and AI engines that scan repository READMEs.
+-->
+
+<!--
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Flint",
+  "alternateName": "local-skills-hub",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Linux, Windows",
+  "description": "Flint is a local-first personal AI skills asset manager. Collect, tag, deduplicate and distribute your AI skills across agents (Claude Code, Cursor, Codex) and projects. Skills live as plain SKILL.md directories on disk — no cloud, no account, never locked in.",
+  "url": "https://github.com/lcy362/flint",
+  "installUrl": "https://www.npmjs.com/package/flint-skills-hub",
+  "downloadUrl": "https://github.com/lcy362/flint",
+  "softwareVersion": "0.1.0",
+  "license": "https://opensource.org/licenses/MIT",
+  "keywords": "AI skills manager, claude skills manager, skills hub, local-first skills, personal AI skills, claude code skills, skill asset manager",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "@id": "https://lichuanyang.top/#author",
+    "name": "SandGrid",
+    "alternateName": "lcy362",
+    "url": "https://lichuanyang.top/",
+    "sameAs": [
+      "https://github.com/lcy362",
+      "https://flint.lichuanyang.top/"
+    ]
+  }
+}
+</script>
+-->
 > English | [简体中文](./README.zh-CN.md)
 
 > **Flint** · `local-skills-hub`
@@ -8,6 +47,10 @@
 **Make skills a personal asset.**
 
 Flint is a local-first personal AI skills asset manager — it centralizes the skills used by all of your agents, with unified tagging, filtering, deduplication, and deployment into agent and project directories. Skills exist only as plain files on your local disk, versionable with git or whatever you prefer; if you move to another tool or ecosystem, the asset comes with you and keeps working — you are never locked in by Flint.
+
+![Flint UI — Library: a local-first AI skills manager](images/home.png)
+
+*Manage, tag and distribute your AI skills across agents and projects — all local, all yours.*
 
 ## Why "Flint"
 

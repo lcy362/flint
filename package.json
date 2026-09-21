@@ -40,15 +40,20 @@
   },
   "keywords": [
     "ai",
+    "ai-skills",
     "agent",
-    "skills",
-    "skill-manager",
+    "agent-skills",
     "claude-code",
+    "claude-skills",
+    "cli",
     "cursor",
     "codex",
     "local-first",
-    "symlink",
-    "cli"
+    "personal-ai-skills",
+    "skill-manager",
+    "skills-hub",
+    "skills",
+    "symlink"
   ],
   "repository": {
     "type": "git",
