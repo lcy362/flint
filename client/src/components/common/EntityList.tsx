@@ -11,8 +11,17 @@ import { useI18n } from '../../i18n';
  * 技能、预设、项目、Agent、仓库、来源、整合候选等一切「列表型实体」
  * 都先映射成 EntityItem，再由 EntityList 统一渲染，保证各页面风格一致。
  */
+/**
+ * 卡片 / 行的视觉变体。
+ * `standard` 用于共享标准目录（Agent Skills 开放标准）：换一套强调色，
+ * 让它在一屏卡片里第一眼可辨，同时仍照常展示活跃 / 非活跃状态。
+ */
+export type EntityVariant = 'standard';
+
 export interface EntityItem {
   id: string;
+  /** 视觉变体：换色突出（如共享标准目录），缺省为普通样式 */
+  variant?: EntityVariant;
   /** 主标题 */
   title: ReactNode;
   /** 副标题（路径 / id 等次要信息） */
@@ -61,7 +70,7 @@ export function EntityCard({ item }: { item: EntityItem }) {
   const tags = item.tags ?? [];
   return (
     <article
-      className={`entity-card ${item.muted ? 'is-off' : ''} ${item.onClick ? 'is-clickable' : ''}`}
+      className={`entity-card ${item.variant ? `entity-card--${item.variant}` : ''} ${item.muted ? 'is-off' : ''} ${item.onClick ? 'is-clickable' : ''}`}
       {...clickProps(item)}
     >
       <div className="entity-card__head">
@@ -96,7 +105,7 @@ export function EntityRow({ item }: { item: EntityItem }) {
   const tags = item.tags ?? [];
   return (
     <div
-      className={`entity-row ${item.muted ? 'is-off' : ''} ${item.onClick ? 'is-clickable' : ''}`}
+      className={`entity-row ${item.variant ? `entity-row--${item.variant}` : ''} ${item.muted ? 'is-off' : ''} ${item.onClick ? 'is-clickable' : ''}`}
       {...clickProps(item)}
     >
       {item.toggle}

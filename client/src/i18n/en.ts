@@ -313,6 +313,9 @@ export const en = {
 
   /* ---------- agents ---------- */
   'agents.subtitle': '{dirs} skill directories · {agents} agents',
+  'agents.openStandard.title': 'Open Agent Skills standard',
+  'agents.openStandard.tip':
+    'Most agents read this directory, so it is the recommended place to manage skills first: a skill installed here works for every tool that reads it. To install for one specific agent only, use that agent\u2019s own directory.',
   'agents.addCustom': 'Add custom agent',
   'agents.addCustom.title': 'Add a custom agent outside the built-in list',
   'agents.notFound.title': 'Agent not found',

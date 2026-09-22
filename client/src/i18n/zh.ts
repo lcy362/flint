@@ -295,6 +295,9 @@ export const zh: Record<MsgKey, string> = {
 
   /* ---------- agents ---------- */
   'agents.subtitle': '共 {dirs} 个技能目录 · {agents} 个 Agent',
+  'agents.openStandard.title': 'Agent Skills 开源标准',
+  'agents.openStandard.tip':
+    '大部分 Agent 都会读取这个目录，推荐优先管理它：技能装在这里，对所有读取该目录的工具一并生效。若只想装给某一个 Agent，用那个 Agent 自己的目录即可。',
   'agents.addCustom': '新增自定义 Agent',
   'agents.addCustom.title': '新增一个内置清单之外的自定义 Agent',
   'agents.notFound.title': '未找到该 Agent',

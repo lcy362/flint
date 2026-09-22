@@ -10,15 +10,19 @@ import { useI18n } from '../../i18n';
 export default function AgentNamesTitle({
   agents,
   onOpen,
+  quiet,
 }: {
   agents: AgentView[];
   onOpen: (key: string) => void;
+  /** 弱化展示：用作共享标准目录卡片的副标题（名字退居次要，主标题让给「开源标准」） */
+  quiet?: boolean;
 }) {
   const { t } = useI18n();
-  if (agents.length === 1) return <>{agents[0].name}</>;
+  const cls = quiet ? 'std-agents' : undefined;
+  if (agents.length === 1) return <span className={cls}>{agents[0].name}</span>;
   return (
     // 外层包一个元素：列表视图的标题是 inline-flex，多个兄弟节点会被 gap 拉开间距
-    <span>
+    <span className={cls}>
       {agents.map((a, i) => (
         <span key={a.key}>
           {i > 0 && <span className="entity-title__sep"> / </span>}

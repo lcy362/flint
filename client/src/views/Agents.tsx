@@ -20,8 +20,9 @@ import { PathField } from '../components/ui/PathField';
 import Tag from '../components/ui/Tag';
 import BadgeLegend from '../components/common/BadgeLegend';
 import AgentNamesTitle from '../components/agent/AgentNamesTitle';
+import OpenStandardTitle from '../components/agent/OpenStandardTitle';
 import { AddAgentModal } from '../components/agent/AddAgentModal';
-import { groupAgentsByDir } from '../components/agent/agentGroups';
+import { groupAgentsByDir, type AgentGroup } from '../components/agent/agentGroups';
 import {
   agentBadgeLegend,
   activeBadge,
@@ -47,6 +48,15 @@ import { joinList, rich, useI18n } from '../i18n';
  */
 const deployedByTool = (row?: SkillCardView) => !!row && row.state === 'on' && isToolManaged(row);
 
+/**
+ * 该卡片是不是共享标准目录（Agent Skills 开放标准，`~/.agents/skills` / `~/.config/agents/skills`）。
+ * 这类卡片换一套强调色突出，并在「活跃 / 非活跃」各自分组里都排第一。
+ */
+const isStandardGroup = (g: AgentGroup) => {
+  const kind = sharedKindOf(g.primary.shared);
+  return !!kind && !!g.primary.sharedOwn;
+};
+
 export default function Agents() {
   const { data, loading, error, reload } = useAsync<AgentView[]>(() => api('/agents'));
   const { t } = useI18n();
@@ -65,11 +75,18 @@ export default function Agents() {
   const groups = useMemo(() => groupAgentsByDir(data ?? []), [data]);
   const shown = useMemo(() => {
     const kw = q.trim().toLowerCase();
-    return groups.filter((g) => {
-      if (onlyInstalled && !g.installed) return false;
-      if (!kw) return true;
-      return `${g.names.join(' ')} ${g.keys.join(' ')} ${g.dir}`.toLowerCase().includes(kw);
-    });
+    return groups
+      .filter((g) => {
+        if (onlyInstalled && !g.installed) return false;
+        if (!kw) return true;
+        return `${g.names.join(' ')} ${g.keys.join(' ')} ${g.dir}`.toLowerCase().includes(kw);
+      })
+      // 共享标准目录排在「活跃 / 非活跃」各自分组的第一位；同组其余保持原有顺序
+      .sort(
+        (a, b) =>
+          Number(b.anyActive) - Number(a.anyActive) ||
+          Number(isStandardGroup(b)) - Number(isStandardGroup(a))
+      );
   }, [groups, q, onlyInstalled]);
   const filtered = !!q.trim() || onlyInstalled;
   const [viewMode, setViewMode] = useViewMode();
@@ -81,6 +98,27 @@ export default function Agents() {
 
   const items: EntityItem[] = shown.map((g) => {
     const { primary } = g;
+    // 共享标准目录：换色突出，主标题直接讲清「这是开源标准」，
+    // 使用它的 Agent（Codex / Warp / OpenHands…）退到副标题并弱化，活跃状态仍由右上角徽标表达。
+    if (isStandardGroup(g)) {
+      return {
+        id: g.dir,
+        variant: 'standard' as const,
+        title: <OpenStandardTitle label={t('agents.openStandard.title')} tip={t('agents.openStandard.tip')} />,
+        sub: <AgentNamesTitle agents={g.agents} onOpen={openAgent} quiet />,
+        desc: <span className="mono">{g.dir}</span>,
+        status: activeBadge(t, { active: g.anyActive }),
+        badges: (
+          <>
+            {customBadge(t, primary)}
+            {presetBadge(t, primary.preset ?? null)}
+            {!g.installed && notInstalledBadge(t)}
+          </>
+        ),
+        onClick: () => openAgent(primary.key),
+        muted: !g.anyActive,
+      };
+    }
     return {
       id: g.dir,
       // 标题罗列使用该目录的全部 Agent —— 它们都是真实的 Agent，不把谁叫「别名」；
@@ -93,8 +131,6 @@ export default function Agents() {
       badges: (
         <>
           {customBadge(t, primary)}
-          {/* 「开源标准」只标在共享标准目录本身，不在每个读取它的 Agent 上重复「另读」 */}
-          {openStandardBadgeForAgent(t, primary)}
           {presetBadge(t, primary.preset ?? null)}
           {!g.installed && notInstalledBadge(t)}
         </>

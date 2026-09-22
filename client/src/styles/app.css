@@ -1161,6 +1161,81 @@ select.field {
   box-shadow: 0 0 0 3px var(--c-focus-ring);
 }
 
+/* 共享标准目录卡片（Agent Skills 开放标准）：换用 standard 强调色，在一屏里第一眼可辨。
+   它与「活跃 / 非活跃」正交——所有强调都在 is-off 时退回调色，活跃与否照旧一眼可辨。 */
+.entity-card--standard {
+  border-color: color-mix(in srgb, var(--c-standard) 42%, var(--c-line));
+  background: linear-gradient(180deg, var(--c-standard-soft), transparent 60%), var(--c-surface);
+}
+.entity-card--standard::before {
+  height: 4px;
+  background: linear-gradient(90deg, var(--c-standard), color-mix(in srgb, var(--c-standard) 40%, transparent));
+}
+.entity-card--standard .entity-card__title {
+  color: var(--c-standard);
+}
+.entity-card--standard:hover {
+  border-color: var(--c-standard);
+}
+.entity-card--standard.is-off {
+  border-color: color-mix(in srgb, var(--c-standard) 22%, var(--c-line));
+  background: var(--c-surface);
+}
+.entity-card--standard.is-off::before {
+  background: var(--c-ink-3);
+  opacity: 0.5;
+}
+.entity-card--standard.is-off .entity-card__title {
+  color: var(--c-ink-2);
+}
+
+/* 标准卡主标题：一句「开源标准」+ info 按钮（悬停 / 聚焦看说明） */
+.std-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.std-title__info {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--c-standard) 55%, transparent);
+  border-radius: var(--r-full);
+  background: var(--c-standard-soft);
+  color: var(--c-standard);
+  font-family: var(--ff-sans);
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  font-style: italic;
+  line-height: 1;
+  cursor: help;
+  transition: background var(--dur-150) var(--ease), color var(--dur-150) var(--ease);
+}
+.entity-card--standard.is-off .std-title__info {
+  border-color: var(--c-line-strong);
+  background: var(--c-surface-2);
+  color: var(--c-ink-3);
+}
+.std-title__info:hover,
+.std-title__info:focus-visible {
+  background: var(--c-standard);
+  border-color: var(--c-standard);
+  color: var(--c-on-accent);
+}
+/* 使用共享标准目录的 Agent 名（Codex / Warp / OpenHands…）：退到副标题并弱化 */
+.std-agents {
+  font-family: var(--ff-sans);
+  font-size: var(--fs-12);
+  color: var(--c-ink-3);
+}
+.std-agents .entity-title__sep {
+  color: var(--c-ink-3);
+}
+
 .entity-card__head {
   display: flex;
   align-items: flex-start;
@@ -1266,6 +1341,24 @@ select.field {
   cursor: pointer;
 }
 .entity-row.is-off {
+  color: var(--c-ink-2);
+}
+/* 列表视图下的共享标准目录行：与卡片同口径换色，非活跃时同样退回灰调 */
+.entity-row--standard {
+  border-color: color-mix(in srgb, var(--c-standard) 42%, var(--c-line));
+  background: linear-gradient(90deg, var(--c-standard-soft), transparent 55%), var(--c-surface);
+}
+.entity-row--standard .entity-row__title {
+  color: var(--c-standard);
+}
+.entity-row--standard:hover {
+  border-color: var(--c-standard);
+}
+.entity-row--standard.is-off {
+  border-color: color-mix(in srgb, var(--c-standard) 22%, var(--c-line));
+  background: var(--c-surface);
+}
+.entity-row--standard.is-off .entity-row__title {
   color: var(--c-ink-2);
 }
 .entity-row__main {
