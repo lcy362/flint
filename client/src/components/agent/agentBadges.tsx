@@ -158,12 +158,6 @@ export function openStandardBadge(t: TFunc) {
   );
 }
 
-/** 该 Agent 的全局目录本身就是 `~/.agents/skills`（原生成员）→ 出一枚「开源生态推荐目录」徽标 */
-export function openStandardBadgeForAgent(t: TFunc, agent: Pick<AgentView, 'shared' | 'sharedOwn'>) {
-  if (!readsAgentsDir(agent.shared) || !agent.sharedOwn) return null;
-  return openStandardBadge(t);
-}
-
 /** 「标签说明」弹窗的数据源：顺序即卡片上的常见排列顺序 */
 export function agentBadgeLegend(t: TFunc): BadgeLegendItem[] {
   return [

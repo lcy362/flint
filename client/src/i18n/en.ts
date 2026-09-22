@@ -314,6 +314,7 @@ export const en = {
   /* ---------- agents ---------- */
   'agents.subtitle': '{dirs} skill directories · {agents} agents',
   'agents.openStandard.title': 'Ecosystem-recommended directory',
+  'agents.openStandard.context': 'Ecosystem-recommended directory · {dir}',
   'agents.openStandard.tip':
     'Most agents read this directory, so it is the recommended place to manage skills first: a skill installed here works for every tool that reads it. To install for one specific agent only, use that agent\u2019s own directory.',
   'agents.addCustom': 'Add custom agent',
@@ -339,18 +340,20 @@ export const en = {
   'agents.install.copy': 'Copy (independent copy, needs re-sync)',
   'agents.activate': 'Set active',
   'agents.deactivate': 'Remove from active',
-  'agents.active.toggle.title': 'Add to / remove from the active set (takes effect immediately when added)',
+  'agents.active.toggle.title':
+    'Add to / remove from the active set: agents in one directory share a single strategy, so the whole directory toggles together (takes effect immediately when added)',
   'agents.dirs': 'Directories',
   'agents.dirs.title': 'Override this agent\u2019s global / project skill directory',
   'agents.sync': 'Sync',
   'agents.sync.title':
     'Fill in missing skills for the current strategy and reclaim extra links deployed by this tool (your own content is never touched)',
   'agents.delete.title': 'Delete this custom agent (built-in agents cannot be deleted)',
-  'agents.inactive.title': 'Not in the active set; changes do not follow automatically',
+  'agents.inactive.title': 'This directory is not in the active set; changes do not follow automatically',
   'agents.inactive.bodySiblings':
     'This skill directory also has {names} in the active set, so vault and preset changes are still synced in automatically; your actions on this page are written immediately too.',
   'agents.inactive.bodyAlone':
     'Future vault and preset changes are not synced to this directory automatically; click "Sync" here. Your actions on this page are still written immediately. To make it follow continuously, click "Set active" at the top right.',
+  'agents.alias.badge': 'Shared directory',
   'agents.alias.title': 'It shares one skill directory with "{name}"',
   'agents.alias.body':
     'The directory has a single physical body, so these agents **share the same** preset / install mode: a change here equals a change there, and both sides always see the same thing. Internally that set is stored under "{name}" — a storage location only, not ownership of the strategy.',

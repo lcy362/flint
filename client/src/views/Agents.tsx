@@ -30,7 +30,6 @@ import {
   familyBadge,
   notInstalledBadge,
   openStandardBadge,
-  openStandardBadgeForAgent,
   presetBadge,
   readsAgentsDir,
 } from '../components/agent/agentBadges';
@@ -280,9 +279,18 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
       api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ skillSync: { [name]: mode } }) })
     );
 
+  // 目录级活跃：一个目录只有一套策略，自动同步也按目录归并——同目录任一成员活跃，
+  // 这个目录就在同步作用域内。详情页与列表卡片必须同一口径，否则会出现「卡片说活跃、页面说非活跃」。
+  const members = [agent, ...siblings];
+  const dirActive = members.some((m) => m.active);
+
+  // 活跃切换作用于**整个目录**：只切单个成员会出现「点了移出、目录却仍在自动同步」的假动作。
   const toggleActive = () => void busy(async () => {
     const res = await api<string[]>('/activeAgents');
-    const next = agent.active ? res.filter((k) => k !== agent.key) : [...res, agent.key];
+    const keys = new Set(members.map((m) => m.key));
+    const next = dirActive
+      ? res.filter((k) => !keys.has(k))
+      : Array.from(new Set([...res, ...keys]));
     await api('/activeAgents', { method: 'PUT', body: JSON.stringify(next) });
   });
 
@@ -305,8 +313,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   // 它与别的 Agent 共用同一个目录（不是主 Agent）：目录只有一份，预设 / 安装方式都落在主 Agent 上
   const isAlias = agent.key !== agent.primaryKey;
   const primaryAgent = siblings.find((o) => o.key === agent.primaryKey);
-  // 该目录的全部成员；主 Agent 可显式指定（AG-02），未指定则按活跃 / 名称自动判定
-  const members = [agent, ...siblings];
+  // 主 Agent 可显式指定（AG-02），未指定则按活跃 / 名称自动判定
   const designatedKey = members.find((m) => m.primaryExplicit)?.key ?? 'auto';
   // 同目录里活跃的其它成员：它们让这个目录持续自动同步，即使本 Agent 自己不活跃
   const activeSiblings = siblings.filter((o) => o.active).map((o) => o.name);
@@ -474,16 +481,21 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
       <div className="detail-head">
         <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
         <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{agent.name}</h2>
-        {activeBadge(t, agent)}
+        {/* 从「开源生态推荐目录」卡片进来时要把这层身份带出来，否则标题忽然只剩一个 Agent 名 */}
+        {readsAgents && (
+          <span className="detail-head__context">
+            {t('agents.openStandard.context', { dir: shortDir(agent.globalDir) })}
+          </span>
+        )}
+        {activeBadge(t, { active: dirActive })}
         {siblings.length > 0 && (isAlias
-          ? <Badge tone="info" title={t('agents.alias.body', { name: primaryAgent?.name ?? agent.primaryKey })}>{t('agents.skillDirs')}</Badge>
+          ? <Badge tone="info" title={t('agents.alias.body', { name: primaryAgent?.name ?? agent.primaryKey })}>{t('agents.alias.badge')}</Badge>
           : <Badge tone="accent" title={t('agents.install.strategyHint')}>{t('agents.install.strategy')}</Badge>)}
         {familyBadge(t, agent)}
         {customBadge(t, agent)}
-        {openStandardBadgeForAgent(t, agent)}
         <div className="detail-actions">
-          <Button size="sm" variant={agent.active ? 'ghost' : 'primary'} onClick={toggleActive} title={t('agents.active.toggle.title')}>
-            {agent.active ? t('agents.deactivate') : t('agents.activate')}
+          <Button size="sm" variant={dirActive ? 'ghost' : 'primary'} onClick={toggleActive} title={t('agents.active.toggle.title')}>
+            {dirActive ? t('agents.deactivate') : t('agents.activate')}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setDirOpen(true)} title={t('agents.dirs.title')}>
             {t('agents.dirs')}
@@ -497,7 +509,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         </div>
       </div>
 
-      {!agent.active && (
+      {!dirActive && (
         <div className="notice">
           <span className="notice__title">{t('agents.inactive.title')}</span>
           <span className="notice__body">

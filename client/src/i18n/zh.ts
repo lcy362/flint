@@ -296,6 +296,7 @@ export const zh: Record<MsgKey, string> = {
   /* ---------- agents ---------- */
   'agents.subtitle': '共 {dirs} 个技能目录 · {agents} 个 Agent',
   'agents.openStandard.title': '开源生态推荐目录',
+  'agents.openStandard.context': '开源生态推荐目录 · {dir}',
   'agents.openStandard.tip':
     '大部分 Agent 都会读取这个目录，推荐优先管理它：技能装在这里，对所有读取该目录的工具一并生效。若只想装给某一个 Agent，用那个 Agent 自己的目录即可。',
   'agents.addCustom': '新增自定义 Agent',
@@ -320,17 +321,19 @@ export const zh: Record<MsgKey, string> = {
   'agents.install.copy': '复制（独立副本，需重新同步）',
   'agents.activate': '设为活跃',
   'agents.deactivate': '移出活跃',
-  'agents.active.toggle.title': '加入/移出活跃集合（加入即刻就位）',
+  'agents.active.toggle.title':
+    '加入/移出活跃集合：同目录的 Agent 共用一套策略，所以整目录一起切换（加入即刻就位）',
   'agents.dirs': '目录',
   'agents.dirs.title': '覆盖该 Agent 的全局/项目 skill 目录',
   'agents.sync': '同步',
   'agents.sync.title': '按当前策略补齐缺失技能，并回收本工具自己多部署的软链（不动你的自有内容）',
   'agents.delete.title': '删除这个自定义 Agent（内置 Agent 不可删除）',
-  'agents.inactive.title': '未加入活跃集合，不会自动跟随变更',
+  'agents.inactive.title': '这个目录未加入活跃集合，不会自动跟随变更',
   'agents.inactive.bodySiblings':
     '这个技能目录还有 {names} 在活跃集合里，技能库与预设的变动仍会自动同步进来；你在本页的操作也会立即写入。',
   'agents.inactive.bodyAlone':
     '技能库、预设之后的变动不会自动同步到这个目录，需要你在这里点「同步」；你在本页的操作仍会立即写入。想让它持续跟随，点右上角「设为活跃」。',
+  'agents.alias.badge': '共用目录',
   'agents.alias.title': '它与「{name}」共用一个技能目录',
   'agents.alias.body':
     '目录只有一份实体，所以这些 Agent **共用同一套**预设 / 安装方式：在这里改等同在那里改，两边看到的始终一致。系统内这套设置存在「{name}」名下——那只是存放位置，不代表策略归它所有。',

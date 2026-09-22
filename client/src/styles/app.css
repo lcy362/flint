@@ -1177,16 +1177,23 @@ select.field {
 .entity-card--standard:hover {
   border-color: var(--c-standard);
 }
+/* 非活跃：把强调色整体减弱而不是抹掉，并换成虚线边——
+   既与普通卡片区分得开，又能一眼看出「这个目录当前没在自动同步」。 */
 .entity-card--standard.is-off {
-  border-color: color-mix(in srgb, var(--c-standard) 22%, var(--c-line));
-  background: var(--c-surface);
+  border-color: color-mix(in srgb, var(--c-standard) 34%, var(--c-line));
+  border-style: dashed;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c-standard) 6%, var(--c-surface)), var(--c-surface));
 }
 .entity-card--standard.is-off::before {
-  background: var(--c-ink-3);
-  opacity: 0.5;
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--c-standard) 50%, transparent) 0 6px,
+    transparent 6px 12px
+  );
+  opacity: 1;
 }
 .entity-card--standard.is-off .entity-card__title {
-  color: var(--c-ink-2);
+  color: color-mix(in srgb, var(--c-standard) 55%, var(--c-ink-2));
 }
 
 /* 推荐目录卡主标题：一句「开源生态推荐目录」+ info 按钮（悬停 / 聚焦看说明） */
@@ -1216,9 +1223,9 @@ select.field {
   transition: background var(--dur-150) var(--ease), color var(--dur-150) var(--ease);
 }
 .entity-card--standard.is-off .std-title__info {
-  border-color: var(--c-line-strong);
-  background: var(--c-surface-2);
-  color: var(--c-ink-3);
+  border-color: color-mix(in srgb, var(--c-standard) 45%, var(--c-line));
+  background: color-mix(in srgb, var(--c-standard) 8%, var(--c-surface));
+  color: color-mix(in srgb, var(--c-standard) 65%, var(--c-ink-2));
 }
 .std-title__info:hover,
 .std-title__info:focus-visible {
@@ -1355,11 +1362,12 @@ select.field {
   border-color: var(--c-standard);
 }
 .entity-row--standard.is-off {
-  border-color: color-mix(in srgb, var(--c-standard) 22%, var(--c-line));
-  background: var(--c-surface);
+  border-color: color-mix(in srgb, var(--c-standard) 34%, var(--c-line));
+  border-style: dashed;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c-standard) 6%, var(--c-surface)), var(--c-surface));
 }
 .entity-row--standard.is-off .entity-row__title {
-  color: var(--c-ink-2);
+  color: color-mix(in srgb, var(--c-standard) 55%, var(--c-ink-2));
 }
 .entity-row__main {
   min-width: 0;
@@ -1423,6 +1431,11 @@ select.field {
   align-items: center;
   gap: var(--sp-3);
   flex-wrap: wrap;
+}
+/* 详情页头部：把「这是开源生态推荐目录」这层身份带出来（跟在 Agent 名之后） */
+.detail-head__context {
+  font-size: var(--fs-12);
+  color: var(--c-ink-3);
 }
 .detail-actions {
   margin-left: auto;
