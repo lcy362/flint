@@ -1202,6 +1202,11 @@ select.field {
   align-items: center;
   gap: var(--sp-2);
 }
+/* 详情页里推荐目录是标题主体，用强调色与卡片保持同一套说法
+   （限定在 .detail-head 内：卡片上的标题颜色由 entity-card--standard 控制） */
+.detail-head .std-title {
+  color: var(--c-standard);
+}
 .std-title__info {
   flex: none;
   width: 16px;

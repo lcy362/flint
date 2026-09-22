@@ -374,8 +374,8 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - `components/common/FilterBar.tsx`：搜索 + 维度筛选 + 重置 + 视图切换 + 徽标说明入口。
 - `components/skill/SkillBadges.tsx`：技能徽标（reason / store / state / 已接管 / 目录）与「标签说明」数据源，卡片与列表行共用。
 - `components/agent/agentBadges.tsx`：Agent 徽标（活跃 / 开源生态推荐目录 / 自定义 / 家族 / 未安装 / 预设）与说明数据源。「开源生态推荐目录」只标在 `~/.agents/skills` 这个目录本身（判定用 `readsAgentsDir`，即后端 `shared === 'agents'`），不对每个读取它的 Agent 重复「另读」；`~/.config/agents/skills` 等其它共用目录不做任何标记。
-- `components/agent/OpenStandardTitle.tsx`：`~/.agents/skills` 卡片的主标题——写明「开源生态推荐目录」并用 info 按钮悬停说明「大部分 Agent 都读这个目录、推荐优先管理，只装给某一个 Agent 请用该 Agent 自己的目录」。该卡片 `variant: 'standard'` 换用 `--c-standard` 强调色、使用它的 Agent 名退到副标题弱化，并在**活跃 / 非活跃各自分组内排第一位**；非活跃时强调色减弱、边框换虚线（看得出没在自动同步，又仍与普通卡片区分得开）。
-- **详情页的目录口径**（`views/Agents.tsx` 的 `AgentDetail`）：`~/.agents/skills` 成员的详情页在标题旁标注「开源生态推荐目录 · <目录>」；标题用 `AgentNamesTitle` 罗列整组成员（主 Agent 在前、其余名称序，与卡片同序），活跃状态与切换都按**整个目录**处理——`dirActive = members.some(m => m.active)`，切换时整组成员一起加入 / 移出 `activeAgents`，与列表卡片同口径，避免「卡片说活跃、页面说非活跃」和「点了移出、目录仍自动同步」。
+- `components/agent/OpenStandardTitle.tsx`：`~/.agents/skills` 的主标题（列表卡片与详情页共用）——写明「开源生态推荐目录」，info 按钮在卡片上讲「大部分 Agent 都读这个目录、推荐优先管理，只装给某一个 Agent 请用该 Agent 自己的目录」，在详情页上讲「大部分 Agent 都支持读这个目录，页面这几个是当前使用的代表」。该卡片 `variant: 'standard'` 换用 `--c-standard` 强调色、使用它的 Agent 名退到副标题弱化，并在**活跃 / 非活跃各自分组内排第一位**；非活跃时强调色减弱、边框换虚线（看得出没在自动同步，又仍与普通卡片区分得开）。
+- **详情页的目录口径**（`views/Agents.tsx` 的 `AgentDetail`）：`~/.agents/skills` 的详情页以推荐目录为标题主体（`OpenStandardTitle`，info 说明「这几个是当前使用的代表」），成员退到副行 `<目录> · <成员并列>`；其它目录的标题用 `AgentNamesTitle` 罗列整组成员（主 Agent 在前、其余名称序，与卡片同序）。活跃状态与切换都按**整个目录**处理——`dirActive = members.some(m => m.active)`，切换时整组成员一起加入 / 移出 `activeAgents`，与列表卡片同口径，避免「卡片说活跃、页面说非活跃」和「点了移出、目录仍自动同步」。
 - **同目录只有一个详情页**：`AgentNamesTitle` 只做并列展示、不再逐名可点（同一目录不存在「某个 Agent 自己的页」）；地址指向别名（如 `#/agents/openhands`）时前端 `replace` 规范到该目录的主 Agent，避免同一目录出现两个详情页各说一套。
 - `components/agent/agentGroups.ts`：按解析后的目录把 Agent 归并成卡片模型（主 Agent 在前）。
 - `domain/cards.ts` ↔ `api/types.ts`：后端领域行 → `SkillCardView`，前端按 `reason / store / state` 决定徽标与可执行操作（`toggle / collect / delete / detail`）。

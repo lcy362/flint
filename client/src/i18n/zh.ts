@@ -296,7 +296,8 @@ export const zh: Record<MsgKey, string> = {
   /* ---------- agents ---------- */
   'agents.subtitle': '共 {dirs} 个技能目录 · {agents} 个 Agent',
   'agents.openStandard.title': '开源生态推荐目录',
-  'agents.openStandard.context': '开源生态推荐目录 · {dir}',
+  'agents.openStandard.tipDetail':
+    '大部分 Agent 都支持读取这个目录，{names} 是当前使用该目录的代表：技能放在这里，对这些工具一并生效。',
   'agents.openStandard.tip':
     '大部分 Agent 都会读取这个目录，推荐优先管理它：技能装在这里，对所有读取该目录的工具一并生效。若只想装给某一个 Agent，用那个 Agent 自己的目录即可。',
   'agents.addCustom': '新增自定义 Agent',

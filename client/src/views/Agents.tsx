@@ -293,6 +293,8 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
   // 标题罗列整个目录的成员（主 Agent 在前、其余按名称序，与列表卡片同一顺序）：
   // 同一目录只有一个实体，页面不该写成「某一个 Agent」的专属页
   const titleMembers = [agent, ...siblings.slice().sort((a, b) => a.name.localeCompare(b.name))];
+  /** 成员名并列串：与卡片标题同一写法，详情页的说明文案里也用它 */
+  const memberNames = titleMembers.map((m) => m.name).join(' / ');
 
   // 活跃切换作用于**整个目录**：只切单个成员会出现「点了移出、目录却仍在自动同步」的假动作。
   const toggleActive = () => void busy(async () => {
@@ -490,13 +492,23 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
     <>
       <div className="detail-head">
         <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
+        {/* 推荐目录就是这个页面的主体：标题写「开源生态推荐目录」（带 info 说明），
+            使用它的 Agent 退到副行当「代表」——与列表卡片同一套说法 */}
         <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>
-          <AgentNamesTitle agents={titleMembers} />
+          {readsAgents ? (
+            <OpenStandardTitle
+              label={t('agents.openStandard.title')}
+              tip={t('agents.openStandard.tipDetail', { names: memberNames })}
+            />
+          ) : (
+            <AgentNamesTitle agents={titleMembers} />
+          )}
         </h2>
-        {/* 从「开源生态推荐目录」卡片进来时要把这层身份带出来，否则标题忽然只剩一个 Agent 名 */}
         {readsAgents && (
           <span className="detail-head__context">
-            {t('agents.openStandard.context', { dir: shortDir(agent.globalDir) })}
+            <span className="mono">{shortDir(agent.globalDir)}</span>
+            {' · '}
+            <AgentNamesTitle agents={titleMembers} quiet />
           </span>
         )}
         {activeBadge(t, { active: dirActive })}

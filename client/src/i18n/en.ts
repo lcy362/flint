@@ -314,7 +314,8 @@ export const en = {
   /* ---------- agents ---------- */
   'agents.subtitle': '{dirs} skill directories · {agents} agents',
   'agents.openStandard.title': 'Ecosystem-recommended directory',
-  'agents.openStandard.context': 'Ecosystem-recommended directory · {dir}',
+  'agents.openStandard.tipDetail':
+    'Most agents can read this directory; {names} are the representatives currently using it. A skill placed here works for all of them.',
   'agents.openStandard.tip':
     'Most agents read this directory, so it is the recommended place to manage skills first: a skill installed here works for every tool that reads it. To install for one specific agent only, use that agent\u2019s own directory.',
   'agents.addCustom': 'Add custom agent',
