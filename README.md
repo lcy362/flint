@@ -146,7 +146,26 @@ npm install -g flint-skills-hub
 flint
 ```
 
-Then open **http://localhost:8787**. Handy flags: `flint --port 9000`, `flint --no-open`, `flint --help`.
+Then open **http://localhost:8787**. Both commands are registered, with the same flags below.
+
+#### 2. Command reference
+
+| Command | Description |
+| --- | --- |
+| `flint` | Start the server and open the browser — the only overarching command |
+| `flint -p 9000` / `flint --port 9000` | Listen on a custom port (default `8787`, or `$PORT`) |
+| `flint -r` / `flint --restart` | Force-stop whatever already occupies the port, then start fresh |
+| `flint --no-open` | Start without auto-opening the browser (CI / headless) |
+| `flint -h` / `flint --help` | Show usage |
+| `flint -v` / `flint --version` | Print the installed version |
+
+Same flags work with `flint-skills-hub` (e.g. `flint-skills-hub -r`).
+
+| Environment variable | Meaning |
+| --- | --- |
+| `PORT` | Same as `--port` |
+| `FLINT_CONFIG` | Config file path (default `~/.flint/config.json`) |
+| `FLINT_CLIENT_DIST` | Override the built Web UI directory |
 
 **Updating, and checking the version:**
 

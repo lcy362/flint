@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,6 +24,7 @@ Usage:
 
 Options:
   -p, --port <port>   Port to listen on (default: ${DEFAULT_PORT}, or $PORT)
+  -r, --restart       Force-stop whatever is already on the port, then start fresh
       --no-open       Do not open the browser automatically
   -h, --help          Show this help
   -v, --version       Show the installed version
@@ -50,6 +51,7 @@ function parseArgs(argv) {
   const opts = {
     port: parsePort(process.env.PORT ?? DEFAULT_PORT),
     open: true,
+    restart: false,
     help: false,
     version: false,
   };
@@ -57,6 +59,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '-h' || arg === '--help') opts.help = true;
     else if (arg === '-v' || arg === '--version') opts.version = true;
+    else if (arg === '-r' || arg === '--restart') opts.restart = true;
     else if (arg === '--no-open') opts.open = false;
     else if (arg === '-p' || arg === '--port') opts.port = parsePort(argv[++i]);
     else if (arg.startsWith('--port=')) opts.port = parsePort(arg.slice('--port='.length));
@@ -76,7 +79,8 @@ function assertPortFree(port) {
       if (err.code === 'EADDRINUSE') {
         fail(
           `port ${port} is already in use.\n` +
-          `        Free it, or start on another port: PORT=${port + 1} npx flint-skills-hub`,
+          `        Restart the running instance: flint -r\n` +
+          `        Or start on another port: PORT=${port + 1} npx flint-skills-hub`,
         );
       }
       reject(err);
@@ -98,6 +102,59 @@ async function waitReady(port, timeoutMs = 20000) {
     }
   }
   return false;
+}
+
+/** 找到占用某端口的进程 PID（mac/Linux 用 lsof，Windows 用 netstat）；找不到或无权限返回空数组 */
+function findPidsOnPort(port) {
+  try {
+    if (process.platform === 'win32') {
+      const out = spawnSync('netstat', ['-ano'], { encoding: 'utf8' }).stdout || '';
+      const pids = new Set();
+      for (const line of out.split('\n')) {
+        if (line.includes(`:${port}`) && /TCP|UDP/.test(line)) {
+          const pid = line.trim().split(/\s+/).pop();
+          if (/^\d+$/.test(pid) && pid !== '0') pids.add(pid);
+        }
+      }
+      return [...pids];
+    }
+    const out = spawnSync('lsof', ['-ti', `tcp:${port}`], { encoding: 'utf8' }).stdout || '';
+    return out.split('\n').map((s) => s.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** 阻塞式小睡，避免引入第三方依赖；仅用于等端口让位这种短等待 */
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** 先 SIGTERM，稍候再 SIGKILL——`--restart` 要的是强制，但给优雅退出留一次机会 */
+function forceKill(pids) {
+  for (const pid of pids) {
+    try { process.kill(Number(pid), 'SIGTERM'); } catch { /* 可能已退 */ }
+  }
+  sleepMs(400);
+  for (const pid of pids) {
+    try { process.kill(Number(pid), 'SIGKILL'); } catch { /* 已退出 */ }
+  }
+}
+
+/** --restart：把已占用端口的旧实例清掉（否则它仍在读旧代码 / 旧配置），再交给 main 起新的 */
+function forceRestart(port) {
+  const pids = findPidsOnPort(port);
+  if (pids.length === 0) {
+    console.log(`[flint] no process on port ${port} — starting fresh`);
+    return;
+  }
+  console.log(`[flint] stopping ${pids.length} process(es) on port ${port} (pid=${pids.join(',')})`);
+  forceKill(pids);
+  // 等端口真的让出来再往下走，避免 assertPortFree 报 EADDRINUSE
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline && findPidsOnPort(port).length > 0) {
+    sleepMs(100);
+  }
 }
 
 function openBrowser(url) {
@@ -146,6 +203,10 @@ async function main() {
     console.warn('[flint] Web UI build not found — only the API will be available.');
     console.warn(`        Expected: ${path.join(CLIENT_DIST, 'index.html')}`);
     console.warn('        Running from source? Build it first: npm run build');
+  }
+
+  if (opts.restart) {
+    forceRestart(opts.port);
   }
 
   await assertPortFree(opts.port);
