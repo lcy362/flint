@@ -287,12 +287,11 @@ export const zh: Record<MsgKey, string> = {
   'agentBadge.notInstalled': '本机未安装',
   'agentBadge.notInstalled.title':
     '本机还没有这个技能目录——通常是这些工具还没装，或它们从未加载过技能；把 Agent 设为活跃并同步后会自动创建。',
-  'agentBadge.sharedRead': '读 {dir}',
-  'agentBadge.sharedReadExtra': '另读 {dir}',
-  'agentBadge.sharedReadOwn.title':
-    '该 Agent 的全局目录本身就是共享标准目录 {dir}：放到这里的技能它直接可用，与同读该目录的其它工具共用。',
-  'agentBadge.sharedReadExtra.title':
-    '该 Agent 除自身目录外，还会读取共享标准目录 {dir}：放到那里的技能它对也可用，无需重复安装。',
+  'agentBadge.openStandard': '开源标准',
+  'agentBadge.openStandard.title':
+    '{dir} 是 Agent Skills 开放标准约定的共享技能目录：生态内多数 Agent（Codex、Warp、OpenHands、GitHub Copilot、Cursor、OpenCode 等）都会读取它，放一份即对这些工具一并生效。',
+  'agentBadge.openStandard.legend':
+    '只标记在共享标准目录（~/.agents/skills、~/.config/agents/skills）本身，而不是某个 Agent：这是 Agent Skills 开放标准约定的目录，生态内多数 Agent 都会读取它，放一份即对这些工具一并生效——正因为绝大多数 Agent 都读它，就不再逐个 Agent 重复标注「另读」。',
 
   /* ---------- agents ---------- */
   'agents.subtitle': '共 {dirs} 个技能目录 · {agents} 个 Agent',

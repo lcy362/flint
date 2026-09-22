@@ -143,7 +143,9 @@ Flint 用一个本地优先的 Web 应用解决它：以文件系统为唯一事
 | clawdbot | Clawdbot | `~/.clawdbot/skills` | `.clawdbot/skills` | — |
 | teamwork | Teamwork | `~/teamwork/skills` | `teamwork/skills` | — |
 
-> **共享标准目录说明**：`codex`、`warp`、`openhands` 直接以 `~/.agents/skills` 为全局目录（放一份即全生效）；`amp`、`replit`、`goose`、`kimi_code` 共享 `~/.config/agents/skills`。其余带"另读"标注的 Agent 在自身目录之外还会读取共享目录，UI 用「另读 ~/.agents/skills」徽标说明，这类技能对本 Agent 直接可用但**只读**（由共享目录自己的策略管理）。
+> **共享标准目录说明**：`codex`、`warp`、`openhands` 直接以 `~/.agents/skills` 为全局目录（放一份即全生效）；`amp`、`replit`、`goose`、`kimi_code` 共享 `~/.config/agents/skills`。其余带"另读"标注的 Agent 在自身目录之外还会读取共享目录，这类技能对本 Agent 直接可用但**只读**（由共享目录自己的策略管理）。
+>
+> **UI 口径**：共享标准目录（Agent Skills 开放标准）被生态内绝大多数 Agent 读取，"也会读共享目录"不构成区分特征，因此**不在每个 Agent 上重复「另读」徽标**，而是把「开源标准」徽标标在**目录本身**——Agent 列表里是共享目录那张卡片，详情页里是「技能目录」一行中的共享目录路径。
 
 ### 5.3 活跃 Agent 与触发式同步（AA）
 

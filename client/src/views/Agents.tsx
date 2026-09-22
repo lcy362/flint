@@ -28,8 +28,10 @@ import {
   customBadge,
   familyBadge,
   notInstalledBadge,
+  openStandardBadge,
+  openStandardBadgeForAgent,
   presetBadge,
-  sharedReadBadge,
+  sharedKindOf,
 } from '../components/agent/agentBadges';
 import { useToast } from '../components/ui/Toast';
 import { useAsync } from '../state/useAsync';
@@ -91,7 +93,8 @@ export default function Agents() {
       badges: (
         <>
           {customBadge(t, primary)}
-          {!primary.sharedOwn && sharedReadBadge(t, primary)}
+          {/* 「开源标准」只标在共享标准目录本身，不在每个读取它的 Agent 上重复「另读」 */}
+          {openStandardBadgeForAgent(t, primary)}
           {presetBadge(t, primary.preset ?? null)}
           {!g.installed && notInstalledBadge(t)}
         </>
@@ -167,7 +170,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   onBack: () => void;
   onChanged: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const toast = useToast();
   const { data, loading, error, reload } = useAsync<AgentSkillsResp>(
     () => api(`/agents/${encodeURIComponent(agent.key)}/skills`),
@@ -389,6 +392,8 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
   // 多目录 Agent：给每行技能补上「来自哪个目录」的徽标，直接显示目录本身（单目录时无需展示，避免噪音）
   const sharedDir = agent.sharedDir && agent.sharedDir !== agent.globalDir ? agent.sharedDir : undefined;
+  // 读取的共享标准目录类型（无则 null）：用于在「技能目录」行把「开源标准」标在共享目录本身
+  const sharedKind = sharedKindOf(agent.shared);
   // 目录展示：home 前缀压成 ~，更短好读；拿不到 home 就原样展示绝对路径
   const shortDir = (p: string): string => (state?.home && p.startsWith(`${state.home}/`) ? `~${p.slice(state.home.length)}` : p);
   const withDir = (items: SkillCardView[]): SkillCardView[] => {
@@ -441,7 +446,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
           : <Badge tone="accent" title={t('agents.install.strategyHint')}>{t('agents.install.strategy')}</Badge>)}
         {familyBadge(t, agent)}
         {customBadge(t, agent)}
-        {sharedReadBadge(t, agent)}
+        {openStandardBadgeForAgent(t, agent)}
         <div className="detail-actions">
           <Button size="sm" variant={agent.active ? 'ghost' : 'primary'} onClick={toggleActive} title={t('agents.active.toggle.title')}>
             {agent.active ? t('agents.deactivate') : t('agents.activate')}
@@ -488,7 +493,17 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
         <div className="panel panel--quiet">
           <div className="panel__hint" style={{ marginBottom: 'var(--sp-3)', display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
             <span title={t('agents.skillDirs.title')}>
-              {t('agents.skillDirs')} <span className="mono">{joinList([agent.globalDir, ...(sharedDir ? [sharedDir] : [])].map(shortDir))}</span>
+              {t('agents.skillDirs')}{' '}
+              {[agent.globalDir, ...(sharedDir ? [sharedDir] : [])].map((d, i) => (
+                <span key={d}>
+                  {i > 0 && <span className="mono">{lang === 'zh' ? '、' : ', '}</span>}
+                  <span className="mono">{shortDir(d)}</span>
+                  {/* 「开源标准」标在共享标准目录本身，而不是标在 Agent 上 */}
+                  {sharedKind && d === agent.sharedDir ? (
+                    <span style={{ marginLeft: 'var(--sp-1)' }}>{openStandardBadge(t, sharedKind)}</span>
+                  ) : null}
+                </span>
+              ))}
             </span>
             {agent.project && <span className="mono">{t('agents.project', { path: agent.project })}</span>}
             {agent.alsoUsedBy?.length ? <span>{t('agents.alsoUsedBy', { names: joinList(agent.alsoUsedBy) })}</span> : null}

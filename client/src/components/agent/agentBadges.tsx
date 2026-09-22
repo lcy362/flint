@@ -129,26 +129,41 @@ export function familyBadge(t: TFunc, agent: Pick<AgentView, 'family'>) {
   );
 }
 
-/** 共享标准目录（Agent Skills 开放标准）：该 Agent 读取的 ~/.agents 或 ~/.config/agents */
+/** 共享标准目录（Agent Skills 开放标准）：~/.agents/skills 或 ~/.config/agents/skills */
 export const SHARED_READ_DIR: Record<'agents' | 'config-agents', string> = {
   agents: '~/.agents/skills',
   'config-agents': '~/.config/agents/skills',
 };
 
+export type SharedKind = keyof typeof SHARED_READ_DIR;
+
+/** 把后端的 shared 字段收窄成共享标准目录类型（其它值一律不认） */
+export function sharedKindOf(shared?: string): SharedKind | null {
+  return shared === 'agents' || shared === 'config-agents' ? shared : null;
+}
+
 /**
- * 展示某 Agent「读取共享标准目录」的信息。标签直接写出它同时读取的具体路径。
- * sharedOwn = true 表示共享目录正是它的原生全局目录（本身就是共享根的用户）；
- * 否则它只是在自身目录之外「兼容读取」该共享目录（放到那里的技能它对也可用）。
+ * 「开源标准」徽标——它标记的是**目录**，而不是某个 Agent。
+ *
+ * ~/.agents/skills 与 ~/.config/agents/skills 是 Agent Skills 开放标准约定的共享目录，
+ * 生态内多数工具（Codex / Warp / OpenHands / GitHub Copilot / Cursor / OpenCode…）都会读取它，
+ * 放一份即对这些工具一并生效。既然绝大多数 Agent 都读它，「它也读共享目录」就不是区分特征，
+ * 因此不再逐个 Agent 重复「另读」标注，只在共享目录本身上标一次「开源标准」。
  */
-export function sharedReadBadge(t: TFunc, agent: Pick<AgentView, 'shared' | 'sharedOwn'>) {
-  const shared = agent.shared;
-  if (shared !== 'agents' && shared !== 'config-agents') return null;
+export function openStandardBadge(t: TFunc, shared: SharedKind) {
   const dir = SHARED_READ_DIR[shared];
-  const label = agent.sharedOwn ? t('agentBadge.sharedRead', { dir }) : t('agentBadge.sharedReadExtra', { dir });
-  const title = agent.sharedOwn
-    ? t('agentBadge.sharedReadOwn.title', { dir })
-    : t('agentBadge.sharedReadExtra.title', { dir });
-  return <Badge tone="info" title={title}>{label}</Badge>;
+  return (
+    <Badge tone="info" title={t('agentBadge.openStandard.title', { dir })}>
+      {t('agentBadge.openStandard')}
+    </Badge>
+  );
+}
+
+/** 该 Agent 的全局目录本身就是共享标准目录（原生成员）→ 出一枚「开源标准」徽标 */
+export function openStandardBadgeForAgent(t: TFunc, agent: Pick<AgentView, 'shared' | 'sharedOwn'>) {
+  const kind = sharedKindOf(agent.shared);
+  if (!kind || !agent.sharedOwn) return null;
+  return openStandardBadge(t, kind);
 }
 
 /** 「标签说明」弹窗的数据源：顺序即卡片上的常见排列顺序 */
@@ -157,14 +172,9 @@ export function agentBadgeLegend(t: TFunc): BadgeLegendItem[] {
     { ...activeMeta(t), dot: 'good' },
     { ...inactiveMeta(t), dot: 'neutral' },
     {
-      label: t('agentBadge.sharedReadExtra', { dir: SHARED_READ_DIR.agents }),
+      label: t('agentBadge.openStandard'),
       tone: 'info' as const,
-      desc: t('agentBadge.sharedReadExtra.title', { dir: SHARED_READ_DIR.agents }),
-    },
-    {
-      label: t('agentBadge.sharedReadExtra', { dir: SHARED_READ_DIR['config-agents'] }),
-      tone: 'info' as const,
-      desc: t('agentBadge.sharedReadExtra.title', { dir: SHARED_READ_DIR['config-agents'] }),
+      desc: t('agentBadge.openStandard.legend'),
     },
     customMeta(t),
     presetMeta(t),

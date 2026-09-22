@@ -305,12 +305,11 @@ export const en = {
   'agentBadge.notInstalled': 'Not installed',
   'agentBadge.notInstalled.title':
     'This skill directory does not exist on this machine yet — usually the tool is not installed, or it has never loaded skills. It is created automatically once the agent is active and synced.',
-  'agentBadge.sharedRead': 'reads {dir}',
-  'agentBadge.sharedReadExtra': 'also reads {dir}',
-  'agentBadge.sharedReadOwn.title':
-    'This agent\u2019s global directory is itself the shared standard directory {dir}: skills placed there work directly and are shared with other tools reading the same directory.',
-  'agentBadge.sharedReadExtra.title':
-    'Besides its own directory this agent also reads the shared standard directory {dir}: skills placed there work for it too, with no need to install twice.',
+  'agentBadge.openStandard': 'Open standard',
+  'agentBadge.openStandard.title':
+    '{dir} is a shared skill directory of the open Agent Skills standard: most agents in the ecosystem (Codex, Warp, OpenHands, GitHub Copilot, Cursor, OpenCode and more) read it, so one copy serves them all.',
+  'agentBadge.openStandard.legend':
+    'Marks the shared standard directory itself (~/.agents/skills, ~/.config/agents/skills), not a single agent: this is the directory agreed by the open Agent Skills standard, read by most agents in the ecosystem so that one copy serves them all. Since nearly every agent reads it, "also reads" is no longer annotated per agent.',
 
   /* ---------- agents ---------- */
   'agents.subtitle': '{dirs} skill directories · {agents} agents',

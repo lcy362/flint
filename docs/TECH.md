@@ -373,7 +373,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - `components/common/EntityList.tsx`：`EntityItem` 契约 + 卡片 / 列表两种渲染；技能、预设、项目、Agent、仓库、来源、归集候选等一切列表型实体统一走它。
 - `components/common/FilterBar.tsx`：搜索 + 维度筛选 + 重置 + 视图切换 + 徽标说明入口。
 - `components/skill/SkillBadges.tsx`：技能徽标（reason / store / state / 已接管 / 目录）与「标签说明」数据源，卡片与列表行共用。
-- `components/agent/agentBadges.tsx`：Agent 徽标（活跃 / 共享目录 / 自定义 / 家族 / 未安装 / 预设）与说明数据源。
+- `components/agent/agentBadges.tsx`：Agent 徽标（活跃 / 开源标准 / 自定义 / 家族 / 未安装 / 预设）与说明数据源。「开源标准」标在共享标准目录本身（`~/.agents/skills`、`~/.config/agents/skills`），不对每个读取它的 Agent 重复「另读」。
 - `components/agent/agentGroups.ts`：按解析后的目录把 Agent 归并成卡片模型（主 Agent 在前）。
 - `domain/cards.ts` ↔ `api/types.ts`：后端领域行 → `SkillCardView`，前端按 `reason / store / state` 决定徽标与可执行操作（`toggle / collect / delete / detail`）。
 - **状态列只回答「装没装、可不可用」**：`state` 只有 `on`（该技能就在本目录里，本 Agent / 项目可用——本工具分发的、自带目录、外部软链、共享目录读到的都算）与 `off`（本工具曾分发、现已移出分发名单）。「本工具管不管它、能不能在这里开关」不占状态列，由 `reason` 徽标表达（自带 / 外部软链 / 只读），前端用 `isToolManaged(item)` 判断是否渲染开关、是否进「安装方式」清单。
