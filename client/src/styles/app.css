@@ -1127,7 +1127,7 @@ select.field {
   border-radius: var(--r-lg);
   border: 1px solid var(--c-line);
   background: var(--c-surface);
-  overflow: hidden;
+  /* 不裁剪：标题旁的 info 气泡要能溢出卡片边界；顶部彩条改用自身圆角贴合卡片 */
   transition: transform var(--dur-150) var(--ease), box-shadow var(--dur-150) var(--ease),
     border-color var(--dur-150) var(--ease);
 }
@@ -1138,6 +1138,7 @@ select.field {
   left: 0;
   right: 0;
   height: 3px;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
   background: linear-gradient(90deg, var(--c-accent), color-mix(in srgb, var(--c-accent) 40%, transparent));
 }
 .entity-card.is-off::before,
@@ -1155,6 +1156,8 @@ select.field {
   border-color: var(--c-line-strong);
   transform: translateY(-3px);
   box-shadow: var(--sh-2);
+  /* 抬一层：hover 的 transform 会生成 stacking context，不抬的话 info 气泡会被相邻卡片盖住 */
+  z-index: 3;
 }
 .entity-card:focus-within {
   border-color: var(--c-accent);
@@ -1237,6 +1240,59 @@ select.field {
   background: var(--c-standard);
   border-color: var(--c-standard);
   color: var(--c-on-accent);
+}
+/* info 的悬浮说明：自绘气泡，即时出现、样式受控（原生 title 要停留约一秒，容易被当成没反应） */
+.std-title__info {
+  position: relative;
+}
+.std-title__info::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+  width: max-content;
+  max-width: min(320px, 62vw);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
+  background: var(--c-surface);
+  color: var(--c-ink-1);
+  font-family: var(--ff-sans);
+  font-size: var(--fs-12);
+  font-style: normal;
+  font-weight: var(--fw-normal);
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  box-shadow: var(--sh-2);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 30;
+  transition: opacity var(--dur-150) var(--ease), transform var(--dur-150) var(--ease);
+}
+.std-title__info::before {
+  content: "";
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-bottom-color: var(--c-line-strong);
+  opacity: 0;
+  pointer-events: none;
+  /* 比气泡低一层：只露出箭尖，别压在气泡内部 */
+  z-index: 20;
+  transition: opacity var(--dur-150) var(--ease);
+}
+.std-title__info:hover::after,
+.std-title__info:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.std-title__info:hover::before,
+.std-title__info:focus-visible::before {
+  opacity: 1;
 }
 /* 使用共享标准目录的 Agent 名（Codex / Warp / OpenHands…）：退到副标题并弱化 */
 .std-agents {

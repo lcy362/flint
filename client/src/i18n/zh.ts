@@ -343,7 +343,6 @@ export const zh: Record<MsgKey, string> = {
   'agents.skillDirs': '技能目录',
   'agents.project': '项目 {path}',
   'agents.alsoUsedBy': '该目录也被 {names} 直接读取，无需单独安装',
-  'agents.sharedWith.note': '这些 Agent 共用这个技能目录：同一套策略，分发一次全部生效。',
   'agents.noSkills': '该目录暂无技能',
   'agents.currentSkillsCount': '现有技能（{n}）',
   'agents.syncFailedItems': '同步失败项',

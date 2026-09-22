@@ -573,7 +573,6 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
             </span>
             {agent.project && <span className="mono">{t('agents.project', { path: agent.project })}</span>}
             {agent.alsoUsedBy?.length ? <span>{t('agents.alsoUsedBy', { names: joinList(agent.alsoUsedBy) })}</span> : null}
-            {siblings.length > 0 && <span>{t('agents.sharedWith.note')}</span>}
           </div>
           <LoadingBoundary state={{ loading, error, data }} empty={{ title: t('agents.noSkills'), icon: '○' }}>
             {(resp) => (

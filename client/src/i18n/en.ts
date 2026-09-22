@@ -363,7 +363,6 @@ export const en = {
   'agents.skillDirs': 'Skill directories',
   'agents.project': 'Project {path}',
   'agents.alsoUsedBy': 'This directory is also read directly by {names}, so no separate install is needed',
-  'agents.sharedWith.note': 'These agents share this skill directory: one strategy, and a single distribution reaches them all.',
   'agents.noSkills': 'This directory has no skills',
   'agents.currentSkillsCount': 'Current skills ({n})',
   'agents.syncFailedItems': 'Failed sync items',
