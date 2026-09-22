@@ -41,6 +41,10 @@ schema.org structured data for SEO/GEO indexing. GitHub does not execute this sc
 -->
 > English | [简体中文](./README.zh-CN.md)
 
+[![npm version](https://img.shields.io/npm/v/flint-skills-hub.svg)](https://www.npmjs.com/package/flint-skills-hub)
+[![npm downloads](https://img.shields.io/npm/dm/flint-skills-hub.svg)](https://www.npmjs.com/package/flint-skills-hub)
+[![License](https://img.shields.io/npm/l/flint-skills-hub.svg)](https://www.npmjs.com/package/flint-skills-hub)
+
 > **Flint** · `local-skills-hub`
 > Obsidian collects knowledge; flint sparks skills.
 

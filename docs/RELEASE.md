@@ -21,7 +21,7 @@
    校验：构建 + 单测 + smoke   解析目标版本（尚未发布的最高版本）
        └──────────┬──────────┘
                   ▼
-       发 npm 包（OIDC）→ 建 tag → 建 GitHub Release
+       发 npm 包（npmjs OIDC + 同步 GitHub Packages）→ 建 tag → 建 GitHub Release
 ```
 
 **关键点：人工审核发生在 notes 落库之前，落库即发布。** AI 负责写 release notes 与定版本号，人负责审阅
@@ -127,7 +127,8 @@
    「已写 notes 但尚未发布」的最高版本；若都已发布、但最高版本缺 tag，则只补 tag / Release）→
    检查 release notes 存在 → 改写发布用 manifest → `npm publish --provenance`（OIDC）→
    **确认该版本已在 registry 可见**（看不到就红掉，不建 tag / Release，见 §5.4）→
-   `npm pack` 打包该版本 tarball → 创建 tag `vX.Y.Z` → 创建 GitHub Release
+   `npm pack` 打包该版本 tarball → 同步发一份到 **GitHub Packages**（`@lcy362/flint`，见 §5.5）→
+   创建 tag `vX.Y.Z` → 创建 GitHub Release
    （正文来自 release notes，tarball 作为下载资产一并挂载）。
 
 ### 兜底触发方式
@@ -272,6 +273,28 @@ v1.0.0 实测从发布步骤跑完（07:11:50）到 registry 上出现该版本�
 
 ---
 
+### 5.5 同步发一份到 GitHub Packages（npm.pkg.github.com）
+
+除了 npmjs.com，发版工作流还会把同一版本**同步发布**到 GitHub Packages（`npm.pkg.github.com`）。
+这是**仓库主页右侧「Packages」边栏出现 npm 包卡片**的原因——GitHub 只显示发布到自家 registry 的包，
+不会展示 npmjs.com 上的包。
+
+规则与注意：
+
+- **scoped 名**：GitHub npm registry 只接受 scoped 包，scope 必须等于仓库所属主，故发布名为 **`@lcy362/flint`**
+  （npmjs 上仍是 `flint-skills-hub`）。两者是**两套独立的镜像**，互不影响。
+- **认证**：走 `release.yml` 里 Actions 自带的 `GITHUB_TOKEN`，需要给发布 job 加 **`packages: write`** 权限；
+  不新增任何 secret，无需提前配置。
+- **版本号**：与 npmjs 共用 `release.yml` 解析出的同一版本，发布写入 manifest 后再 `npm pkg set name="@lcy362/flint"`。
+- **顺序**：该步排在 `npm pack`（Release 资产）之后，避免改名先改了 npmjs 侧 tarball 文件名。
+- **触发条件**：与 npmjs 保持一致（`skip != true && publish == true`），`dry-run` 时跳过。
+- 效果自查：发完后到 <https://github.com/lcy362/flint/packages> 能看到 `@lcy362/flint`，仓库侧边栏出现其入口。
+
+首次发布无需任何额外配置即可工作；若 `GITHUB_TOKEN` 权限盘中 `packages` 未开启，初次发布会在该步失败，
+届时去仓库 Settings ▸ Actions ▸ General 确认已勾选 **Read and write** 的包发布权限。
+
+---
+
 ## 六、CI 与 Release 的分工
 
 | | `ci.yml` | `release.yml` |
@@ -279,8 +302,8 @@ v1.0.0 实测从发布步骤跑完（07:11:50）到 registry 上出现该版本�
 | 触发 | 每次 push / PR / 手动 | release notes 落到 `master`（自动）/ 手动 `workflow_dispatch` / 推 `v*` 标签 |
 | 构建 + 单测 | ✅（Node 20 / 22 矩阵） | ✅（发布前再验一遍） |
 | smoke | ✅ | ✅ |
-| 写权限 | 无（`contents: read`） | `contents: write` + `id-token: write` |
-| 产物 | 无 | npm 包 + tag + GitHub Release |
+| 写权限 | 无（`contents: read`） | `contents: write` + `id-token: write` + `packages: write` |
+| 产物 | 无 | npm 包（npmjs + GitHub Packages）+ tag + GitHub Release |
 
 两者互不依赖：`ci.yml` 挂掉不会阻止发版，但 `release.yml` 内部的校验不过就发不出去。
 
