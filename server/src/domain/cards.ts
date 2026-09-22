@@ -102,7 +102,9 @@ function acts(r: CommonRow): SkillAction[] {
   }
   // 共享标准目录里的技能由该目录自己的策略管理，本 Agent 无权开关/删除，这里不给操作
   if (r.reason === 'shared') return [];
-  return [action('toggle', r.wanted ? t('card.disable') : t('card.enable'), { title: r.wanted ? t('card.disable.title') : t('card.enable.title') })];
+  // 受管行（本工具部署的软链 / 副本，reason=manual/preset）：新模型下没有 on/off 开关，
+  // 移除它就等于从该目录删除物理产物，因此只给「删除」。
+  return [action('delete', t('card.delete'), { title: t('card.delete.title') })];
 }
 
 /** agent 上下文行 → SkillCardView */
@@ -131,13 +133,13 @@ export function agentCards(rows: AgentSkillRow[]): SkillCardView[] { return rows
 
 /** 项目上下文行 → SkillCardView */
 export function projectCard(row: ProjectSkillRow): SkillCardView {
-  const r: CommonRow = { wanted: row.wanted, present: row.present, store: row.store, reason: normReason(row.reason), offOverride: row.offOverride };
+  const r: CommonRow = { wanted: row.wanted, present: row.present, store: row.store, reason: normReason(row.reason) };
   return {
     id: row.skillId ?? `${row.name}@${row.repo ?? ''}`,
     name: row.name, title: row.title, description: row.description,
     source: row.repo ?? '', dir: row.dir, tags: [],
     reason: r.reason, store: row.store, state: stateOf(r),
-    offOverride: row.offOverride, takenOver: row.takenOver,
+    takenOver: row.takenOver,
     pathLabel: pathLabelOf(row, r.reason),
     actions: acts(r),
   };

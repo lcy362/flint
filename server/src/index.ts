@@ -35,9 +35,9 @@ app.use((req, res, next) => {
   withLocale(resolveLocale(req.headers['accept-language']), () => next());
 });
 
-// 自动同步入口（reason 标识触发来源，便于日志排查）。
-// 只补齐缺失 / 修复失效链接，绝不删除：回收多余项只在「预设变更 / 该 Agent 策略变更 /
-// 手动同步 / 用户点修复」这类显式操作里发生（那些路径各自带 prune: true）。
+// 自动同步已停用（agent / 项目目录不再由 watcher / touch 触发部署）：
+// 预设只作一次性「应用」，由 Agent/项目页显式触发（syncActive / POST 部署）。
+// `resync` 保留给自动化任务按需调用（仅补齐、不删除，prune:false）。
 function resync(reason: string = 'manual') {
   const lib = scanAll(cfg.data.repos, cfg.data.foreignSources);
   try {
@@ -50,13 +50,13 @@ function resync(reason: string = 'manual') {
 // 供自动化任务触发的句柄（可通过环境变量约定，或后续注册任务模块）
 export { resync };
 
+// watcher 的变更回调不再部署（复制模式的增量同步在本模型下不再自动运行）
 const watcher = new CopyWatcher();
-const onChange = () => resync('watcher');
+const onChange = () => {};
 
 app.use('/api', makeRouter(cfg, {
-  // 结构性变更（新增/删除仓库、导入 skill、收编、改 preset/标签/活跃集）后自动同步活跃 agent，无需点「立即同步」；
-  // watcher 仅在用户显式开启且存在复制模式 agent 时才会真正启动（PRD §8.4）。
-  onChanged: () => { resync('route'); watcher.start(cfg, onChange); },
+  // 结构性变更后仅刷新，不触发部署（自动同步链停用）
+  onChanged: () => { watcher.start(cfg, onChange); },
   onConfigChanged: () => watcher.start(cfg, onChange),
 }));
 

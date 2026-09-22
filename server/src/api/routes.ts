@@ -9,14 +9,15 @@ import { log } from '../infra/logger.js';
 import { pickDirectory, pickFile } from '../infra/picker.js';
 import {
   listAgents, agentSkillRows, findAgentDef, resolveGlobalDir, effectiveAgentKey,
-  setPrimary, pruneAliasStrategies,
+  setPrimary, pruneAliasStrategies, isManagedLinkTarget,
 } from '../core/agents.js';
 import { scanAll, detectLayoutAbs } from '../core/scanner.js';
 import * as presets from '../core/presets.js';
 import * as active from '../core/active.js';
-import { syncActive, diffSync, computeDesired, desiredContext } from '../core/sync.js';
+import { syncActive, diffSync, deployOne, copySkill } from '../core/sync.js';
 import { collectCandidates } from '../core/integrate.js';
-import { addProject, syncProject, projectSkillRows, projectAddable, deployedAgents, pushProjectToRepo, takeoverProjectSkill } from '../core/projects.js';
+import { addProject, syncProject, projectSkillRows, projectAddable, deployedAgents, pushProjectToRepo, takeoverProjectSkill, writeIndex, INDEX_NAME } from '../core/projects.js';
+import { readSkill } from '../core/skill.js';
 import { importDirs, previewImportDirs } from '../core/import.js';
 import { previewCollect, collectAgentSkill, previewCollectSource, collectFromSource, projectCollectSource } from '../core/collect.js';
 import { migrateTagsToFrontmatter } from '../core/repo-tags.js';
@@ -368,73 +369,59 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       else delete cfg.data.agents[key];
     }
 
-    // 3) 分发策略（预设 / 安装方式 / 显式开关）一律落到该目录的主 Agent：目录只有一份实体，
+    // 3) 分发策略（预设 / 安装方式）一律落到该目录的主 Agent：目录只有一份实体，
     //    别名与主 Agent 必须共用同一套策略，否则两边会互相覆盖。
     //    主 Agent 可能刚被 1) 改变，所以在这里重新解析。
     const target = effectiveAgentKey(cfg.data, key);
     const over = cfg.data.agents[target] ?? {};
     if (sync === 'symlink' || sync === 'copy') over.sync = sync;
-    // 关联预设即取预设为基准；置空则不再使用任何预设（只保留单独开启的技能）
+    // 关联预设 = 记忆该目录「一次应用」哪套预设；保存决策，不再触发自动部署
     if ('preset' in body) { if (body.preset) over.preset = body.preset; else delete over.preset; }
     // 每关系同步策略（SY-01）：{ skill, sync } 写入 skillSync
     if ('skillSync' in body && body.skillSync && typeof body.skillSync === 'object') {
       over.skillSync = { ...(over.skillSync ?? {}), ...body.skillSync };
     }
-    // 兼容前端 `skill + on` 语义：开启→显式开启列表；关闭→按情况写入停用列表或移出开启列表
-    if ('skill' in body && typeof body.skill === 'string') {
-      const name = body.skill;
-      const on = body.on !== false;
-      const onSet = new Set(over.explicitOn ?? []);
-      const offSet = new Set(over.explicitOff ?? []);
-      if (on) { onSet.add(name); offSet.delete(name); }
-      else { onSet.delete(name); offSet.add(name); }
-      over.explicitOn = onSet.size ? [...onSet] : undefined;
-      over.explicitOff = offSet.size ? [...offSet] : undefined;
-    }
-    const setList = (field: 'explicitOn' | 'explicitOff') => {
-      if (field in body) { const list = Array.isArray(body[field]) ? body[field] : []; if (list.length) over[field] = list; else delete over[field]; }
-    };
-    setList('explicitOn'); setList('explicitOff');
     cfg.data.agents[target] = over;
     // 别名自己那份策略永远不生效，清掉避免配置里留下看似有效、实则被忽略的旧值
     const cleared = pruneAliasStrategies(cfg.data, target);
     if (cleared.length > 0) log.info('http', 'Cleared ignored alias strategies', { primary: target, aliases: cleared });
     cfg.save();
-    if (findAgentDef(cfg.data, key)) {
-      // 用户显式改了这个 Agent 的分发策略：只对「它自己」允许回收多余的软链（prune）。
-      // 非活跃 Agent 不跟随预设 / 仓库等间接变更自动同步，但用户在这里的手动操作立即落盘。
-      const result = syncActive(cfg, library().skills, [key], 'route:agent-op', { prune: true })[0];
-      log.info('http', 'Synced after agent strategy change', {
-        agent: key,
-        active: cfg.data.activeAgents.includes(key),
-        created: result?.created.length ?? 0,
-        removed: result?.removed.length ?? 0,
-      });
-      // 其它活跃 Agent 顺带补齐漂移，但只补齐、不删除
-      if (cfg.data.activeAgents.includes(key)) touch();
-    }
     res.json(cfg.data.agents[target] ?? {});
   });
   r.get('/agents/:key/skills', (req, res) => {
     const key = req.params.key;
     const lib = library();
-    const ctx = desiredContext(cfg, lib.skills, key);
-    const rows = agentSkillRows(key, cfg.data, lib.skills, ctx);
+    const rows = agentSkillRows(key, cfg.data, lib.skills);
     const present = new Set(rows.filter((x) => x.present).map((x) => x.name));
-    const inDesired = new Set(rows.filter((x) => x.wanted).map((x) => x.name));
+    // 「可添加」= 技能库里尚未出现在该目录的实际行（物理为准，不看期望集）
     const seenAddable = new Set<string>();
     const addable = lib.skills
-      .filter((s) => !inDesired.has(s.name) && !present.has(s.name) && !ctx.onNames.has(s.name))
+      .filter((s) => !present.has(s.name))
       .map((s) => ({ id: s.id, name: s.name, repo: s.source }))
       .filter((a) => { if (seenAddable.has(a.name)) return false; seenAddable.add(a.name); return true; });
     res.json({ skills: agentCards(rows), addable, active: cfg.data.activeAgents.includes(key) });
   });
+  // 「添加」：把单个技能部署进该 agent 目录（软链/复制，遵循其同步策略），不写 config（物理即真相）
+  r.post('/agents/:key/skills', (req, res) => {
+    const key = req.params.key;
+    if (!findAgentDef(cfg.data, key)) return res.status(404).json({ error: 'unknown agent' });
+    const { id } = req.body ?? {};
+    if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id (name@source) required' });
+    const lib = library();
+    const result = deployOne(cfg, key, id, lib.skills, { prune: false });
+    log.info('http', 'Agent skill added', {
+      agent: key, skill: String(id),
+      created: result.created.length, failed: result.failed.map((f) => f.skill),
+    });
+    res.json(result);
+  });
   r.post('/agents/:key/sync', (req, res) => {
     const key = req.params.key;
-    // 用户显式点「同步」：允许回收该 Agent 上本工具多部署的软链
+    // 用户显式点「同步（应用预设）」：以该 agent 绑定预设为一次性部署并允许回收多余软链
     const r_ = syncActive(cfg, library().skills, [key], 'route:agent-sync', { prune: true });
     res.json(r_[0] ?? { agent: key, created: [], removed: [], failed: [] });
   });
+  // 「删除」：移除本工具部署到该 agent 目录的软链/副本，绝不删真实目录或外部软链（物理为准）
   r.delete('/agents/:key/skills/:skillName', (req, res) => {
     const key = req.params.key;
     const name = req.params.skillName;
@@ -442,11 +429,21 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (!def) return res.status(404).json({ error: 'unknown agent' });
     const dir = resolveGlobalDir(def, cfg.data.agents[key]?.globalDir);
     const target = path.join(dir, name);
-    if (!fs.existsSync(target)) return res.status(404).json({ error: 'skill not found' });
-    const ctx = desiredContext(cfg, library().skills, key);
-    const wanted = [...ctx.desired.values()].some((s) => s.name === name);
-    if (wanted) return res.status(400).json({ error: t('api.skillEnabled') });
-    fs.rmSync(target, { recursive: true, force: true });
+    let st;
+    try { st = fs.lstatSync(target, { throwIfNoEntry: false }); } catch { st = undefined; }
+    if (!st) return res.status(404).json({ error: 'skill not found' });
+    if (st.isDirectory() && !st.isSymbolicLink()) {
+      // 实体目录 = 用户自带技能：即便内容与本工具副本一致也不删，绝不破坏用户内容
+      return res.status(400).json({ error: t('api.onlyRealDir') });
+    }
+    if (!st.isSymbolicLink()) return res.status(400).json({ error: 'not a managed link' });
+    // 只有指向自有仓库（本工具部署）的软链才允许删除；外部软链不归本工具管，绝不删
+    let linkTarget: string | undefined;
+    try { linkTarget = fs.readlinkSync(target); } catch { /* 读不到按外部处理 */ }
+    if (!isManagedLinkTarget(cfg.data, linkTarget, dir)) {
+      return res.status(400).json({ error: t('sync.externalLink', { dir }) });
+    }
+    fs.unlinkSync(target);
     res.json({ ok: true, removed: name });
   });
   // 活跃 Agent 集合（AA-01 / AA-04）
@@ -504,16 +501,11 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       res.status(400).json({ error: (e as Error).message });
     }
   });
-  // 改预设立即同步活跃 Agent；非活跃 Agent 不自动跟随，等其详情页手动操作时即时生效。
-  // 预设变更会改变「应装什么」，因此这里是允许回收多余软链的显式场景（prune: true）。
+  // 编辑预设：保存配置即可，**不再触发自动同步**——预设只作一次性「应用」，由 Agent/项目页显式触发。
   r.put('/presets/:name', (req, res) => {
     try {
       const p = presets.update(cfg, req.params.name, req.body ?? {});
-      const lib = library();
-      const results = syncActive(cfg, lib.skills, undefined, 'route', { prune: true });
-      const created = results.reduce((n, r) => n + r.created.length, 0);
-      const removed = results.reduce((n, r) => n + r.removed.length, 0);
-      log.info('http', 'Preset updated', { name: req.params.name, skills: p.skills.length, tags: p.tags.length, created, removed });
+      log.info('http', 'Preset updated', { name: req.params.name, skills: p.skills.length, tags: p.tags.length });
       res.json(p);
     } catch (e) {
       log.error('http', `Preset update failed: ${(e as Error).message}`, { name: req.params.name });
@@ -577,34 +569,44 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const lib = library();
     res.json({ skills: projectCards(projectSkillRows(cfg, proj, lib.skills)), addable: projectAddable(cfg, proj, lib.skills) });
   });
+  // 项目技能：物理为准（期望集已停用）。GET 只读实际目录；PUT 仅刷新（原 on/off 分支已删除）；
+  // 「添加」POST 部署一份副本；「删除」移除本工具部署的副本（真实目录），绝不删软链/接管项之外的东西。
   r.put('/projects/:id/skills', (req, res) => {
     const id = Number(req.params.id);
     const proj = cfg.data.projects[id];
     if (!proj) return res.status(404).json({ error: 'project not found' });
-    // 兼容前端 `skill + on` 语义
-    if ('skill' in (req.body ?? {}) && typeof req.body.skill === 'string') {
-      const name = req.body.skill;
-      const on = req.body.on !== false;
-      const onSet = new Set(proj.explicitOn ?? []);
-      const offSet = new Set(proj.explicitOff ?? []);
-      if (on) { onSet.add(name); offSet.delete(name); }
-      else { onSet.delete(name); offSet.add(name); }
-      proj.explicitOn = onSet.size ? [...onSet] : undefined;
-      proj.explicitOff = offSet.size ? [...offSet] : undefined;
-    }
-    const setList = (field: 'explicitOn' | 'explicitOff') => {
-      if (field in (req.body ?? {})) {
-        const list = Array.isArray(req.body[field]) ? req.body[field] : [];
-        if (list.length) proj[field] = list; else delete proj[field];
-      }
-    };
-    setList('explicitOn'); setList('explicitOff');
-    cfg.save();
+    // 显式开关/期望集已取消：PUT 仅返回当前物理列表，供前端刷新
     const lib = library();
-    const result = syncProject(cfg, proj.path, lib.skills);
-    res.json({ ...result });
+    const rows = projectSkillRows(cfg, proj, lib.skills);
+    res.json({ skills: projectCards(rows), addable: projectAddable(cfg, proj, lib.skills) });
   });
-  // 删除项目目录里「自带」的技能（真实目录）。受管技能需先停用；软链不在此列。
+  // 「添加」：把单个技能以**副本**形式部署进项目 .agents/skills，并登记进 INDEX.md（物理为准）
+  r.post('/projects/:id/skills', (req, res) => {
+    const id = Number(req.params.id);
+    const proj = cfg.data.projects[id];
+    if (!proj) return res.status(404).json({ error: 'project not found' });
+    const { id: skillId } = req.body ?? {};
+    if (!skillId || typeof skillId !== 'string') return res.status(400).json({ error: 'id (name@source) required' });
+    const lib = library();
+    const skill = lib.skills.find((s) => s.id === skillId);
+    if (!skill) return res.status(400).json({ error: t('merge.skillNotFound', { name: skillId }) });
+    const agentsRoot = path.join(proj.path, '.agents', 'skills');
+    fs.mkdirSync(agentsRoot, { recursive: true });
+    const dest = path.join(agentsRoot, skill.name);
+    const st = fs.lstatSync(dest, { throwIfNoEntry: false });
+    // 软链（已被接管）不重复落副本；真实目录视为已落地（幂等）
+    if (st?.isSymbolicLink() && fs.existsSync(dest)) return res.status(409).json({ error: t('sync.externalLink', { dir: dest }) });
+    copySkill(dest, skill.dir);
+    // 登记进 INDEX.md，使该副本可被本工具识别为「曾投放」的内容（供未来安全回收）
+    const managed = fs.readdirSync(agentsRoot, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.isSymbolicLink() && e.name !== INDEX_NAME)
+      .map((e) => ({ name: e.name, title: e.name, description: readSkill(path.join(agentsRoot, e.name))?.description }));
+    writeIndex(agentsRoot, managed);
+    log.info('http', 'Project skill added (copy)', { project: proj.path, name: String(skillId) });
+    res.json({ ok: true, copied: skill.name });
+  });
+  // 「删除」：移除项目里本工具部署的副本（真实目录）。软链（接管项）与真实目录都属安全边界：
+  // 这里只删「实体目录」，即本工具曾落副本（已登记 INDEX）内容；不删软链、不删用户自有内容。
   r.delete('/projects/:id/skills/:name', (req, res) => {
     const id = Number(req.params.id);
     const proj = cfg.data.projects[id];
@@ -614,13 +616,11 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const st = fs.lstatSync(target, { throwIfNoEntry: false });
     if (!st) return res.status(404).json({ error: 'skill not found' });
     if (!st.isDirectory() || st.isSymbolicLink()) {
+      // 软链（接管项）或非目录：不删
       return res.status(400).json({ error: t('api.onlyRealDir') });
     }
-    const lib = library();
-    const row = projectSkillRows(cfg, proj, lib.skills).find((r) => r.name === name);
-    if (row?.wanted) return res.status(400).json({ error: t('api.skillEnabled') });
     fs.rmSync(target, { recursive: true, force: true });
-    log.info('http', 'Project skill deleted', { project: id, name });
+    log.info('http', 'Project skill removed', { project: id, name });
     res.json({ ok: true, removed: name });
   });
 
@@ -733,7 +733,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       res.json(diagnose(cfg, {
         lib,
         candidates: collectCandidates(cfg, lib),
-        desired: computeDesired(cfg, lib.skills),
+        desired: new Map(),
       }));
     } catch (e) { res.status(500).json({ error: (e as Error).message }); }
   });

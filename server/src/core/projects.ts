@@ -15,8 +15,8 @@ export const INDEX_NAME = 'INDEX.md';
 
 /**
  * 依据当前被管理的 skill 重建 .agents/skills/INDEX.md。
- * 注意：INDEX.md 是**同步产物**（给人/git 看的目录清单），绝不参与期望集推导——
- * 期望集只能由 config（标签 + explicit）推导，避免形成第二事实源（PRD C1/C2）。
+ * 注意：INDEX.md 是**同步产物**（给人/git 看的目录清单）与受管登记——
+ * 物理为准模式下，它只反映目录现状，不参与期望集推导、不构成拦截。
  */
 export function writeIndex(agentsRoot: string, managed: { name: string; title?: string; description?: string }[]): void {
   fs.mkdirSync(agentsRoot, { recursive: true });
@@ -43,28 +43,18 @@ function readIndexNames(agentsRoot: string): Set<string> {
 }
 
 /**
- * 项目的期望集（PJ-01）：
- *  标签命中 ∪ 逐个开启 − 逐个关闭
- * 纯由 config 推导，与文件落地解耦。
+ * 项目的「期望」技能（PJ-01，物理为准）：
+ *  标签命中（tags 作为投放策略）
+ * 显式 on/off 已取消；skills 只随实际目录变动，不维护开关列表。
  */
-/** explicit 记录可能是完整 id(name@来源) 或裸技能名，两者都视为命中（与 agent 期望解析对齐） */
-function idOrName(set: Set<string>, s: Skill): boolean {
-  return set.has(s.id) || set.has(s.name);
-}
-
 export function projectedSkills(cfg: ConfigStore, proj: ProjectLink, allSkills: Skill[]): Skill[] {
   const tagSet = new Set(proj.tags);
-  const on = new Set(proj.explicitOn ?? []);
-  const off = new Set(proj.explicitOff ?? []);
   const out: Skill[] = [];
   const seen = new Set<string>();
   const add = (s: Skill) => { if (!seen.has(s.name)) { seen.add(s.name); out.push(s); } };
+  if (tagSet.size === 0) return out; // 无标签策略 → 不自动投放任何技能
   for (const s of allSkills) {
-    const tags = effectiveTags(cfg.data, s);
-    const inTag = tagSet.size > 0 && tags.some((t) => tagSet.has(t));
-    if (!(inTag || idOrName(on, s))) continue;
-    if (idOrName(off, s)) continue;
-    add(s);
+    if (effectiveTags(cfg.data, s).some((t) => tagSet.has(t))) add(s);
   }
   return out;
 }
@@ -81,12 +71,8 @@ export interface ProjectSkillRow {
   store: 'symlink' | 'copy' | 'pending' | 'own';
   /** 已接管：该条目是指向任一自有仓库内技能的软链（系统口径，指向仓库外的不算） */
   takenOver?: boolean;
-  /** 来源原因：标签命中 / 逐个开启 / 自带 */
-  reason: 'tag' | 'manual' | 'own';
-  /** 标签命中但被逐个关闭 */
-  offOverride?: boolean;
-  /** 关闭该技能时应走哪个叠加集：'off'=加入 explicitOff（标签命中成员）；'on'=移出 explicitOn */
-  disableVia?: 'off' | 'on';
+  /** 来源原因：标签命中 / 自带 */
+  reason: 'tag' | 'own';
   repo?: string;
   dir?: string;
 }
@@ -96,10 +82,8 @@ function linkTo(p: string): string | undefined {
   try { return fs.readlinkSync(p); } catch { return undefined; }
 }
 
-/** 构建项目技能行：期望集（并按项目配置覆盖）∪ 目录已存在。与 agent 技能行逻辑对齐。 */
+/** 构建项目技能行（物理为准，期望集已停用）：实际目录 ∪ 标签命中的可补入行。与 agent 技能行逻辑对齐。 */
 export function projectSkillRows(cfg: ConfigStore, proj: ProjectLink, allSkills: Skill[]): ProjectSkillRow[] {
-  const onIds = new Set(proj.explicitOn ?? []);
-  const offIds = new Set(proj.explicitOff ?? []);
   const agentsRoot = path.join(proj.path, '.agents', 'skills');
   const presentNames = new Set<string>();
   const presentIsLink = new Map<string, boolean>();
@@ -111,62 +95,53 @@ export function projectSkillRows(cfg: ConfigStore, proj: ProjectLink, allSkills:
     }
   }
   const rows: ProjectSkillRow[] = [];
-  const desired = projectedSkills(cfg, proj, allSkills);
-  const desiredNames = new Set(desired.map((s) => s.name));
 
-  // 1) 期望集行
-  for (const s of desired) {
-    const inTag = effectiveTags(cfg.data, s).some((t) => (proj.tags ?? []).includes(t));
-    const inOn = onIds.has(s.id) || onIds.has(s.name);
-    const exists = presentNames.has(s.name);
-    const isLink = presentIsLink.get(s.name) ?? false;
-    // present 保持原语义（真实目录才算「已落地副本」），供可补入清单判断
-    const present = exists && !isLink;
-    const off = offIds.has(s.id) || offIds.has(s.name);
-    const entry = path.join(agentsRoot, s.name);
-    const linkTarget = exists && isLink ? linkTo(entry) : undefined;
-    rows.push({
-      skillId: s.id, name: s.name, title: s.name, description: s.description,
-      source: 'managed', wanted: true, present,
-      // 已接管（软链）→ symlink；已落地的真实副本 → copy；未落地 → pending
-      store: !exists ? 'pending' : isLink ? 'symlink' : 'copy',
-      takenOver: !!linkTarget && isManagedLinkTarget(cfg.data, linkTarget, agentsRoot),
-      reason: inOn ? 'manual' : 'tag',
-      offOverride: inTag && off ? true : undefined,
-      disableVia: inTag ? 'off' : 'on',
-      repo: s.source,
-      dir: exists ? entry : undefined,
-    });
+  // 1) 目录中已存在的行（含接管软链与自带真实目录）
+  for (const name of presentNames) {
+    const isLink = presentIsLink.get(name) ?? false;
+    const p = path.join(agentsRoot, name);
+    const entryPath = path.join(agentsRoot, name);
+    if (isLink) {
+      const target = linkTo(entryPath);
+      rows.push({
+        name, title: name, description: readSkill(p)?.description,
+        source: 'managed', wanted: true, present: true, store: 'symlink',
+        takenOver: !!target && isManagedLinkTarget(cfg.data, target, agentsRoot),
+        reason: 'tag',
+        repo: target ? undefined : undefined, dir: entryPath,
+      });
+    } else {
+      if (!fs.existsSync(path.join(p, 'SKILL.md'))) continue; // 只把带 SKILL.md 的真实目录视作技能
+      const meta = readSkill(p);
+      rows.push({
+        name, title: meta?.name ?? name, description: meta?.description,
+        source: 'owned', wanted: false, present: true, store: 'own', reason: 'own', dir: p,
+      });
+    }
   }
 
-  // 2) 目录中存在但不在期望集（残留 / 自带）
-  for (const name of presentNames) {
-    if (desiredNames.has(name)) continue;
-    const isLink = presentIsLink.get(name) ?? false;
-    if (isLink) continue; // 软链不视作项目内技能，略过
-    const p = path.join(agentsRoot, name);
-    const meta = readSkill(p);
+  // 2) 标签命中的可补入行（present=false，供「可添加」判断；物理为准，不落盘）
+  const present = presentNames;
+  for (const s of projectedSkills(cfg, proj, allSkills)) {
+    if (present.has(s.name)) continue;
     rows.push({
-      name, title: meta?.name ?? name, description: meta?.description,
-      source: 'owned', wanted: false, present: true, store: 'own',
-      reason: 'own', dir: p,
+      skillId: s.id, name: s.name, title: s.name, description: s.description,
+      source: 'managed', wanted: true, present: false, store: 'pending',
+      reason: 'tag', repo: s.source,
     });
   }
 
   return rows.sort((a, b) => Number(b.wanted) - Number(a.wanted) || a.name.localeCompare(b.name));
 }
 
-/** 可从资产库补入本项目的候选：不在期望集、不在目录、也未被逐个关闭 */
+/** 可从资产库补入本项目的候选：不在目录、也不是标签命中项（物理为准） */
 export function projectAddable(cfg: ConfigStore, proj: ProjectLink, allSkills: Skill[]): { id: string; name: string; repo: string }[] {
-  const desired = new Set(projectedSkills(cfg, proj, allSkills).map((s) => s.name));
-  const present = projectSkillRows(cfg, proj, allSkills).filter((r) => r.present).map((r) => r.name);
-  const off = new Set(proj.explicitOff ?? []);
-  const presentSet = new Set(present);
+  const present = new Set(projectSkillRows(cfg, proj, allSkills).filter((r) => r.present).map((r) => r.name));
   const seen = new Set<string>();
   const out: { id: string; name: string; repo: string }[] = [];
   for (const s of allSkills) {
     if (seen.has(s.name)) continue; // 同一技能跨多个来源只列一次（首见即入）
-    if (desired.has(s.name) || presentSet.has(s.name) || idOrName(off, s)) continue;
+    if (present.has(s.name)) continue;
     seen.add(s.name);
     out.push({ id: s.id, name: s.name, repo: s.source });
   }
@@ -246,7 +221,7 @@ export function ensureAgentLinks(cfg: ConfigStore, projectPath: string, wanted?:
 
 /**
  * 项目级同步：
- * 1) 把项目期望集（标签匹配 ∪ 逐个开启 − 逐个关闭）的 skill 本体复制到 <project>/.agents/skills（PJ-02）
+ * 1) 把项目标签命中的 skill 本体复制到 <project>/.agents/skills（PJ-02；开关已取消，只按标签）
  * 2) 让项目投放的 agent 的项目技能目录软链到 .agents（PJ-03：一套本体、多 Agent 共享）
  */
 export function syncProject(cfg: ConfigStore, projectPath: string, allSkills: Skill[], wantedAgents?: Set<string>): ProjectSyncResult {
@@ -344,15 +319,11 @@ export function takeoverProjectSkill(
   const dest = path.join(agentsRoot, name);
   const st = fs.lstatSync(dest, { throwIfNoEntry: false });
 
-  /** 登记为项目期望集成员：之后由本工具按仓库维护它 */
+  /** 登记为项目受管技能：写进 INDEX.md（物理为准的受管登记，交给后续同步/回收识别） */
   const register = () => {
-    const onSet = new Set(proj.explicitOn ?? []);
-    const offSet = new Set(proj.explicitOff ?? []);
-    onSet.add(name);
-    offSet.delete(name);
-    proj.explicitOn = onSet.size ? [...onSet] : undefined;
-    proj.explicitOff = offSet.size ? [...offSet] : undefined;
-    cfg.save();
+    const names = readIndexNames(agentsRoot);
+    names.add(name);
+    writeIndex(agentsRoot, [...names].map((n) => ({ name: n, description: readSkill(path.join(agentsRoot, n))?.description })));
   };
 
   // 幂等：项目里已是与仓库一致的真实副本 → 只补登记，不动文件

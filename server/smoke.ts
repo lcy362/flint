@@ -98,8 +98,8 @@ let projBase = '';
   const { diagnose } = await import('./src/core/diagnose.js');
   const lib4 = scanAll(store.data.repos, store.data.foreignSources);
   const { collectCandidates } = await import('./src/core/integrate.js');
-  const { computeDesired } = await import('./src/core/sync.js');
-  const diag = diagnose(store, { lib: lib4, candidates: collectCandidates(store, lib4), desired: computeDesired(store, lib4.skills) });
+  // 期望集已停用：diagnose 的 desired 传空（物理为准，仅报告实际目录）
+  const diag = diagnose(store, { lib: lib4, candidates: collectCandidates(store, lib4), desired: new Map() });
   console.log('[diagnose] items =', diag.items.length, '| config =', diag.config);
   console.log('Repository contains new skill echarts =', fs.existsSync(path.join(repoDir, 'skills', 'echarts', 'SKILL.md')));
 }
@@ -110,16 +110,15 @@ let projBase = '';
   presets.update(store, 'demo', { tags: ['viz'] });
   store.save();
   const lib5 = scanAll(store.data.repos, store.data.foreignSources);
-  const { desiredNamesFor } = await import('./src/core/sync.js');
-  const names = [...desiredNamesFor(store, lib5.skills, 'trae_cn')];
+  const { presetSkillSet } = await import('./src/core/sync.js');
+  const names = [...presetSkillSet(store, lib5.skills, 'trae_cn').values()].map((s) => s.name);
   console.log('\n[preset-tags] desired set =', names.sort());
   console.log(names.includes('echarts') ? 'PASS: preset tag matching' : 'FAIL: preset tag not effective');
 }
 
 // ---- Batch 5: same-directory sharing smoke (one directory, one strategy) ----
 {
-  const { listAgents } = await import('./src/core/agents.js');
-  const { desiredContext } = await import('./src/core/sync.js');
+  const { listAgents, effectiveAgentKey } = await import('./src/core/agents.js');
   const sharedDir = path.join(base, 'shared-skills');
   // cline and warp normally own .cline/skills and the shared ~/.agents/skills; here both are
   // overridden into one temp directory to simulate "same-directory sharing"
@@ -140,7 +139,8 @@ let projBase = '';
     ? fs.readdirSync(sharedDir).filter((n) => !n.startsWith('.')).sort()
     : [];
   const aliasSync = syncActive(store, lib6.skills, ['warp'], 'smoke')[0];
-  const aliasPreset = desiredContext(store, lib6.skills, 'warp').preset;
+  // alias 沿用主 Agent 的 preset：直接读折算出主 Agent 后 config.agents 里的 preset
+  const aliasPreset = store.data.agents[effectiveAgentKey(store.data, 'warp')]?.preset;
   console.log('\n[alias] warp.primaryKey =', warp?.primaryKey, '| warp effective preset =', warp?.preset, '| shared with =', cline?.sharedWith);
   console.log('[alias] two active agents deployed =', ran.length, 'time(s) | directory content =', deployed, '| alias sync landed on =', aliasSync?.agent, '| alias desired preset =', aliasPreset);
   const ok =
@@ -156,8 +156,7 @@ let projBase = '';
 
 // ---- Batch 6: explicit primary agent smoke (AG-02) ----
 {
-  const { listAgents, setPrimary } = await import('./src/core/agents.js');
-  const { desiredContext } = await import('./src/core/sync.js');
+  const { listAgents, setPrimary, effectiveAgentKey } = await import('./src/core/agents.js');
   const sharedDir = path.join(base, 'shared-skills');
   const lib7 = scanAll(store.data.repos, store.data.foreignSources);
 
@@ -173,7 +172,7 @@ let projBase = '';
   // 断言里的 !deployed.includes('alpha') 永远不成立（prune:false 只补不删）。
   const ran = syncActive(store, lib7.skills, undefined, 'smoke', { prune: true });
   const deployed = fs.existsSync(sharedDir) ? fs.readdirSync(sharedDir).sort() : [];
-  const aliasPreset = desiredContext(store, lib7.skills, 'cline').preset;
+  const aliasPreset = store.data.agents[effectiveAgentKey(store.data, 'cline')]?.preset;
   console.log('\n[primary] after designation warp.primaryKey =', warp?.primaryKey, '| warp.primaryExplicit =', warp?.primaryExplicit, '| cline.primaryKey =', cline?.primaryKey);
   console.log('[primary] effective preset =', warp?.preset, '| cline desired preset =', aliasPreset, '| deploy targets =', ran.map((r) => r.agent).join(','), '| directory content =', deployed);
 
@@ -181,7 +180,7 @@ let projBase = '';
   setPrimary(store.data, 'warp', false);
   store.save();
   const back = listAgents(store.data).find((a) => a.key === 'warp');
-  console.log('[primary] after clearing warp.primaryKey =', back?.primaryKey, '| warp desired preset =', desiredContext(store, lib7.skills, 'warp').preset);
+  console.log('[primary] after clearing warp.primaryKey =', back?.primaryKey, '| warp desired preset =', store.data.agents[effectiveAgentKey(store.data, 'warp')]?.preset);
   const ok =
     warp?.primaryKey === 'warp' &&
     warp?.primaryExplicit === true &&

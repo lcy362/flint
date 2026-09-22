@@ -19,7 +19,6 @@ import {
   sharedStandardDir,
 } from '../src/core/agents.js';
 import { scanAll } from '../src/core/scanner.js';
-import { desiredContext } from '../src/core/sync.js';
 import { agentCards } from '../src/domain/cards.js';
 import { emptyConfig, HubConfig, Repo } from '../src/config/types.js';
 import { makeStore, tmpDir, writeSkill } from './helpers.js';
@@ -167,8 +166,6 @@ describe('pruneAliasStrategies', () => {
           preset: 'demo',
           sync: 'copy',
           skillSync: { alpha: 'copy' },
-          explicitOn: ['alpha@default'],
-          explicitOff: ['beta@default'],
         },
         warp: { globalDir: shared },
       },
@@ -308,8 +305,7 @@ describe('agentSkillRows：来源展示与「归集到仓库」入口', () => {
     /** 渲染该 Agent 的技能卡片 */
     const cards = () => {
       const lib = scanAll(store.data.repos, store.data.foreignSources);
-      const ctx = desiredContext(store, lib.skills);
-      return agentCards(agentSkillRows('codebuddy', store.data, lib.skills, ctx));
+      return agentCards(agentSkillRows('codebuddy', store.data, lib.skills));
     };
     /** 在 Agent 目录里放一条软链（target 可为相对路径，模拟手工软链的形态） */
     const link = (name: string, target: string) => fs.symlinkSync(target, path.join(agentDir, name), 'dir');

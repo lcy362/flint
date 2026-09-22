@@ -12,9 +12,9 @@ Flint（`local-skills-hub`）是一个**本地优先**的个人 AI Skills 资产
 一句话模型：
 
 ```
-config.json ──推导──▶ 期望集 desired ──投影──▶ 物理目录（软链 / 复制）
-     ▲                                             │
-     └──────────── 诊断 diffSync 对账 ◀─────────────┘
+config.json ──(生成式：预设一次性应用 / 手动添加)──▶ 物理目录（软链 / 复制）
+     ▲                                                     │
+     └────────────── 诊断 diffSync 对账（以目录为准）◀────────┘
 ```
 
 ## 2. 技术栈与命令
@@ -75,10 +75,10 @@ docs/releases/      # 各版本 release notes（GitHub Release 正文来源）
 ## 5. 核心不变量（改动不得违反）
 
 - **文件即本体**：skill 内容永不写入 config / 数据库；config 只存"无法从文件系统推导的用户决策"。
-- **期望集推导式、不落盘**：某 Agent / 项目的"应装什么"永远运行时计算（`desiredContext`）。
+- **物理为准、不做期望集**：agent / 项目的技能列表与状态一律读实际目录，不维护"该装什么"清单；目录之外不再存开关 / 快照（`explicitOn/explicitOff` 已取消）。
 - **物理状态以目录为准**：投放给了哪些 Agent、装了哪些技能，一律读目录，不在 config 存快照。
-- **触发式同步**：只在操作触发点执行；自动同步作用域**只限活跃 Agent**（`activeAgents`）。
-- **只补不删 vs 显式回收**：自动触发用 `prune:false`（只补齐、修失效）；只有显式操作（预设变更 / Agent 策略变更 / 手动同步 / 修复）才 `prune:true` 回收本工具部署的软链。**真实目录与外部软链永不删。**
+- **一次性投放、无自动同步补回**：agent / 项目目录的写入只在显式操作（手动"添加 / 应用预设 / 删除"、手动同步）发生；不做按期望集的自动同步，被删技能不会自动补回。
+- **只删自己部署的**：删除只移除本工具部署的软链 / 副本（`isManagedLinkTarget` 判定其指向自有仓库或第三方来源注册库）。**真实目录与外部软链永不删。**
 - **一个目录只有一套策略**：多个 Agent 共用同一技能目录时，策略落到该目录的**主 Agent**（`effectiveAgentKey` / `primaryOf`）；别名那份策略不生效，应被清理。
 - **`name@source` 逻辑唯一、`name` 物理唯一**：投影按目录名归一化，只落一份。
 - **自有仓库恒扁平**：只认 `<root>/<name>/SKILL.md`，不递归分类子目录——读取与写入（归集 / 导入 / 项目回写）共用同一套位置规则，避免"读得到却找不到副本"的错位。需要分类组织请用第三方只读来源或标签；放错层级的技能由诊断报出，**不静默丢弃**。
@@ -92,7 +92,7 @@ docs/releases/      # 各版本 release notes（GitHub Release 正文来源）
 - **提交信息用英文**：简洁标题 + 分点说明改动（项目约定）。
 - **前端视觉走 token**：颜色 / 字号 / 间距 / 圆角 / 动效 / 字体引用 `styles/tokens.css` 命名变量，组件内不写 hex / 字体名。
 - **路径输入用 `PathField` / `PathListField`**，可一键调起系统选择器；相对路径因选择器无法表达才允许纯文本，并注明。
-- **高频开关用乐观更新 + 串行队列**（见 `views/Agents.tsx` 的 `directQueue` / `views/Presets.tsx` 的 `skillQueue`），避免连点后发先至。
+- **高频开关用乐观更新 + 串行队列**（见 `views/Presets.tsx` 的 `skillQueue`），避免连点后发先至。
 - **日志用 `infra/logger`** 的结构化接口（`log.info(module, msg, meta)`），不要裸 `console.log`；日志会脱敏 homedir。
 
 ## 7. 新增功能自查
@@ -102,9 +102,9 @@ docs/releases/      # 各版本 release notes（GitHub Release 正文来源）
  ├─ 是用户决策吗？ ──否──▶ 不存，由目录 / 文件推导
  ├─ 是 skill 内容吗？ ──是──▶ 只能存在于文件本体
  ├─ 是标签吗？ ──是──▶ 走标签载体（优先 SKILL.md frontmatter，暂存 skillMeta）
- └─ 是策略 / 开关吗？ ──是──▶ 存 config，标识用 name@source
-                               └─ 写操作：先算 diff、幂等、限自有作用域
-                                   └─ 同步：自动只补不删（prune:false）
+ └─ 是策略 / 配置吗？ ──是──▶ 存 config（预设成员等"无法推导的用户决策"），标识用 name@source
+                               └─ 投放：添加 / 应用预设 = 一次性写入物理目录，不落期望集
+                                   └─ 删除 = 只删本工具部署的软链 / 副本
                                        └─ 诊断页补对应检查项（core/diagnose.ts）
 ```
 

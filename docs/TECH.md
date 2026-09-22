@@ -62,9 +62,9 @@ flint/  (local-skills-hub)
 浏览器 (React + Vite :5173)
       │ HTTP /api
       ▼
-Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发同步
+Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发投放
       │
-      ├─ core/ 领域层                 扫描·期望集·同步·标签·导入·项目·诊断
+      ├─ core/ 领域层                 扫描·投放·标签·导入·项目·诊断
       ├─ config/ 配置层               ConfigStore（加载 / 迁移 / 保存 config.json）
       ├─ domain/ 展示契约             行 → SkillCardView
       └─ infra/ 基础设施              日志 / 配置读写 / 系统选择器
@@ -86,16 +86,16 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 | `core/scanner.ts` | 扫描仓库 / 外部源：自有仓库**恒按扁平**读取，外部源支持布局识别（flat / nested / auto，深层存在技能即判 nested）、带索引清单（catalog）读取、聚合 `scanAll`。 |
 | `core/tags.ts` | `effectiveTags`：`config.skillMeta` 覆盖优先，回落 frontmatter。 |
 | `core/repo-tags.ts` | 把 `skillMeta` 标签写回 `SKILL.md` frontmatter（保留其它字段与正文）。 |
-| `core/agents.ts` | 内置 Agent 清单、路径解析、同目录归并与**主 Agent** 判定、`agentSkillRows`（某 Agent 的完整技能行并集）。 |
-| `core/sync.ts` | **同步引擎**：`desiredContext`（期望集）、`deployAgent`（落盘 + prune）、`syncActive`、`diffSync`（只读对账）。 |
-| `core/active.ts` | 活跃集合 set / toggle。 |
+| `core/agents.ts` | 内置 Agent 清单、路径解析、同目录归并与**主 Agent** 判定、`agentSkillRows`（**只读目录**的某 Agent 完整技能行并集）、`isManagedLinkTarget` / `repoSkillRoots`。 |
+| `core/sync.ts` | **一次性投放能力**：复用 `resolveSyncMode` / `symlinkSkill` / `copySkill` / `dirsEqual` / `deployAgent`，暴露 `deployOne`（单技能部署，`prune:false`）供添加 / 应用预设调用；`diffSync`（只读对账）供诊断。**无期望集推导、无自动同步。** |
+| `core/active.ts` | 活跃集合 set / toggle（仅作展示 / 排序 / `primaryOf` 判定 / 诊断扫描的辅助集合）。 |
 | `core/presets.ts` | 预设 CRUD。 |
 | `core/collect.ts` | 归集：预览某来源目录、复制进仓库（去重 / 覆盖）。 |
 | `core/takeover.ts` | 接管：把来源目录条目替换为指向仓库副本的软链。 |
 | `core/import.ts` | 批量导入外部目录 + 导入预览。 |
 | `core/merge.ts` | 同名多来源合并仲裁。 |
 | `core/integrate.ts` | 汇总所有来源（仓库 / 外部源 / Agent 目录）为候选清单（供诊断 dup）。 |
-| `core/projects.ts` | 项目期望集、`syncProject`、投放 Agent 反读、接管（副本）、回写仓库、`INDEX.md`。 |
+| `core/projects.ts` | 项目投放（复制 `.agents` 本体、写 `INDEX.md` 登记）、投放 Agent 反读、接管（副本）、回写仓库。 |
 | `core/diagnose.ts` | 6 维度只读体检。 |
 | `core/fix.ts` | 按诊断项 key 分发就地修复。 |
 | `core/watcher.ts` | 复制模式可选目录 watcher（`CopyWatcher`）。 |
@@ -127,14 +127,14 @@ interface HubConfig {
 | `Repo` | `id`（参与 `name@id`，不可变）、`name?`、`path`、`root?`（skills 根，缺省 `<path>/skills`）。**无 `layout`：自有仓库恒为扁平** |
 | `ForeignSource` | `id`、`name`、`path`、`layout`（flat / nested / auto；只有只读来源才需要它）、`linked`（true=只读关联） |
 | `CustomAgent` | `key`、`name`、`globalDir`（绝对路径或 `~/`）、`projectDir?`、`recursive?` |
-| `AgentOverride` | `globalDir?`、`projectDir?`、`sync?`、`skillSync?: Record<skillName, SyncMode>`、`preset?`、`explicitOn?`、`explicitOff?`、`primary?` |
+| `AgentOverride` | `globalDir?`、`projectDir?`、`sync?`、`skillSync?: Record<skillName, SyncMode>`、`preset?`、`primary?` |
 | `Preset` | `name`、`skills: string[]`（`name@来源`）、`tags: string[]` |
 | `SkillMeta` | `tags: string[]`、`mergeSource?`、`origin?` |
-| `ProjectLink` | `path`、`tags: string[]`、`explicitOn?`、`explicitOff?` |
+| `ProjectLink` | `path`、`tags: string[]` |
 
 **迁移与清理**（`config/store.ts`）：
 - 旧 Agent key → 新 key（`claude`→`claude_code`、`trae-cn`→`trae_cn`、`qwen-code`→`qwen_code`、`kilo-code`→`kilo_code`、`roo-code`→`roo_code`、`gemini-cli`→`gemini_cli`）。
-- 剔除历史残留死字段：preset 的 `active`、agent 的 `mode`。
+- 剔除历史残留死字段：preset 的 `active`、agent 的 `mode`、agent / project 的 `explicitOn` / `explicitOff`（开关已取消，agent / 项目完全以实际目录为准）。
 - `watchers` 仅当显式为 `true` 才开启。
 
 ### 5.1 数据资产：两个世界
@@ -147,9 +147,9 @@ interface HubConfig {
 ## 6. 核心数据流
 
 ```
-配置(config.json) ──推导──▶ 期望集 desired ──投影──▶ 物理目录（软链/复制）
-     ▲                                                    │
-     └────────── 诊断 diffSync 对账 ◀─────────────────────┘
+config.json ──(手动添加 / 应用预设)──▶ deployOne 一次性投放 ──▶ 物理目录（软链/复制）
+     ▲                                                        │
+     └────────── 物理目录为准；无期望集、无自动补回 ◀────────────┘
 ```
 
 ### 6.1 资产入仓
@@ -160,39 +160,34 @@ Agent 技能目录 ──归集(复制)──▶ 仓库 skills/ ──scanAll─
 第三方仓库   ──只读关联────────▶ scanAll 纳入发现（不拷贝）
 ```
 
-去重键 = skill 目录名（`name`）；`name@来源` 允许跨来源重名共存于逻辑层，但**投影时按 `name` 归一化只落一份**。
+去重键 = skill 目录名（`name`）；`name@来源` 允许跨来源重名共存于逻辑层，但**投放时按 `name` 归一化只落一份**。
 
-### 6.2 期望集 → 触发式分发
+### 6.2 手动投放（一次性部署）
 
 ```
-触发点（无 watcher）：预设增删改 / 活跃集合变更 / Agent 显式开关 / 标签变更 / 手动同步 / 诊断修复
-        │
+添加（POST /agents/:key/skills，body {id: name@source}）: 用户选定单技能
+        │   复用 deployOne（单技能部署，prune:false），软链 / 复制按 resolveSyncMode 决定
         ▼
-desiredContext(agent) = (基准 ∪ explicitOn) − explicitOff
-        │   基准 = 关联预设的 skills[] ∪ tags[] 命中；未关联预设则基准为空
-        ▼
-deployAgent：物理目录 vs desired（按 name 比对）
-   ├─ 缺失 → 建（软链 / 复制）
-   ├─ 失效软链 → 重建
-   ├─ 已存在 → 软链指向正确则跳过；实体目录内容一致才允许重建，否则报 failed（用户自有内容不删）
-   └─ prune=true 时 → 回收「本工具部署的、已不在期望集」的软链
+落盘到 Agent 目录：按 name 建软链或副本
+   ├─ 已存在同名校验 → 软链指向正确则跳过；实体目录内容一致才允许重建，否则报 failed（用户自有内容不删）
+   └─ 删除（DELETE /agents/:key/skills/:skillName）→ 仅回收 isManagedLinkTarget 判定的本工具部署软链 / 副本
 ```
 
-- **作用域**：自动触发只覆盖 `activeAgents`（`resync` 走 `prune:false`，只补不删）；显式操作（预设变更 / Agent 策略变更 / 手动同步 / 修复）带 `prune:true`。
-- **幂等**：重复执行 diff 为空即无操作。
+- **应用预设（一次性）**：在某目录「应用预设」= 把该预设展开成员逐个 `deployOne` 部署一次（`prune:false`），**此后不再自动补回**——被删技能不会因预设仍在而自动回来。
+- **无自动同步**：`activeAgents` 不再作为部署触发作用域；`onChanged/onConfigChanged` 不再自动 resync / 部署。手动 `POST /sync` 显式保留。
+- **幂等**：重复执行 diff 为空即无操作；安全边界决定不覆盖真实目录、不删外部软链。
 
 ### 6.3 项目级链路
 
 ```
-项目 tags ∪ explicitOn − explicitOff ──▶ 项目期望集
+添加（POST /projects/:id/skills）: 手动选定技能 ──▶ 复制本体到 <project>/.agents/skills/（写 INDEX.md 登记）
         │
-        ├─ 复制本体 ──▶ <project>/.agents/skills/   （可提交 git，团队共享）
-        ├─ 软链     ──▶ <project>/.<agent>/skills   （一套本体、多 Agent 共享）
-        └─ 反写     ──▶ POST /projects/:id/push      （.agents → 仓库）
+        ├─ 软链 ──▶ <project>/.<agent>/skills   （一套本体、多 Agent 共享）
+        └─ 反写     ──▶ POST /projects/:id/push  （.agents → 仓库）
 ```
 
-- 投放对象**以目录结构为事实**（软链是否存在），不写 config（`deployedAgents` 反读）。
-- `INDEX.md` 是**同步产物**（供人 / git 查阅），不参与期望集推导；仅用作"上一轮投放记录"以安全回收残留副本。
+- 投放对象**以目录结构为事实**（软链 / 副本是否存在），不写 config（`deployedAgents` 反读）。
+- `INDEX.md` 记录本工具投放的技能（供人 / git 查阅），也用作回收时判定"曾由本工具投放"以安全回收副本；不参与任何期望集推导。删除仅移除本工具登记的副本，用户自带技能永不误删。
 
 ### 6.4 标签链路
 
@@ -208,33 +203,32 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 | 函数 | 说明 |
 |------|------|
-| `desiredContext(cfg, allSkills, agentKey?)` | 计算期望上下文。别名 Agent 折算到主 Agent；**基准** = 关联预设成员 ∪ 标签命中，再由显式开启 / 关闭叠加。 |
-| `computeDesired` | `desiredContext().desired` 的快捷入口。 |
+| `deployOne(agentKey, skillId, cfg, allSkills)` | 单技能一次性部署：按 `name` 落盘到目标目录（内部复用 `deployAgent`，`prune:false`），受 `isManagedLinkTarget` 安全守卫；**不写 config**（物理即真相）。 |
 | `resolveSyncMode(cfg, agentKey, skillName)` | 同步方式：`skillSync[name]` > agent `sync` > `defaultSync`。 |
-| `deployAgent(cfg, agentKey, desired, allSkills, { prune })` | 落盘单目录：建 / 修复 / 回收（受 `prune` 控制）。安全前提见下。 |
-| `syncActive(cfg, allSkills, only?, reason, { prune })` | 触发式同步入口：把目标折算到主 Agent 并按目录去重后逐个 `deployAgent`。 |
-| `diffSync(cfg, allSkills)` | 只读对账：期望 vs 实际（missing / extra / brokenLink），供诊断。 |
+| `deployAgent(cfg, agentKey, skillName, allSkills)` | 落盘单技能：建软链 / 副本 / 失效重建；安全前提见下。 |
+| `syncActive(cfg, allSkills, only?, reason)` | 仅保留给「手动应用预设」的一次性调用（展开预设成员逐个 `deployOne`）；不再由任何自动同步触发。 |
+| `diffSync(cfg, allSkills)` | 只读对账：实际目录 vs 来源（missing / extra / brokenLink），`desired` 恒为空，仅用于识别残留 / 失效，供诊断。 |
 
 **`deployAgent` 的安全边界**（决定"绝不误删"）：
 1. 落点已有软链：指向正确则跳过；指向本工具部署的仓库则重建；指向**外部**（不在任何自有仓库内）则报 `failed`，不替换。
 2. 落点已有实体目录：内容与目标副本一致才视为"本工具部署的副本"可重建，否则报 `failed`（用户自有内容不删）。
-3. `prune` 只回收**软链**且目标落在自有仓库内（`isManagedLinkTarget`）；真实目录与外部软链不动。
+3. 删除 / `prune` 只回收 `isManagedLinkTarget` 判定为本工具部署的软链 / 副本——目标落在**自有仓库或第三方来源**注册库内（口径已扩展）；真实目录与外部软链不动。
 4. 软链创建失败时降级为复制并记入 `warnings`（Windows 兼容）。
 
 ---
 
 ## 8. 同目录主 Agent 机制（AG-02 / C18）
 
-**问题**：多个 Agent 可能解析到同一全局目录（如 `codex` / `warp` / `openhands` 共用 `~/.agents/skills`）。目录只有一份实体，而预设 / 安装方式 / 显式开关都是**按 Agent 存**的，两套期望集会在同一目录里互相删除（后同步者获胜）。
+**问题**：多个 Agent 可能解析到同一全局目录（如 `codex` / `warp` / `openhands` 共用 `~/.agents/skills`）。目录只有一份实体，需要确定唯一的策略 / 投放落点，避免多个 Agent 各自投放、互相覆盖。
 
 **方案**：每个技能目录固定一个**主 Agent** 作为策略唯一落点，同目录其它 Agent 视为别名。
 
 - 主 Agent 判定（`primaryOf`）：① 用户显式 `primary: true` 优先 → ② 活跃优先 → ③ 名称序。
-- `effectiveAgentKey` 把任意 Agent 折算到其目录的主 Agent；策略读写、期望集推导、同步目标都以它为准。
+- `effectiveAgentKey` 把任意 Agent 折算到其目录的主 Agent；策略读写、投放目标都以它为准。
 - `setPrimary`：指定 / 取消主 Agent（同目录至多一个，写在被指定者身上）。
 - `pruneAliasStrategies`：清理别名那份永不生效的策略，避免配置里留下假象。
 - 展示：卡片与详情页的标题都罗列使用该目录的全部 Agent（不分主次），**不设「主 / 别名」徽标**——它们是否共用由一句「这些 Agent 共用这个技能目录：同一套策略，分发一次全部生效」说明；「存在谁名下」在详情页「安装与存放 → 策略存放于」可更换。
-- 同目录其它 Agent 是否活跃不影响目录同步（同步目标按目录归并，组内任一活跃即覆盖该目录）。
+- 投放按目录归并：一次 `deployOne` 作用于该目录实体，组内其它 Agent 一并生效；`activeAgents` 只参与主 Agent 判定，不决定是否自动投放。
 
 ---
 
@@ -260,8 +254,8 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - `GET /diagnose` → `{ config, summary, groups, items }`，分组：`sync / dup / durability / config / repo / project`。
 - 不含独立的 "Agent" 维度：Agent 侧没有能独立成立的健康问题，相关状态由 `sync` / `durability` 覆盖。
 - `POST /fix { key }` 分发：
-  - `sync:<agent>` → 重同步该 Agent（`prune: true`）。
-  - `broken:*` → 重同步全部活跃 Agent。
+  - `sync:<agent>` → 对账该 Agent 目录（补缺失 / 修失效，`prune:true` 回收本工具部署物）。
+  - `broken:*` → 扫描全部活跃 Agent 的失效软链并修复。
   - `project:<path>` → 创建 `<path>/.agents/skills`。
   - `repo:<id>` → 创建仓库 skills 目录。
   - `tags:<repoId>` → 标签迁移到 frontmatter。
@@ -271,7 +265,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 ## 11. HTTP API 一览
 
-> 全部挂载在 `/api` 前缀下。结构性变更后由入口的 `onChanged` 触发活跃 Agent 自动同步（`resync`，只补不删）。
+> 全部挂载在 `/api` 前缀下。投放 / 删除由用户显式触发（添加、应用预设、删除），**无自动同步补回**；`POST /sync` 为保留的显式手动同步。
 
 **状态 / 设置**
 
@@ -308,25 +302,27 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/agents` | Agent 视图列表（含 primaryKey / sharedWith / 生效策略） |
-| PUT | `/agents/:key` | 更新策略（sync / preset / skillSync / skill+on / explicit*）、目录覆盖、主 Agent 指定；随后对该 Agent 就地对账（`prune:true`） |
-| GET | `/agents/:key/skills` | 该 Agent 技能行 + 可添加清单 |
-| POST | `/agents/:key/sync` | 手动同步（`prune:true`） |
-| DELETE | `/agents/:key/skills/:skillName` | 删除非期望状态的技能条目 |
+| PUT | `/agents/:key` | 更新策略（sync / preset / skillSync）、目录覆盖、主 Agent 指定；仅保存，不触发自动投放（`activeAgents` 不作部署作用域） |
+| GET | `/agents/:key/skills` | 该 Agent 技能行（**读目录**）+ 可添加清单 |
+| POST | `/agents/:key/skills` | **添加**单个技能（body `{id: name@source}`，`deployOne` 一次性部署软链 / 副本） |
+| POST | `/agents/:key/sync` | 手动同步（`prune:true`，回收本工具部署物） |
+| DELETE | `/agents/:key/skills/:skillName` | **删除**该技能物理产物（仅本工具部署的软链 / 副本；真实目录与外部软链一律不动） |
 | GET / POST | `/agents/custom` | 列出 / 新增自定义 Agent |
 | DELETE | `/agents/custom/:key` | 删除自定义 Agent |
-| GET / PUT | `/activeAgents` | 活跃集合 |
+| GET / PUT | `/activeAgents` | 活跃集合（仅作展示 / 排序 / `primaryOf` 判定 / 诊断扫描的辅助，不再触发投放） |
 
 **预设 / 项目**
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET / POST | `/presets` | 列出 / 创建 |
-| PUT / DELETE | `/presets/:name` | 更新（变更后 `prune:true` 同步活跃 Agent）/ 删除 |
-| GET / POST | `/projects` | 列出（含 deployedAgents）/ 新建并同步 |
-| PUT | `/projects/:id/tags` | 改标签并重投 |
+| PUT / DELETE | `/presets/:name` | 更新 / 删除预设定义（仅刷新，不再自动同步到任何目录；Agent / 项目页「应用预设」一次性投放） |
+| GET / POST | `/projects` | 列出（含 deployedAgents）/ 新建项目 |
+| PUT | `/projects/:id/tags` | 改标签（仅刷新，不自动重投） |
 | PUT | `/projects/:id/agents` | 调整投放 Agent（以目录结构为事实） |
-| GET / PUT | `/projects/:id/skills` | 项目技能行 / 开关技能 |
-| DELETE | `/projects/:id/skills/:name` | 删除项目自带真实目录 |
+| GET | `/projects/:id/skills` | 项目技能行（**读目录**）+ 可添加清单 |
+| POST | `/projects/:id/skills` | **添加**单个技能（复制本体到 `.agents` 并登记 `INDEX.md`，对齐 takeover 的 copy 语义） |
+| DELETE | `/projects/:id/skills/:name` | **删除**本工具登记投放的副本（真实目录与外部内容不动） |
 | GET | `/projects/:id/collect/preview` | 项目技能归集预览 |
 | POST | `/projects/:id/collect` | 项目技能归集 |
 | POST | `/projects/:id/takeover` | 项目技能接管（副本） |
@@ -347,8 +343,8 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | POST | `/filesystem/pick` · `/filesystem/pick-file` | 调起系统目录 / 文件选择器 |
 
 **请求入口包装**（`index.ts`）：
-- `onChanged`：结构性变更后 → `resync('route')`（`prune:false`）+ 重启 watcher。
-- `onConfigChanged`：设置变更后重启 watcher。
+- `onChanged` / `onConfigChanged`：仅刷新状态 / 重启 watcher；**不再触发任何自动同步或对账**。
+- `POST /sync`（手动显式）保留为唯一的手动全量同步入口。
 - 启动时也按开关判断是否启动 watcher（默认关闭）。
 
 ---
@@ -374,12 +370,12 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - `components/common/FilterBar.tsx`：搜索 + 维度筛选 + 重置 + 视图切换 + 徽标说明入口。
 - `components/skill/SkillBadges.tsx`：技能徽标（reason / store / state / 已接管 / 目录）与「标签说明」数据源，卡片与列表行共用。
 - `components/agent/agentBadges.tsx`：Agent 徽标（活跃 / 开源生态推荐目录 / 自定义 / 家族 / 未安装 / 预设）与说明数据源。「开源生态推荐目录」只标在 `~/.agents/skills` 这个目录本身（判定用 `readsAgentsDir`，即后端 `shared === 'agents'`），不对每个读取它的 Agent 重复「另读」；`~/.config/agents/skills` 等其它共用目录不做任何标记。
-- `components/agent/OpenStandardTitle.tsx`：`~/.agents/skills` 的主标题（列表卡片与详情页共用）——写明「开源生态推荐目录」，info 按钮在卡片上讲「大部分 Agent 都读这个目录、推荐优先管理，只装给某一个 Agent 请用该 Agent 自己的目录」，在详情页上讲「大部分 Agent 都支持读这个目录，页面这几个是当前使用的代表」。该卡片 `variant: 'standard'` 换用 `--c-standard` 强调色、使用它的 Agent 名退到副标题弱化，并在**活跃 / 非活跃各自分组内排第一位**；非活跃时强调色减弱、边框换虚线（看得出没在自动同步，又仍与普通卡片区分得开）。
-- **详情页的目录口径**（`views/Agents.tsx` 的 `AgentDetail`）：`~/.agents/skills` 的详情页以推荐目录为标题主体（`OpenStandardTitle`，info 说明「这几个是当前使用的代表」），成员退到副行 `<目录> · <成员并列>`；其它目录的标题用 `AgentNamesTitle` 罗列整组成员（主 Agent 在前、其余名称序，与卡片同序）。活跃状态与切换都按**整个目录**处理——`dirActive = members.some(m => m.active)`，切换时整组成员一起加入 / 移出 `activeAgents`，与列表卡片同口径，避免「卡片说活跃、页面说非活跃」和「点了移出、目录仍自动同步」。
+- `components/agent/OpenStandardTitle.tsx`：`~/.agents/skills` 的主标题（列表卡片与详情页共用）——写明「开源生态推荐目录」，info 按钮在卡片上讲「大部分 Agent 都读这个目录、推荐优先管理，只装给某一个 Agent 请用该 Agent 自己的目录」，在详情页上讲「大部分 Agent 都支持读这个目录，页面这几个是当前使用的代表」。该卡片 `variant: 'standard'` 换用 `--c-standard` 强调色、使用它的 Agent 名退到副标题弱化，并在**活跃 / 非活跃各自分组内排第一位**；非活跃时强调色减弱、边框换虚线（看得出是非活跃推荐目录，仍与普通卡片区分得开）。
+- **详情页的目录口径**（`views/Agents.tsx` 的 `AgentDetail`）：`~/.agents/skills` 的详情页以推荐目录为标题主体（`OpenStandardTitle`，info 说明「这几个是当前使用的代表」），成员退到副行 `<目录> · <成员并列>`；其它目录的标题用 `AgentNamesTitle` 罗列整组成员（主 Agent 在前、其余名称序，与卡片同序）。活跃状态与切换都按**整个目录**处理——`dirActive = members.some(m => m.active)`，切换时整组成员一起加入 / 移出 `activeAgents`，与列表卡片同口径，避免「卡片说活跃、页面说非活跃」。
 - **同目录只有一个详情页**：`AgentNamesTitle` 只做并列展示、不再逐名可点（同一目录不存在「某个 Agent 自己的页」）；地址指向别名（如 `#/agents/openhands`）时前端 `replace` 规范到该目录的主 Agent，避免同一目录出现两个详情页各说一套。
 - `components/agent/agentGroups.ts`：按解析后的目录把 Agent 归并成卡片模型（主 Agent 在前）。
-- `domain/cards.ts` ↔ `api/types.ts`：后端领域行 → `SkillCardView`，前端按 `reason / store / state` 决定徽标与可执行操作（`toggle / collect / delete / detail`）。
-- **状态列只回答「装没装、可不可用」**：`state` 只有 `on`（该技能就在本目录里，本 Agent / 项目可用——本工具分发的、自带目录、外部软链、共享目录读到的都算）与 `off`（本工具曾分发、现已移出分发名单）。「本工具管不管它、能不能在这里开关」不占状态列，由 `reason` 徽标表达（自带 / 外部软链 / 只读），前端用 `isToolManaged(item)` 判断是否渲染开关、是否进「安装方式」清单。
+- `domain/cards.ts` ↔ `api/types.ts`：后端领域行 → `SkillCardView`，前端按 `reason / store / state` 决定徽标与可执行操作（`add / delete / collect / detail`，无 on/off 开关）。
+- **状态列只回答「装没装、可不可用」**：`state` 只有 `on`（该技能就在本目录里，本 Agent / 项目可用——本工具分发的、自带目录、外部软链、共享目录读到的都算）；删除后物理产物被移除，不再有 `off` 状态。「本工具管不管它」不占状态列，由 `reason` 徽标表达（自带 / 外部软链 / 只读），前端用 `isToolManaged(item)` 判断是否渲染「添加 / 删除」、是否进「安装方式」清单。
 - **行内「是什么」以事实为准**：`SkillCardView.source` 只表达**软链目标实际落在哪个已登记库**（`libraryOfLinkTarget`，按路径判定；自有仓库 / 第三方来源），判定不出就留空——绝不拿技能名去回填来源。不在本工具分发范围内的行（`own` / `external` / `shared`）再由服务端给出 `pathLabel`（真实位置，软链附带真实目标，home 压成 `~`），列表把它当行的副标题展示；本工具分发的行才用 `name@来源` 表达身份。
 
 ### 12.4 关键交互约定
@@ -404,21 +400,21 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 - **C4 以文件目录状态为准**：凡是"物理上看得见"的状态（投放给了哪些 Agent、Agent 装了哪些技能）一律以目录为唯一事实，不在 config 存快照。
 - **C5 config 只存不可推导的管理决策**：每个字段都须满足"删掉后无法从文件系统重新推导"。
-- **C6 期望集推导式，不落盘**：`基准 ∪ explicitOn − explicitOff` 永远运行时计算。
-- **C7 幂等**：扫描 / 导入 / 归集 / 同步可重复执行；写操作先算 diff 再动手。
+- **C6 物理为准，无期望集**：agent / 项目技能列表与状态**完全以实际目录为准**，不在 config 存 on/off 开关，也不维护"应装什么"的运行时期望集。投放由用户显式发起（添加 / 应用预设 / 删除）、一次性生效，没有按期望集的自动补回。
+- **C7 幂等**：扫描 / 导入 / 归集 / 投放可重复执行；写操作先算 diff 再动手。
 
 ### 标识与命名类
 
-- **C8 `name@source` 逻辑唯一，`name` 物理唯一**：逻辑层用 `name@来源` 精确标识，物理投影按 `name` 归一化只落一份。
+- **C8 `name@source` 逻辑唯一，`name` 物理唯一**：逻辑层用 `name@来源` 精确标识，物理投放按 `name` 归一化只落一份。
 - **C9 去重收敛**：同名 skill 自动去重保留一份；复制类操作默认带同名去重。
 
 ### 同步类
 
-- **C10 触发式同步，无常驻**：只在操作触发点执行；watcher 仅为复制模式的可选增量手段。
+- **C10 手动投放，无自动补回**：物理目录只经用户显式「添加 / 应用预设 / 删除」变更；不存在按期望集或事件驱动的自动同步，被删技能不会自动回来。`POST /sync` 为保留的显式手动同步。
 - **C11 软链优先，复制回退**：默认软链；不跟随软链的场景降级为复制。
-- **C12 活跃即实时，非活跃即懒**：自动同步作用域必须是 `activeAgents`，不得静默扩散。
+- **C12 `activeAgents` 不作部署作用域**：活跃集合仅作展示 / 排序 / `primaryOf` 判定 / 诊断扫描的辅助集合，不触发、不限定任何自动投放。
 - **C18 一个目录只有一套策略（主 Agent 生效）**：见 §8。
-- **C13 只读尊重，不侵入外部数据**：只读关联的外部源只读不写；Agent 自带技能不擅自改动；删除限定在"非期望"状态。
+- **C13 只读尊重，不侵入外部数据**：只读关联的外部源只读不写；Agent 自带技能与外部软链不擅自改动；删除只针对 `isManagedLinkTarget` 判定为本工具部署（自有仓库 ∪ 第三方来源）的软链 / 副本，真实目录与外部软链永不删。
 
 ### 生态兼容类
 
@@ -450,5 +446,5 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 ## 15. 测试与脚本
 
-- `server/smoke.ts`：使用临时目录（`FLINT_CONFIG` 指向 mkdtemp），覆盖最小闭环（扫描 → 预设 → 活跃同步）、项目级同步、回写仓库、批量导入 + 诊断、预设标签命中、同目录共用、显式指定主 Agent 等批次；不污染真实 `~/.xxx` 目录。
+- `server/smoke.ts`：使用临时目录（`FLINT_CONFIG` 指向 mkdtemp），覆盖最小闭环（扫描 → 预设 → 添加 / 应用预设落盘）、项目级投放、回写仓库、批量导入 + 诊断、预设标签命中、同目录共用、显式指定主 Agent 等批次；不污染真实 `~/.xxx` 目录。
 - `npm run build`：先构建 server（`tsc`）再构建 client（`tsc && vite build`）。

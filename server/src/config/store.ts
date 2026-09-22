@@ -36,11 +36,24 @@ function stripLegacyPresetFields(presets: Preset[]): Preset[] {
 function stripLegacyAgentFields(agents: Record<string, AgentOverride>): Record<string, AgentOverride> {
   return Object.fromEntries(
     Object.entries(agents).map(([key, ov]) => {
-      const next = { ...ov } as AgentOverride & { mode?: string };
+      const next = { ...ov } as AgentOverride & { mode?: string; explicitOn?: unknown; explicitOff?: unknown };
       delete next.mode;
+      // 显式开关已取消：剔除历史配置里残留的 explicitOn/explicitOff，避免留下死状态
+      delete next.explicitOn;
+      delete next.explicitOff;
       return [key, next];
     }),
   );
+}
+
+/** 项目显式开关已取消：剔除历史配置里残留的 explicitOn/explicitOff（与 agent 口径一致，C5） */
+function stripLegacyProjectFields(projects: HubConfig['projects']): HubConfig['projects'] {
+  return projects.map((p) => {
+    const next = { ...p } as HubConfig['projects'][number] & { explicitOn?: unknown; explicitOff?: unknown };
+    delete next.explicitOn;
+    delete next.explicitOff;
+    return next;
+  });
 }
 
 /**
@@ -94,7 +107,7 @@ export class ConfigStore {
       activeAgents: parsed.activeAgents ?? [],
       presets: stripLegacyPresetFields(parsed.presets ?? []),
       skillMeta: parsed.skillMeta ?? {},
-      projects: parsed.projects ?? [],
+      projects: stripLegacyProjectFields(parsed.projects ?? []),
       defaultSync: parsed.defaultSync ?? emptyConfig().defaultSync,
       // PRD：watcher 为可选项，历史配置一律按「关闭」处理
       watchers: parsed.watchers === true,

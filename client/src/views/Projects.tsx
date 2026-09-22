@@ -170,23 +170,20 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
       await api(`/projects/${project.id}/agents`, { method: 'PUT', body: JSON.stringify({ agents: next }) });
     });
 
-  // 项目技能行的操作按 kind 分发：归集/接管交给共用弹窗，删除走删除接口，其余（启用等）走开关接口
+  // 项目技能行的操作按 kind 分发：归集交给共用弹窗，删除走删除接口（无 on/off 开关）
   const handleAction = (item: SkillCardView, action: SkillAction) => {
     if (action.kind === 'collect') {
       setCollectItem(item);
       return;
     }
-    void busy(() => {
-      if (action.kind === 'delete') {
-        return api(`/projects/${project.id}/skills/${encodeURIComponent(item.name)}`, { method: 'DELETE' });
-      }
-      return api(`/projects/${project.id}/skills`, { method: 'PUT', body: JSON.stringify({ skill: item.name, on: true }) });
-    });
+    if (action.kind === 'delete') {
+      void busy(() => api(`/projects/${project.id}/skills/${encodeURIComponent(item.name)}`, { method: 'DELETE' }));
+    }
   };
 
   const collectAddable = (item: AddableSkill) =>
     void busy(() =>
-      api(`/projects/${project.id}/skills`, { method: 'PUT', body: JSON.stringify({ skill: item.name, on: true }) })
+      api(`/projects/${project.id}/skills`, { method: 'POST', body: JSON.stringify({ id: item.id }) })
     );
 
   const saveTags = (tags: string[]) =>

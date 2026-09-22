@@ -1,9 +1,9 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  computeDesired,
-  desiredContext,
-  desiredNamesFor,
+  presetSkillSet,
+  deployOne,
   resolveSyncMode,
 } from '../src/core/sync.js';
 import { skill, makeStore, tmpDir } from './helpers.js';
@@ -12,15 +12,14 @@ import { skill, makeStore, tmpDir } from './helpers.js';
 // 既避免读到本机真实目录，也让 effectiveAgentKey 稳定折回自身。
 const cursorDir = path.join(tmpDir('flint-desired-'), 'cursor');
 
-describe('desiredContext（期望集推导）', () => {
-  it('未绑定预设时基准为空 —— 不会「跟随全部预设」', () => {
+describe('presetSkillSet（一次性「应用预设」的 skill 集）', () => {
+  it('未绑定预设时为空集 —— 不会「跟随全部预设」', () => {
     const store = makeStore({
       agents: { cursor: { globalDir: cursorDir } },
       presets: [{ name: 'demo', skills: ['alpha@default'], tags: [] }],
     });
     const skills = [skill('alpha')];
-    expect([...computeDesired(store, skills, 'cursor').values()]).toEqual([]);
-    expect(desiredContext(store, skills, 'cursor').preset).toBe('');
+    expect(presetSkillSet(store, skills, 'cursor').size).toBe(0);
   });
 
   it('绑定预设后基准 = 预设成员', () => {
@@ -29,17 +28,16 @@ describe('desiredContext（期望集推导）', () => {
       presets: [{ name: 'demo', skills: ['alpha@default', 'beta@other'], tags: [] }],
     });
     const skills = [skill('alpha'), skill('beta', 'other')];
-    expect([...desiredNamesFor(store, skills, 'cursor')].sort()).toEqual(['alpha', 'beta']);
-    expect(desiredContext(store, skills, 'cursor').preset).toBe('demo');
+    expect([...presetSkillSet(store, skills, 'cursor').values()].map((s) => s.name).sort()).toEqual(['alpha', 'beta']);
   });
 
-  it('预设关联标签命中也会进基准', () => {
+  it('预设关联标签命中也会进集', () => {
     const store = makeStore({
       agents: { cursor: { globalDir: cursorDir, preset: 'demo' } },
       presets: [{ name: 'demo', skills: [], tags: ['viz'] }],
     });
     const skills = [skill('echarts', 'default', ['viz']), skill('other', 'default', ['misc'])];
-    expect([...desiredNamesFor(store, skills, 'cursor')]).toEqual(['echarts']);
+    expect([...presetSkillSet(store, skills, 'cursor').values()].map((s) => s.name)).toEqual(['echarts']);
   });
 
   it('skillMeta 里的标签覆盖 frontmatter（命中口径与展示口径一致）', () => {
@@ -49,56 +47,27 @@ describe('desiredContext（期望集推导）', () => {
       skillMeta: { 'echarts@default': { tags: [] } },
     });
     const skills = [skill('echarts', 'default', ['viz'])];
-    expect([...desiredNamesFor(store, skills, 'cursor')]).toEqual([]);
+    expect(presetSkillSet(store, skills, 'cursor').size).toBe(0);
   });
 
-  it('预设来源标注 presetOf（含标签命中的成员）', () => {
+  it('成员 id 找不到时按纯名字兜底命中（id / 名字两种写法归一）', () => {
     const store = makeStore({
       agents: { cursor: { globalDir: cursorDir, preset: 'demo' } },
-      presets: [{ name: 'demo', skills: ['alpha@default'], tags: ['viz'] }],
+      presets: [{ name: 'demo', skills: ['beta@ghost'], tags: [] }],
     });
-    const skills = [skill('alpha'), skill('echarts', 'default', ['viz'])];
-    const ctx = desiredContext(store, skills, 'cursor');
-    expect(ctx.presetOf.get('alpha')).toBe('demo');
-    expect(ctx.presetOf.get('echarts')).toBe('demo');
+    const skills = [skill('beta', 'other')];
+    expect([...presetSkillSet(store, skills, 'cursor').values()].map((s) => s.name)).toEqual(['beta']);
   });
 
-  it('explicitOn 在基准之外额外开启技能', () => {
-    const store = makeStore({
-      agents: { cursor: { globalDir: cursorDir, preset: 'demo', explicitOn: ['gamma@ext'] } },
-      presets: [{ name: 'demo', skills: ['alpha@default'], tags: [] }],
-    });
-    const skills = [skill('alpha'), skill('gamma', 'ext')];
-    expect([...desiredNamesFor(store, skills, 'cursor')].sort()).toEqual(['alpha', 'gamma']);
-  });
-
-  it('explicitOff 从基准中裁掉技能（按 id 命中）', () => {
-    const store = makeStore({
-      agents: { cursor: { globalDir: cursorDir, preset: 'demo', explicitOff: ['beta@default'] } },
-      presets: [{ name: 'demo', skills: ['alpha@default', 'beta@default'], tags: [] }],
-    });
-    const skills = [skill('alpha'), skill('beta')];
-    expect([...desiredNamesFor(store, skills, 'cursor')]).toEqual(['alpha']);
-  });
-
-  it('explicitOff 按纯名字也生效（id / 名字两种写法归一）', () => {
-    const store = makeStore({
-      agents: { cursor: { globalDir: cursorDir, preset: 'demo', explicitOff: ['beta'] } },
-      presets: [{ name: 'demo', skills: ['alpha@default', 'beta@other'], tags: [] }],
-    });
-    const skills = [skill('alpha'), skill('beta', 'other')];
-    expect([...desiredNamesFor(store, skills, 'cursor')]).toEqual(['alpha']);
-  });
-
-  it('同一技能 id 与名字都找不到时不会硬塞进期望集', () => {
+  it('id 与名字都找不到时不会硬塞进集', () => {
     const store = makeStore({
       agents: { cursor: { globalDir: cursorDir, preset: 'demo' } },
       presets: [{ name: 'demo', skills: ['ghost@default'], tags: [] }],
     });
-    expect([...desiredNamesFor(store, [skill('alpha')], 'cursor')]).toEqual([]);
+    expect(presetSkillSet(store, [skill('alpha')], 'cursor').size).toBe(0);
   });
 
-  it('别名 Agent 没有自己的期望集，一律沿用主 Agent 的策略', () => {
+  it('别名 Agent 没有自己的集，一律沿用主 Agent 的预设', () => {
     const shared = tmpDir('flint-shared-desired-');
     const store = makeStore({
       agents: {
@@ -113,13 +82,35 @@ describe('desiredContext（期望集推导）', () => {
     });
     const skills = [skill('alpha'), skill('gamma', 'ext')];
     // 主 Agent 是 Cline（都活跃时按名称序），Warp 自己那份 solo 不生效
-    expect([...desiredNamesFor(store, skills, 'warp')]).toEqual(['alpha']);
-    expect(desiredContext(store, skills, 'warp').preset).toBe('demo');
+    expect([...presetSkillSet(store, skills, 'warp').values()].map((s) => s.name)).toEqual(['alpha']);
   });
 
-  it('未指定 agentKey 时按全局默认（无 override → 基准为空）', () => {
+  it('未指定 agentKey 场景（无 override）→ 空集', () => {
     const store = makeStore({ presets: [{ name: 'demo', skills: ['alpha@default'], tags: [] }] });
-    expect([...computeDesired(store, [skill('alpha')]).values()]).toEqual([]);
+    expect(presetSkillSet(store, [skill('alpha')], 'cursor').size).toBe(0);
+  });
+});
+
+describe('deployOne（单技能「添加」部署）', () => {
+  it('把单个技能部署进 agent 目录（symlink）', () => {
+    const repo = tmpDir('flint-deployone-repo-');
+    fs.mkdirSync(path.join(repo, 'alpha'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'alpha', 'SKILL.md'), '---\nname: alpha\n---\nBody');
+    const target = path.join(tmpDir('flint-deployone-target-'), 'agent');
+    const store = makeStore({ agents: { cursor: { globalDir: target, sync: 'symlink' } } });
+    const alpha = skill('alpha');
+    alpha.dir = path.join(repo, 'alpha');
+    const res = deployOne(store, 'cursor', alpha.id, [alpha]);
+    expect(res.created).toEqual(['alpha@default']);
+    expect(fs.lstatSync(path.join(target, 'alpha')).isSymbolicLink()).toBe(true);
+  });
+
+  it('技能 id 找不到时给出 failed 而非抛错', () => {
+    const target = path.join(tmpDir('flint-deployone-target-'), 'agent');
+    const store = makeStore({ agents: { cursor: { globalDir: target, sync: 'symlink' } } });
+    const res = deployOne(store, 'cursor', 'ghost@default', [skill('alpha')]);
+    expect(res.failed.length).toBe(1);
+    expect(res.failed[0].skill).toBe('ghost@default');
   });
 });
 

@@ -30,9 +30,9 @@ describe('Agent 技能行的操作推导（acts）', () => {
     expect(kinds({ reason: 'own', store: 'own' })).toEqual(['collect', 'delete']);
   });
 
-  it('受管技能（预设 / 手动开启）仍是开关', () => {
-    expect(kinds({ reason: 'manual', store: 'symlink', wanted: true })).toEqual(['toggle']);
-    expect(kinds({ reason: 'preset', store: 'symlink', wanted: false })).toEqual(['toggle']);
+  it('受管技能（预设 / 手动投放）没有开关，只能删除物理产物', () => {
+    expect(kinds({ reason: 'manual', store: 'symlink', wanted: true })).toEqual(['delete']);
+    expect(kinds({ reason: 'preset', store: 'symlink', wanted: false })).toEqual(['delete']);
   });
 
   it('共享标准目录读取不给任何操作', () => {

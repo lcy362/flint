@@ -123,7 +123,6 @@ export interface DiagItem { key: string; status: DiagStatus; message: string; de
 /** sync 诊断项的 detail：期望 / 缺失 / 多余 / 失效软链，供「修复」确认弹窗逐条列出改动 */
 export interface SyncDiff {
   agent: string;
-  desiredNames: string[];
   missing: string[];
   extra: string[];
   brokenLink: string[];

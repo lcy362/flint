@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, type AgentView, type AgentSkillsResp, type PresetView, type SkillAction, type SkillCardView, type StateView, type SyncResult } from '../api/types';
 import SkillList from '../components/skill/SkillList';
 import CollectSkillModal, { agentCollectSource } from '../components/skill/CollectSkillModal';
@@ -38,13 +38,6 @@ import { useViewMode } from '../state/viewMode';
 import { useCollapsed } from '../state/collapse';
 import { getRoute, navigate, useQueryFlag, useQueryParam, useRoute } from '../state/router';
 import { joinList, rich, useI18n } from '../i18n';
-
-/**
- * 本工具是否已把该技能装到本目录（= 在分发名单内且已落盘）。
- * 状态列只说明「这个目录里装没装」，自带目录 / 外部软链同样算「装着」——
- * 但它们不在本工具的分发名单里，开关不能拿它们当「已开启」。
- */
-const deployedByTool = (row?: SkillCardView) => !!row && row.state === 'on' && isToolManaged(row);
 
 /**
  * 该卡片是不是开源生态推荐目录（`~/.agents/skills`）：生态里被采纳得最广的共享技能目录。
@@ -225,8 +218,6 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
   const [collectItem, setCollectItem] = useState<SkillCardView | null>(null);
   const collectApi = useMemo(() => agentCollectSource(agent.key, agent.name), [agent.key, agent.name]);
 
-  // 直接添加技能：本地草稿（乐观更新）+ 串行提交，连点开关时不丢操作、不后发先至
-  const [draftOn, setDraftOn] = useState<Record<string, boolean>>({});
   const [q, setQ] = useState('');
   /** 来源筛选：null = 用默认值（只选自有仓库），[] = 不按来源筛，[...] = 只留这些来源 */
   const [srcs, setSrcs] = useState<string[] | null>(null);
@@ -234,7 +225,6 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
   const [viewMode, setViewMode] = useViewMode();
   const [presetCollapsed, togglePresetCollapsed] = useCollapsed('lsh.collapsed.agent.preset');
   const [installCollapsed, toggleInstallCollapsed] = useCollapsed('lsh.collapsed.agent.install', true);
-  const directQueue = useRef<Promise<void>>(Promise.resolve());
 
   const busy = async (fn: () => Promise<unknown>) => {
     try {
@@ -270,13 +260,9 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
       setCollectItem(item);
       return;
     }
-    void busy(async () => {
-      if (action.kind === 'delete') {
-        await api(`/agents/${encodeURIComponent(agent.key)}/skills/${encodeURIComponent(item.name)}`, { method: 'DELETE' });
-        return;
-      }
-      await api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ skill: item.name, on: item.state !== 'on' }) });
-    });
+    if (action.kind === 'delete') {
+      void busy(() => api(`/agents/${encodeURIComponent(agent.key)}/skills/${encodeURIComponent(item.name)}`, { method: 'DELETE' }));
+    }
   };
 
   // 每 (skill, Agent) 关系的同步策略（SY-01）
@@ -319,7 +305,7 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
   };
 
   // 「安装方式」只对由本工具分发的技能有意义：自带 / 外部软链 / 共享目录读取不参与
-  const managed = (data?.skills ?? []).filter((s) => s.state === 'on' && isToolManaged(s));
+  const managed = (data?.skills ?? []).filter((s) => isToolManaged(s));
 
   // 它与别的 Agent 共用同一个目录（不是主 Agent）：目录只有一份，预设 / 安装方式都落在主 Agent 上
   const isAlias = agent.key !== agent.primaryKey;
@@ -349,41 +335,30 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
     return m;
   }, [data]);
 
-  // 服务端已跟上草稿后，丢掉对应草稿，回落到服务端数据（避免草稿长期压制真实状态）
-  useEffect(() => {
-    setDraftOn((d) => {
-      const keys = Object.keys(d);
-      if (keys.length === 0) return d;
-      const next: Record<string, boolean> = {};
-      let dropped = false;
-      for (const k of keys) {
-        if (deployedByTool(rowsByName.get(k)) === d[k]) { dropped = true; continue; }
-        next[k] = d[k];
-      }
-      return dropped ? next : d;
-    });
-  }, [rowsByName]);
-
   const library = state?.skills ?? [];
 
-  // 技能库全量 → 卡片：开关 = 该技能当前是否装到此 Agent；预设带入的显式标注
+  // 技能库全量 → 卡片：每行带「添加/部署」入口，把该技能一次性部署到这个目录（无开关）
   const directCards = useMemo<SkillCardView[]>(
     () => library.map((s) => {
       const row = rowsByName.get(s.name);
-      const on = draftOn[s.name] ?? deployedByTool(row);
+      const installed = !!row;
       const card = skillViewToCard(s);
-      card.state = on ? 'on' : 'off';
-      card.toggleOn = on;
       if (row?.reason === 'preset') {
         card.reason = 'preset';
         card.reasonLabel = t('badge.reason.preset');
         card.reasonTitle = t('agents.presetReason.title', { preset: row.preset ?? agent.preset ?? '' });
       }
-      if (on && row) card.store = row.store;
+      if (installed && row) card.store = row.store;
       card.preset = row?.preset;
+      card.actions = [{
+        kind: 'toggle',
+        label: installed ? t('agents.direct.added') : t('common.add'),
+        disabled: installed,
+        title: installed ? t('agents.direct.added.title') : t('agents.direct.add.title'),
+      }];
       return card;
     }),
-    [library, rowsByName, draftOn, agent.preset, t]
+    [library, rowsByName, agent.preset, t]
   );
 
   const allSources = useMemo(() => [...new Set(library.map((s) => s.source))].sort(), [library]);
@@ -416,31 +391,9 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
     });
   }, [directCards, q, activeSrcs, facets]);
 
-  // 关联预设当前会带入的技能名（显式名单 ∪ 关联标签命中）
-  const activePreset = (presets ?? []).find((p) => p.name === agent.preset);
-  const presetSkillNames = useMemo(() => {
-    if (!activePreset) return [];
-    const dirName = (id: string) => { const i = id.lastIndexOf('@'); return i >= 0 ? id.slice(0, i) : id; };
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const id of activePreset.skills) {
-      const n = dirName(id);
-      const sk = library.find((s) => s.id === id) ?? library.find((s) => s.name === n);
-      if (sk && !seen.has(sk.name)) { seen.add(sk.name); out.push(sk.name); }
-    }
-    const tagSet = new Set(activePreset.tags);
-    if (tagSet.size > 0) {
-      for (const s of library) {
-        if (seen.has(s.name)) continue;
-        if ((s.tags ?? []).some((tag) => tagSet.has(tag))) { seen.add(s.name); out.push(s.name); }
-      }
-    }
-    return out;
-  }, [activePreset, library]);
-
   const enabledRows = data?.skills ?? [];
-  const enabledViaPreset = enabledRows.filter((s) => s.state === 'on' && s.reason === 'preset').length;
-  const enabledDirect = enabledRows.filter((s) => s.state === 'on' && s.reason === 'manual').length;
+  const enabledViaPreset = enabledRows.filter((s) => s.reason === 'preset').length;
+  const enabledDirect = enabledRows.filter((s) => s.reason === 'manual').length;
 
   // 多目录 Agent：给每行技能补上「来自哪个目录」的徽标，直接显示目录本身（单目录时无需展示，避免噪音）
   const sharedDir = agent.sharedDir && agent.sharedDir !== agent.globalDir ? agent.sharedDir : undefined;
@@ -455,20 +408,13 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
       : s));
   };
 
-  // 直接添加技能：乐观更新 + 串行提交，成功后再刷新（草稿由 rowsByName 比对自动回收）
-  const toggleDirect = (name: string, on: boolean) => {
-    setDraftOn((d) => ({ ...d, [name]: on }));
-    directQueue.current = directQueue.current.then(async () => {
-      try {
-        await api(`/agents/${encodeURIComponent(agent.key)}`, { method: 'PUT', body: JSON.stringify({ skill: name, on }) });
-      } catch (e) {
-        setDraftOn((d) => { const n = { ...d }; delete n[name]; return n; });
-        toast.push(e instanceof Error ? e.message : String(e), 'bad');
-        return;
-      }
-      reload();
-      onChanged();
-    });
+  // 从技能库添加/部署单个技能：一次性部署进目录（prune:false，只补不删），物理即真相
+  const deploySkill = (id: string) =>
+    void busy(() => api(`/agents/${encodeURIComponent(agent.key)}/skills`, { method: 'POST', body: JSON.stringify({ id }) }));
+
+  // 技能库「添加/部署」入口：已装技能置灰（在目录中了），其余点击即部署
+  const onDirectAction = (item: SkillCardView, action: SkillAction) => {
+    if (action.kind === 'toggle') deploySkill(item.id);
   };
 
   const syncModeItems: EntityItem[] = managed.map((s) => ({
@@ -622,19 +568,15 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
               </FieldSelect>
               {agent.preset && (
                 <div style={{ marginTop: 'var(--sp-3)' }}>
-                  <p className="panel__hint" style={{ marginBottom: 'var(--sp-2)' }}>
-                    {t('agents.preset.brings', { n: presetSkillNames.length })}
-                    {activePreset?.tags.length ? t('agents.preset.bringsTags', { t: activePreset.tags.length }) : ''}
-                  </p>
-                  {presetSkillNames.length === 0 ? (
-                    <EmptyState title={t('agents.preset.empty.title')} hint={t('agents.preset.empty.hint')} />
-                  ) : (
-                    <div className="skill-pills">
-                      {presetSkillNames.map((n) => (
-                        <span className="skill-pill" key={n}><span className="skill-pill__name">{n}</span></span>
-                      ))}
-                    </div>
-                  )}
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    loading={syncing}
+                    onClick={() => void runSync()}
+                    title={t('agents.preset.apply.title')}
+                  >
+                    {t('agents.preset.apply')}
+                  </Button>
                 </div>
               )}
             </>
@@ -684,7 +626,7 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
             <SkillList
               title={`${directFiltered ? t('list.filtered') : t('nav.library')} · ${shownDirect.length}${directFiltered ? ` / ${directCards.length}` : ''}`}
               items={shownDirect}
-              onToggle={(item) => toggleDirect(item.name, !(item.toggleOn ?? item.state === 'on'))}
+              onAction={onDirectAction}
               hideToggle
               collapsible
               storageKey="lsh.collapsed.agent.direct"

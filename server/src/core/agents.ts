@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import { HubConfig, CustomAgent, AgentOverride, Repo } from '../config/types.js';
 import type { Skill } from './skill.js';
 import { readSkill } from './skill.js';
-import type { DesiredContext } from './sync.js';
 
 export type ToolCategory = 'coding' | 'lobster';
 
@@ -213,7 +212,10 @@ function underRoot(root: string, target: string | undefined, baseDir?: string): 
  * 这条判断同时服务展示与安全：同步的清理阶段只回收本工具自己部署的软链，绝不误删外部软链。
  */
 export function isManagedLinkTarget(cfg: HubConfig, target: string | undefined, baseDir?: string): boolean {
-  return repoSkillRoots(cfg).some((root) => underRoot(root, target, baseDir));
+  // 本工具可管理 / 可回收的软链口径：目标落在「自有仓库 ∪ 第三方来源注册库 ∪ 共享标准目录」之下。
+  // 第三方来源（如 ume-skills）的技能由本工具部署成软链后同样算本工具产物，应允许回收/删除——否则
+  // 停用 / 删除第三方来源技能时会因判为「外部软链」而不回收（历史 bug）。
+  return registeredLibraryRoots(cfg).some((root) => underRoot(root, target, baseDir));
 }
 
 /** 仓库角度：该软链是否指向「指定仓库」内的技能（只有自己仓库过去的软链才算被它接管） */
@@ -264,15 +266,11 @@ export interface AgentView extends AgentDef {
   /** 文档化跨产品复用 */
   alsoUsedBy?: string[];
   /**
-   * 关联的预设名。关联了才有预设基准；未关联则基准为空，
-   * 该 Agent 只分发单独开启的技能（不存在「未绑定即跟随全部预设」的兜底）。
+   * 关联的预设名。作为该目录「一次应用」哪套预设的记忆（物理为准，不推导期望集）。
    */
   preset?: string;
   /** 每 (skill, Agent) 关系的同步策略覆盖（SY-01） */
   skillSync?: Record<string, 'symlink' | 'copy'>;
-  /** 手动开启的 skill id */
-  explicitOn?: string[];
-  explicitOff?: string[];
 }
 
 /**
@@ -349,14 +347,11 @@ export function pruneAliasStrategies(cfg: HubConfig, primaryKey: string): string
     if (m.key === primaryKey) continue;
     const ov = cfg.agents[m.key];
     if (!ov) continue;
-    const had = ov.preset !== undefined || ov.sync !== undefined || ov.skillSync !== undefined
-      || ov.explicitOn !== undefined || ov.explicitOff !== undefined;
+    const had = ov.preset !== undefined || ov.sync !== undefined || ov.skillSync !== undefined;
     if (!had) continue;
     delete ov.preset;
     delete ov.sync;
     delete ov.skillSync;
-    delete ov.explicitOn;
-    delete ov.explicitOff;
     cleared.push(m.key);
     if (Object.keys(ov).length === 0) delete cfg.agents[m.key];
   }
@@ -386,8 +381,6 @@ export function listAgents(cfg: HubConfig): AgentView[] {
       primaryKey: def.key,
       ...(ov?.preset ? { preset: ov.preset } : {}),
       ...(ov?.skillSync ? { skillSync: ov.skillSync } : {}),
-      ...(ov?.explicitOn ? { explicitOn: ov.explicitOn } : {}),
-      ...(ov?.explicitOff ? { explicitOff: ov.explicitOff } : {}),
     };
   });
   // 按解析后的 globalDir 分组：同目录者互为 sharedWith，并统一指向该目录的主 Agent
@@ -423,8 +416,6 @@ export function listAgents(cfg: HubConfig): AgentView[] {
 function applyStrategyOverrides(view: AgentView, ov: AgentOverride | undefined): void {
   if (ov?.preset) view.preset = ov.preset; else delete view.preset;
   if (ov?.skillSync) view.skillSync = ov.skillSync; else delete view.skillSync;
-  if (ov?.explicitOn) view.explicitOn = ov.explicitOn; else delete view.explicitOn;
-  if (ov?.explicitOff) view.explicitOff = ov.explicitOff; else delete view.explicitOff;
 }
 
 export interface AgentSkillRow {
@@ -472,8 +463,6 @@ export interface AgentSkillRow {
   skillId?: string;
   dir?: string;
   link?: boolean;
-  /** 关闭该技能时应走哪个叠加集：'off'=加入 explicitOff（套餐基准成员）；'on'=移出 explicitOn */
-  disableVia?: 'off' | 'on';
 }
 
 /**
@@ -487,20 +476,19 @@ function sharedReadDirs(def: AgentDef, ownDir: string): string[] {
 }
 
 /**
- * 构建某 agent 技能行的完整并集 = 自身目录（期望集 ∪ 目录已存在）∪ 额外读取的共享目录。
- * 每行用 wanted × present 表达状态，并用 reason/offOverride 决定唯一操作；
- * 自带、外部软链、共享目录读取也会一并列出，并用 fromDir/readVia 标注「来自哪个目录」。
+ * 构建某 agent 的技能行，**完全以实际目录为准**（期望集已停用）：
+ * 自身目录（含本工具部署的软链 / 副本 / 自带真实目录）+ 额外读取的共享标准目录。
+ * 不再有「待装 / wanted」行——列表只反映物理现状；来源按软链目标实际落在哪个库判定，
+ * 自带、外部软链、共享目录读取会一并列出，并用 fromDir/readVia 标注「来自哪个目录」。
  */
-export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skill[], ctx: DesiredContext): AgentSkillRow[] {
+export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skill[]): AgentSkillRow[] {
   const def = findAgentDef(cfg, agentKey);
   if (!def) return [];
   const ownDir = resolveGlobalDir(def, cfg.agents[agentKey]?.globalDir);
-  const desired = ctx.desired;
   const rows: AgentSkillRow[] = [];
   const presentNames = new Set<string>();
   const presentLstat = new Map<string, fs.Dirent>();
 
-  const isOff = (name: string) => ctx.offIds.has(name) || ctx.offNames.has(name);
   /**
    * 读软链目标并归一为**绝对路径**：readlink 可能给出相对路径（如 `../../.agents/skills/x`），
    * 列表要展示、归属要判定的是「实际指向哪里」，相对路径两者都说不清。
@@ -512,7 +500,6 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
     } catch { return undefined; }
   };
 
-
   // 1) 扫描自身目录，记录是否存在及各目录项类型（隐藏项不算技能）
   if (fs.existsSync(ownDir)) {
     for (const ent of fs.readdirSync(ownDir, { withFileTypes: true })) {
@@ -522,46 +509,16 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
     }
   }
 
-  // 2) 期望集行（无论是否存在）：wanted=true
-  for (const skill of desired.values()) {
-    const inBase = ctx.baselineNames.has(skill.name);
-    const inOn = ctx.onNames.has(skill.name);
-    const present = presentNames.has(skill.name);
-    const ent = presentLstat.get(skill.name);
-    const isLinkEnt = !!ent && ent.isSymbolicLink();
-    let store: AgentSkillRow['store'] = 'pending';
-    if (present) store = isLinkEnt ? 'symlink' : 'copy';
-    const dirPath = present ? path.join(ownDir, skill.name) : undefined;
-    const linkTarget = present && isLinkEnt ? linkTo(dirPath!) : undefined;
-    rows.push({
-      name: skill.name, title: skill.name, description: skill.description,
-      source: 'managed', wanted: true, present, store,
-      linkTarget,
-      reason: inBase ? 'preset' : 'manual',
-      preset: ctx.presetOf.get(skill.name),
-      repo: skill.source, skillId: skill.id,
-      dir: dirPath,
-      link: present ? isLinkEnt : undefined,
-      // 指向仓库内技能的软链 = 已接管；指向仓库外的不算
-      takenOver: !!linkTarget && isManagedLinkTarget(cfg, linkTarget, ownDir),
-      disableVia: inBase && !inOn ? 'off' : 'on',
-      fromDir: ownDir, readVia: 'own',
-    });
-  }
-
-  // 3) 自身目录中存在但不在期望集的行（残留 or 自带）
-  const desiredNames = seenNames(desired);
+  // 2) 目录中实际存在的行（只有这里——物理为准）
   for (const name of presentNames) {
-    if (desiredNames.has(name)) continue; // 已在期望集，跳过
     const ent = presentLstat.get(name);
     if (!ent) continue;
     const isLink = ent.isSymbolicLink();
     if (isLink) {
-      // 软链但不期望：区分两种来源 —— 本工具分发的残留（已停用）／外部工具创建的（不归本工具管）
+      // 软链：区分「本工具部署（指向自有仓库）」与「外部工具创建（不归本工具管）」
       const p = path.join(ownDir, name);
       const target = linkTo(p);
       const externalLink = !isManagedLinkTarget(cfg, target, ownDir);
-      const offOverride = !externalLink && ctx.baselineNames.has(name) && isOff(name);
       // 展示口径：来源 = 这条软链**实际指向**的已登记库；目标不在任何已登记库内就不给来源，
       // 由展示层直接呈现真实路径（绝不拿同名技能去回填来源，那样会把「同名」说成「来自」）。
       const owner = libraryOfLinkTarget(cfg, target, ownDir);
@@ -573,13 +530,11 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
       rows.push({
         name, title: name,
         description: readSkill(p)?.description, // readSkill 顺着软链读到目标
-        source: 'managed', wanted: false, present: true, store: 'symlink',
+        source: 'managed', wanted: true, present: true, store: 'symlink',
         linkTarget: target,
-        // 残留的来源按基准归属判断：来自预设的记 preset，其余（如接管后停用）记 manual，
-        // 不再一律记成「预设引入」——那会让已接管的技能被误标成预设带来的。
-        reason: externalLink ? 'external' : (ctx.baselineNames.has(name) ? 'preset' : 'manual'),
-        offOverride, externalLink, alreadyInLibrary,
-        preset: ctx.presetOf.get(name),
+        // 来源：指向仓库内 = 本工具部署（managed）；指向仓库外 = 外部软链
+        reason: externalLink ? 'external' : 'manual',
+        externalLink, alreadyInLibrary,
         skillId: owner ? `${name}@${owner.id}` : undefined, repo: owner?.id,
         dir: p, link: true, fromDir: ownDir, readVia: 'own',
         takenOver: !externalLink,
@@ -596,7 +551,7 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
     }
   }
 
-  // 4) 额外读取的共享标准目录：**只做展示**，既不进期望集、也不参与归集 / 接管
+  // 3) 额外读取的共享标准目录：**只做展示**，既不分发、也不参与归集 / 接管
   //    （归集预览只扫自身 globalDir，所以这些条目不会出现在可归集清单里；这里也不给任何操作）。
   //    同名技能以自身目录为准（前面已收录），共享目录只补自身目录没有的。
   const seen = new Set(rows.map((r) => r.name));
@@ -620,7 +575,6 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
         store: isLink ? 'symlink' : 'own',
         linkTarget: target,
         reason: 'shared',
-        preset: ctx.presetOf.get(name),
         skillId: owner ? `${name}@${owner.id}` : undefined, repo: owner?.id,
         dir: p, link: isLink, fromDir: sharedDir, readVia: 'shared',
       });
@@ -628,13 +582,6 @@ export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skil
   }
 
   return rows.sort((a, b) => Number(b.wanted) - Number(a.wanted) || a.name.localeCompare(b.name));
-}
-
-/** 期望集里的技能名集合（避免在循环里反复展开 Map 造成 O(n²)） */
-function seenNames(desired: Map<string, Skill>): Set<string> {
-  const set = new Set<string>();
-  for (const s of desired.values()) set.add(s.name);
-  return set;
 }
 
 /** 判断目录是否为带 SKILL.md 的技能目录 */

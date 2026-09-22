@@ -56,13 +56,10 @@ export interface AgentOverride {
   /** 每条 (skill, Agent) 关系的同步策略覆盖，键为 skill 名（SY-01） */
   skillSync?: Record<string, SyncMode>;
   /**
-   * 关联的预设：作为该 Agent 的期望基准（基准 = 预设成员 ∪ 标签命中）。
-   * 不关联就是不用预设——基准为空，该 Agent 只分发 explicitOn 里单独开启的技能，
-   * 不存在「不绑定 = 跟随全部预设」的兜底。预设与单独配置是两件独立的事。
+   * 关联的预设：记录「该目录应用哪套预设」的决策。
+   * 仅作一次性「应用」的记忆，不再推导期望集，也不再自动同步补回。
    */
   preset?: string;
-  explicitOn?: string[];
-  explicitOff?: string[];
   /**
    * 显式指定该 Agent 为其技能目录的主 Agent（AG-02 / C18）。
    * 同一目录至多一个；未指定时按「活跃优先、其次名称序」自动判定。
@@ -95,8 +92,6 @@ export interface ProjectLink {
   path: string;
   /** 标签=投放策略 */
   tags: string[];
-  explicitOn?: string[];
-  explicitOff?: string[];
 }
 
 export interface HubConfig {
