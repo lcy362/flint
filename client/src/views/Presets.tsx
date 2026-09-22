@@ -407,7 +407,7 @@ function PresetDetail({
 
   const agentItems: EntityItem[] = appliedGroups.map((g) => ({
     id: g.dir,
-    title: <AgentNamesTitle agents={g.agents} onOpen={openAgent} />,
+    title: <AgentNamesTitle agents={g.agents} />,
     sub: <span className="mono">{g.dir}</span>,
     badges: (
       <>

@@ -334,7 +334,7 @@ export const en = {
   'agents.deletedCustom': 'Custom agent deleted',
   'agents.failed': 'Failed',
   'agents.presetReason.title':
-    'Brought in by the linked preset "{preset}"; switch it off here to exclude it for this agent only',
+    'Brought in by the linked preset "{preset}"; switch it off here to exclude it for this directory only',
   'agents.installModeAria': 'Install mode for {name}',
   'agents.install.symlink': 'Link (no file copy, takes effect immediately)',
   'agents.install.copy': 'Copy (independent copy, needs re-sync)',
@@ -365,7 +365,7 @@ export const en = {
   'agents.alsoUsedBy': 'This directory is also read directly by {names}, so no separate install is needed',
   'agents.sharedWith.pre': 'Shares',
   'agents.sharedWith.post': 'as the same skill directory: they share one strategy, and one distribution reaches them all',
-  'agents.noSkills': 'This agent has no skills',
+  'agents.noSkills': 'This directory has no skills',
   'agents.currentSkillsCount': 'Current skills ({n})',
   'agents.syncFailedItems': 'Failed sync items',
   'agents.section.control': 'Skill control',
@@ -375,7 +375,7 @@ export const en = {
   'agents.preset.fieldHint': 'Changes take effect and sync immediately',
   'agents.preset.none': 'No preset',
   'agents.preset.hint':
-    'Pick a preset as the distribution baseline: every skill enabled in it is installed into this agent. If none is picked, only skills enabled under "Add skills directly" below are used.',
+    'Pick a preset as the distribution baseline: every skill enabled in it is installed into this directory. If none is picked, only skills enabled under "Add skills directly" below are used.',
   'agents.preset.brings': 'This preset currently brings in {n} skills',
   'agents.preset.bringsTags': ' (including {t} matched by linked tags)',
   'agents.preset.empty.title': 'This preset has no enabled skill yet',
@@ -383,7 +383,7 @@ export const en = {
   'agents.direct.section': 'Add skills directly',
   'agents.direct.badge.title': 'Skills enabled directly (not via a preset)',
   'agents.direct.hint':
-    'Pick from the whole vault: turning one on installs it for this agent alone (regardless of the preset above), turning it off removes it. Skills marked "From preset" come from the linked preset and can be switched off for this agent only.',
+    'Pick from the whole vault: turning one on installs it into this directory (regardless of the preset above), turning it off removes it. Skills marked "From preset" come from the linked preset and can be switched off for this directory only.',
   'agents.source.empty': 'The vault has no sources yet.',
   'agents.tags.empty': 'No skill has tags yet.',
   'agents.legend.skill.title': 'What do the badges on a skill mean?',
@@ -405,7 +405,6 @@ export const en = {
   'agents.install.auto': 'Automatic (active first, then by name)',
   'agents.install.perSkill': 'Override install mode per skill',
   'agents.install.noneEnabled': 'No skill is enabled right now',
-  'agents.openDetail': 'Open details for {name}',
   'agents.dir.overridden': 'Directories overridden',
   'agents.dir.title': 'Override directories · {name}',
   'agents.dir.global': 'Global skill directory',

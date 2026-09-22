@@ -37,7 +37,7 @@ import { useToast } from '../components/ui/Toast';
 import { useAsync } from '../state/useAsync';
 import { useViewMode } from '../state/viewMode';
 import { useCollapsed } from '../state/collapse';
-import { navigate, useQueryFlag, useQueryParam, useRoute } from '../state/router';
+import { getRoute, navigate, useQueryFlag, useQueryParam, useRoute } from '../state/router';
 import { joinList, rich, useI18n } from '../i18n';
 
 /**
@@ -67,6 +67,14 @@ export default function Agents() {
   const selected = selectedKey ? (data ?? []).find((a) => a.key === selectedKey) : null;
   const openAgent = (key: string) => navigate({ ...route, sub: key });
   const backToList = () => navigate({ ...route, sub: null });
+
+  // 同一目录只有一个实体：地址若指向「别名」（如 #/agents/openhands），规范到该目录的主 Agent。
+  // 否则同一目录会出现两个详情页各说一套，与「一个目录一套策略」的约定相悖。
+  useEffect(() => {
+    if (selected && selected.key !== selected.primaryKey) {
+      navigate({ ...getRoute(), sub: selected.primaryKey }, { replace: true });
+    }
+  }, [selected?.key, selected?.primaryKey]);
 
   // 一个实际技能目录一张卡片：同目录的多个 Agent 收进同一张卡
   const groups = useMemo(() => groupAgentsByDir(data ?? []), [data]);
@@ -102,7 +110,7 @@ export default function Agents() {
         id: g.dir,
         variant: 'standard' as const,
         title: <OpenStandardTitle label={t('agents.openStandard.title')} tip={t('agents.openStandard.tip')} />,
-        sub: <AgentNamesTitle agents={g.agents} onOpen={openAgent} quiet />,
+        sub: <AgentNamesTitle agents={g.agents} quiet />,
         desc: <span className="mono">{g.dir}</span>,
         status: activeBadge(t, { active: g.anyActive }),
         badges: (
@@ -119,8 +127,8 @@ export default function Agents() {
     return {
       id: g.dir,
       // 标题罗列使用该目录的全部 Agent —— 它们都是真实的 Agent，不把谁叫「别名」；
-      // 每个名字可单独点开自己的详情，卡片空白处仍进主 Agent
-      title: <AgentNamesTitle agents={g.agents} onOpen={openAgent} />,
+      // 整张卡一个入口：同一目录不存在「各自的详情页」，点谁都是同一份内容
+      title: <AgentNamesTitle agents={g.agents} />,
       sub: <span className="mono">{g.keys.join(' / ')}</span>,
       desc: <span className="mono">{g.dir}</span>,
       status: activeBadge(t, { active: g.anyActive }),
@@ -149,7 +157,7 @@ export default function Agents() {
       />
       {selectedKey ? (
         selected ? (
-          <AgentDetail agent={selected} siblings={siblings} onOpenAgent={openAgent} onBack={backToList} onChanged={reload} />
+          <AgentDetail agent={selected} siblings={siblings} onBack={backToList} onChanged={reload} />
         ) : (
           <LoadingBoundary
             state={{ loading, error, data }}
@@ -195,11 +203,10 @@ export default function Agents() {
   );
 }
 
-function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
+function AgentDetail({ agent, siblings, onBack, onChanged }: {
   agent: AgentView;
   /** 与它指向同一技能目录的其它 Agent */
   siblings: AgentView[];
-  onOpenAgent: (key: string) => void;
   onBack: () => void;
   onChanged: () => void;
 }) {
@@ -283,6 +290,9 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
   // 这个目录就在同步作用域内。详情页与列表卡片必须同一口径，否则会出现「卡片说活跃、页面说非活跃」。
   const members = [agent, ...siblings];
   const dirActive = members.some((m) => m.active);
+  // 标题罗列整个目录的成员（主 Agent 在前、其余按名称序，与列表卡片同一顺序）：
+  // 同一目录只有一个实体，页面不该写成「某一个 Agent」的专属页
+  const titleMembers = [agent, ...siblings.slice().sort((a, b) => a.name.localeCompare(b.name))];
 
   // 活跃切换作用于**整个目录**：只切单个成员会出现「点了移出、目录却仍在自动同步」的假动作。
   const toggleActive = () => void busy(async () => {
@@ -480,7 +490,9 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
     <>
       <div className="detail-head">
         <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
-        <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{agent.name}</h2>
+        <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>
+          <AgentNamesTitle agents={titleMembers} />
+        </h2>
         {/* 从「开源生态推荐目录」卡片进来时要把这层身份带出来，否则标题忽然只剩一个 Agent 名 */}
         {readsAgents && (
           <span className="detail-head__context">
@@ -557,7 +569,7 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
               <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--sp-1)' }}>
                 {t('agents.sharedWith.pre')}
                 {siblings.map((o) => (
-                  <Tag key={o.key} onClick={() => onOpenAgent(o.key)}>{o.name}</Tag>
+                  <Tag key={o.key}>{o.name}</Tag>
                 ))}
                 {t('agents.sharedWith.post')}
               </span>
