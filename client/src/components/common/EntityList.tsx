@@ -13,7 +13,7 @@ import { useI18n } from '../../i18n';
  */
 /**
  * 卡片 / 行的视觉变体。
- * `standard` 用于共享标准目录（Agent Skills 开放标准）：换一套强调色，
+ * `standard` 用于开源生态推荐目录：换一套强调色，
  * 让它在一屏卡片里第一眼可辨，同时仍照常展示活跃 / 非活跃状态。
  */
 export type EntityVariant = 'standard';

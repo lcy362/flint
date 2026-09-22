@@ -287,15 +287,15 @@ export const zh: Record<MsgKey, string> = {
   'agentBadge.notInstalled': '本机未安装',
   'agentBadge.notInstalled.title':
     '本机还没有这个技能目录——通常是这些工具还没装，或它们从未加载过技能；把 Agent 设为活跃并同步后会自动创建。',
-  'agentBadge.openStandard': '开源标准',
+  'agentBadge.openStandard': '开源生态推荐目录',
   'agentBadge.openStandard.title':
-    '{dir} 是 Agent Skills 开放标准约定的共享技能目录：生态内多数 Agent（Codex、Warp、OpenHands、GitHub Copilot、Cursor、OpenCode 等）都会读取它，放一份即对这些工具一并生效。',
+    '{dir} 是开源生态里被广泛推荐的技能目录：生态内多数 Agent（Codex、Warp、OpenHands、GitHub Copilot、Cursor、OpenCode 等）都会读取它，放一份即对这些工具一并生效。',
   'agentBadge.openStandard.legend':
-    '只标记在共享标准目录（~/.agents/skills、~/.config/agents/skills）本身，而不是某个 Agent：这是 Agent Skills 开放标准约定的目录，生态内多数 Agent 都会读取它，放一份即对这些工具一并生效——正因为绝大多数 Agent 都读它，就不再逐个 Agent 重复标注「另读」。',
+    '只标记在多 Agent 共用的推荐目录（~/.agents/skills、~/.config/agents/skills）本身，而不是某个 Agent：这些目录被生态内多数 Agent 读取，放一份即对这些工具一并生效——正因为绝大多数 Agent 都读它，就不再逐个 Agent 重复标注「另读」。',
 
   /* ---------- agents ---------- */
   'agents.subtitle': '共 {dirs} 个技能目录 · {agents} 个 Agent',
-  'agents.openStandard.title': 'Agent Skills 开源标准',
+  'agents.openStandard.title': '开源生态推荐目录',
   'agents.openStandard.tip':
     '大部分 Agent 都会读取这个目录，推荐优先管理它：技能装在这里，对所有读取该目录的工具一并生效。若只想装给某一个 Agent，用那个 Agent 自己的目录即可。',
   'agents.addCustom': '新增自定义 Agent',

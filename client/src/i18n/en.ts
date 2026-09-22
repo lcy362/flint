@@ -305,15 +305,15 @@ export const en = {
   'agentBadge.notInstalled': 'Not installed',
   'agentBadge.notInstalled.title':
     'This skill directory does not exist on this machine yet — usually the tool is not installed, or it has never loaded skills. It is created automatically once the agent is active and synced.',
-  'agentBadge.openStandard': 'Open standard',
+  'agentBadge.openStandard': 'Ecosystem-recommended',
   'agentBadge.openStandard.title':
-    '{dir} is a shared skill directory of the open Agent Skills standard: most agents in the ecosystem (Codex, Warp, OpenHands, GitHub Copilot, Cursor, OpenCode and more) read it, so one copy serves them all.',
+    '{dir} is a widely recommended skill directory in the open ecosystem: most agents (Codex, Warp, OpenHands, GitHub Copilot, Cursor, OpenCode and more) read it, so one copy serves them all.',
   'agentBadge.openStandard.legend':
-    'Marks the shared standard directory itself (~/.agents/skills, ~/.config/agents/skills), not a single agent: this is the directory agreed by the open Agent Skills standard, read by most agents in the ecosystem so that one copy serves them all. Since nearly every agent reads it, "also reads" is no longer annotated per agent.',
+    'Marks the directories shared by many agents (~/.agents/skills, ~/.config/agents/skills) rather than a single agent: most agents in the ecosystem read them, so one copy serves them all. Since nearly every agent reads them, "also reads" is no longer annotated per agent.',
 
   /* ---------- agents ---------- */
   'agents.subtitle': '{dirs} skill directories · {agents} agents',
-  'agents.openStandard.title': 'Open Agent Skills standard',
+  'agents.openStandard.title': 'Ecosystem-recommended directory',
   'agents.openStandard.tip':
     'Most agents read this directory, so it is the recommended place to manage skills first: a skill installed here works for every tool that reads it. To install for one specific agent only, use that agent\u2019s own directory.',
   'agents.addCustom': 'Add custom agent',

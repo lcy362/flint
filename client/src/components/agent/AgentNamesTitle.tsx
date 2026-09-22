@@ -14,7 +14,7 @@ export default function AgentNamesTitle({
 }: {
   agents: AgentView[];
   onOpen: (key: string) => void;
-  /** 弱化展示：用作共享标准目录卡片的副标题（名字退居次要，主标题让给「开源标准」） */
+  /** 弱化展示：用作开源生态推荐目录卡片的副标题（名字退居次要，主标题让给「开源生态推荐目录」） */
   quiet?: boolean;
 }) {
   const { t } = useI18n();

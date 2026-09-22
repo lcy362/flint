@@ -1161,7 +1161,7 @@ select.field {
   box-shadow: 0 0 0 3px var(--c-focus-ring);
 }
 
-/* 共享标准目录卡片（Agent Skills 开放标准）：换用 standard 强调色，在一屏里第一眼可辨。
+/* 开源生态推荐目录卡片：换用 standard 强调色，在一屏里第一眼可辨。
    它与「活跃 / 非活跃」正交——所有强调都在 is-off 时退回调色，活跃与否照旧一眼可辨。 */
 .entity-card--standard {
   border-color: color-mix(in srgb, var(--c-standard) 42%, var(--c-line));
@@ -1189,7 +1189,7 @@ select.field {
   color: var(--c-ink-2);
 }
 
-/* 标准卡主标题：一句「开源标准」+ info 按钮（悬停 / 聚焦看说明） */
+/* 推荐目录卡主标题：一句「开源生态推荐目录」+ info 按钮（悬停 / 聚焦看说明） */
 .std-title {
   display: inline-flex;
   align-items: center;
