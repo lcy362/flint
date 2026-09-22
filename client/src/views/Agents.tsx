@@ -17,7 +17,6 @@ import LoadingBoundary from '../components/ui/LoadingBoundary';
 import Modal from '../components/ui/Modal';
 import { FieldInput, FieldSelect } from '../components/ui/Field';
 import { PathField } from '../components/ui/PathField';
-import Tag from '../components/ui/Tag';
 import BadgeLegend from '../components/common/BadgeLegend';
 import AgentNamesTitle from '../components/agent/AgentNamesTitle';
 import OpenStandardTitle from '../components/agent/OpenStandardTitle';
@@ -512,9 +511,6 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
           </span>
         )}
         {activeBadge(t, { active: dirActive })}
-        {siblings.length > 0 && (isAlias
-          ? <Badge tone="info" title={t('agents.alias.body', { name: primaryAgent?.name ?? agent.primaryKey })}>{t('agents.alias.badge')}</Badge>
-          : <Badge tone="accent" title={t('agents.install.strategyHint')}>{t('agents.install.strategy')}</Badge>)}
         {familyBadge(t, agent)}
         {customBadge(t, agent)}
         <div className="detail-actions">
@@ -577,15 +573,7 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
             </span>
             {agent.project && <span className="mono">{t('agents.project', { path: agent.project })}</span>}
             {agent.alsoUsedBy?.length ? <span>{t('agents.alsoUsedBy', { names: joinList(agent.alsoUsedBy) })}</span> : null}
-            {siblings.length > 0 && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--sp-1)' }}>
-                {t('agents.sharedWith.pre')}
-                {siblings.map((o) => (
-                  <Tag key={o.key}>{o.name}</Tag>
-                ))}
-                {t('agents.sharedWith.post')}
-              </span>
-            )}
+            {siblings.length > 0 && <span>{t('agents.sharedWith.note')}</span>}
           </div>
           <LoadingBoundary state={{ loading, error, data }} empty={{ title: t('agents.noSkills'), icon: '○' }}>
             {(resp) => (

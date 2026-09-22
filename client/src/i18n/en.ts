@@ -354,7 +354,6 @@ export const en = {
     'This skill directory also has {names} in the active set, so vault and preset changes are still synced in automatically; your actions on this page are written immediately too.',
   'agents.inactive.bodyAlone':
     'Future vault and preset changes are not synced to this directory automatically; click "Sync" here. Your actions on this page are still written immediately. To make it follow continuously, click "Set active" at the top right.',
-  'agents.alias.badge': 'Shared directory',
   'agents.alias.title': 'It shares one skill directory with "{name}"',
   'agents.alias.body':
     'The directory has a single physical body, so these agents **share the same** preset / install mode: a change here equals a change there, and both sides always see the same thing. Internally that set is stored under "{name}" — a storage location only, not ownership of the strategy.',
@@ -364,8 +363,7 @@ export const en = {
   'agents.skillDirs': 'Skill directories',
   'agents.project': 'Project {path}',
   'agents.alsoUsedBy': 'This directory is also read directly by {names}, so no separate install is needed',
-  'agents.sharedWith.pre': 'Shares',
-  'agents.sharedWith.post': 'as the same skill directory: they share one strategy, and one distribution reaches them all',
+  'agents.sharedWith.note': 'These agents share this skill directory: one strategy, and a single distribution reaches them all.',
   'agents.noSkills': 'This directory has no skills',
   'agents.currentSkillsCount': 'Current skills ({n})',
   'agents.syncFailedItems': 'Failed sync items',

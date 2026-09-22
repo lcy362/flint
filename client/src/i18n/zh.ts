@@ -334,7 +334,6 @@ export const zh: Record<MsgKey, string> = {
     '这个技能目录还有 {names} 在活跃集合里，技能库与预设的变动仍会自动同步进来；你在本页的操作也会立即写入。',
   'agents.inactive.bodyAlone':
     '技能库、预设之后的变动不会自动同步到这个目录，需要你在这里点「同步」；你在本页的操作仍会立即写入。想让它持续跟随，点右上角「设为活跃」。',
-  'agents.alias.badge': '共用目录',
   'agents.alias.title': '它与「{name}」共用一个技能目录',
   'agents.alias.body':
     '目录只有一份实体，所以这些 Agent **共用同一套**预设 / 安装方式：在这里改等同在那里改，两边看到的始终一致。系统内这套设置存在「{name}」名下——那只是存放位置，不代表策略归它所有。',
@@ -344,8 +343,7 @@ export const zh: Record<MsgKey, string> = {
   'agents.skillDirs': '技能目录',
   'agents.project': '项目 {path}',
   'agents.alsoUsedBy': '该目录也被 {names} 直接读取，无需单独安装',
-  'agents.sharedWith.pre': '与',
-  'agents.sharedWith.post': '指向同一个技能目录：共用同一套策略，分发一次全部生效',
+  'agents.sharedWith.note': '这些 Agent 共用这个技能目录：同一套策略，分发一次全部生效。',
   'agents.noSkills': '该目录暂无技能',
   'agents.currentSkillsCount': '现有技能（{n}）',
   'agents.syncFailedItems': '同步失败项',
