@@ -32,7 +32,7 @@ import {
   openStandardBadge,
   openStandardBadgeForAgent,
   presetBadge,
-  sharedKindOf,
+  readsAgentsDir,
 } from '../components/agent/agentBadges';
 import { useToast } from '../components/ui/Toast';
 import { useAsync } from '../state/useAsync';
@@ -49,13 +49,11 @@ import { joinList, rich, useI18n } from '../i18n';
 const deployedByTool = (row?: SkillCardView) => !!row && row.state === 'on' && isToolManaged(row);
 
 /**
- * 该卡片是不是开源生态推荐目录（`~/.agents/skills` / `~/.config/agents/skills`）：
- * 多款 Agent 共用的目录。这类卡片换一套强调色突出，并在「活跃 / 非活跃」各自分组里都排第一。
+ * 该卡片是不是开源生态推荐目录（`~/.agents/skills`）：生态里被采纳得最广的共享技能目录。
+ * 这类卡片换一套强调色突出，并在「活跃 / 非活跃」各自分组里都排第一；
+ * `~/.config/agents/skills` 等其它共用目录与普通目录一样正常展示。
  */
-const isStandardGroup = (g: AgentGroup) => {
-  const kind = sharedKindOf(g.primary.shared);
-  return !!kind && !!g.primary.sharedOwn;
-};
+const isStandardGroup = (g: AgentGroup) => readsAgentsDir(g.primary.shared) && !!g.primary.sharedOwn;
 
 export default function Agents() {
   const { data, loading, error, reload } = useAsync<AgentView[]>(() => api('/agents'));
@@ -428,8 +426,8 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
 
   // 多目录 Agent：给每行技能补上「来自哪个目录」的徽标，直接显示目录本身（单目录时无需展示，避免噪音）
   const sharedDir = agent.sharedDir && agent.sharedDir !== agent.globalDir ? agent.sharedDir : undefined;
-  // 读取的推荐目录类型（无则 null）：用于在「技能目录」行把「开源生态推荐目录」标在共享目录本身
-  const sharedKind = sharedKindOf(agent.shared);
+  // 是否读取 `~/.agents/skills`：用于在「技能目录」行把「开源生态推荐目录」标在该目录本身
+  const readsAgents = readsAgentsDir(agent.shared);
   // 目录展示：home 前缀压成 ~，更短好读；拿不到 home 就原样展示绝对路径
   const shortDir = (p: string): string => (state?.home && p.startsWith(`${state.home}/`) ? `~${p.slice(state.home.length)}` : p);
   const withDir = (items: SkillCardView[]): SkillCardView[] => {
@@ -534,9 +532,9 @@ function AgentDetail({ agent, siblings, onOpenAgent, onBack, onChanged }: {
                 <span key={d}>
                   {i > 0 && <span className="mono">{lang === 'zh' ? '、' : ', '}</span>}
                   <span className="mono">{shortDir(d)}</span>
-                  {/* 「开源生态推荐目录」标在目录本身，而不是标在 Agent 上 */}
-                  {sharedKind && d === agent.sharedDir ? (
-                    <span style={{ marginLeft: 'var(--sp-1)' }}>{openStandardBadge(t, sharedKind)}</span>
+                  {/* 「开源生态推荐目录」只标在 `~/.agents/skills` 这个目录本身 */}
+                  {readsAgents && d === agent.sharedDir ? (
+                    <span style={{ marginLeft: 'var(--sp-1)' }}>{openStandardBadge(t)}</span>
                   ) : null}
                 </span>
               ))}

@@ -289,9 +289,9 @@ export const zh: Record<MsgKey, string> = {
     '本机还没有这个技能目录——通常是这些工具还没装，或它们从未加载过技能；把 Agent 设为活跃并同步后会自动创建。',
   'agentBadge.openStandard': '开源生态推荐目录',
   'agentBadge.openStandard.title':
-    '{dir} 是开源生态里被广泛推荐的技能目录：生态内多数 Agent（Codex、Warp、OpenHands、GitHub Copilot、Cursor、OpenCode 等）都会读取它，放一份即对这些工具一并生效。',
+    '{dir} 是开源生态里被采纳得最广的共享技能目录：多数 Agent（Codex、Warp、OpenHands、GitHub Copilot、Cursor、OpenCode 等）都会读取它，放一份即对这些工具一并生效。',
   'agentBadge.openStandard.legend':
-    '只标记在多 Agent 共用的推荐目录（~/.agents/skills、~/.config/agents/skills）本身，而不是某个 Agent：这些目录被生态内多数 Agent 读取，放一份即对这些工具一并生效——正因为绝大多数 Agent 都读它，就不再逐个 Agent 重复标注「另读」。',
+    '只标记在 ~/.agents/skills 这个目录本身，而不是某个 Agent：它是开源生态里被采纳得最广的共享技能目录，放一份即对多数工具一并生效——正因为绝大多数 Agent 都读它，就不再逐个 Agent 重复标注「另读」。',
 
   /* ---------- agents ---------- */
   'agents.subtitle': '共 {dirs} 个技能目录 · {agents} 个 Agent',

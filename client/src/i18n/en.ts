@@ -307,9 +307,9 @@ export const en = {
     'This skill directory does not exist on this machine yet — usually the tool is not installed, or it has never loaded skills. It is created automatically once the agent is active and synced.',
   'agentBadge.openStandard': 'Ecosystem-recommended',
   'agentBadge.openStandard.title':
-    '{dir} is a widely recommended skill directory in the open ecosystem: most agents (Codex, Warp, OpenHands, GitHub Copilot, Cursor, OpenCode and more) read it, so one copy serves them all.',
+    '{dir} is the most widely adopted shared skill directory in the open ecosystem: most agents (Codex, Warp, OpenHands, GitHub Copilot, Cursor, OpenCode and more) read it, so one copy serves them all.',
   'agentBadge.openStandard.legend':
-    'Marks the directories shared by many agents (~/.agents/skills, ~/.config/agents/skills) rather than a single agent: most agents in the ecosystem read them, so one copy serves them all. Since nearly every agent reads them, "also reads" is no longer annotated per agent.',
+    'Marks the ~/.agents/skills directory itself rather than a single agent: it is the most widely adopted shared skill directory in the open ecosystem, so one copy serves most tools. Since nearly every agent reads it, "also reads" is no longer annotated per agent.',
 
   /* ---------- agents ---------- */
   'agents.subtitle': '{dirs} skill directories · {agents} agents',

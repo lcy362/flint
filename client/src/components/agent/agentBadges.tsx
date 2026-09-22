@@ -129,41 +129,39 @@ export function familyBadge(t: TFunc, agent: Pick<AgentView, 'family'>) {
   );
 }
 
-/** 多 Agent 共用的推荐目录（开源生态约定）：~/.agents/skills 或 ~/.config/agents/skills */
-export const SHARED_READ_DIR: Record<'agents' | 'config-agents', string> = {
-  agents: '~/.agents/skills',
-  'config-agents': '~/.config/agents/skills',
-};
+/**
+ * 开源生态推荐目录：只针对 `~/.agents/skills` 这一个目录。
+ *
+ * 它是生态里被采纳得最广的共享技能目录（Codex / Warp / OpenHands / GitHub Copilot /
+ * Cursor / OpenCode… 都读它），值得在 UI 上突出、推荐优先管理。
+ * `~/.config/agents/skills` 等其它共用目录只是几款工具恰好同路径，不做任何特殊标记，
+ * 与普通目录一样正常展示。
+ */
+export const RECOMMENDED_DIR = '~/.agents/skills';
 
-export type SharedKind = keyof typeof SHARED_READ_DIR;
-
-/** 把后端的 shared 字段收窄成共享标准目录类型（其它值一律不认） */
-export function sharedKindOf(shared?: string): SharedKind | null {
-  return shared === 'agents' || shared === 'config-agents' ? shared : null;
+/** 该 Agent 是否读取 `~/.agents/skills`（后端 `shared` 字段为 `agents`） */
+export function readsAgentsDir(shared?: string): boolean {
+  return shared === 'agents';
 }
 
 /**
  * 「开源生态推荐目录」徽标——它标记的是**目录**，而不是某个 Agent。
  *
- * ~/.agents/skills 与 ~/.config/agents/skills 是开源生态里被多款工具共用的技能目录，
- * 生态内多数工具（Codex / Warp / OpenHands / GitHub Copilot / Cursor / OpenCode…）都会读取它，
- * 放一份即对这些工具一并生效。既然绝大多数 Agent 都读它，「它也读共享目录」就不是区分特征，
- * 因此不再逐个 Agent 重复「另读」标注，只在共享目录本身上标一次「开源生态推荐目录」。
+ * 既然生态内绝大多数 Agent 都读 `~/.agents/skills`，「它也读共享目录」就不是区分特征，
+ * 因此不再逐个 Agent 重复「另读」标注，只在该目录本身上标一次。
  */
-export function openStandardBadge(t: TFunc, shared: SharedKind) {
-  const dir = SHARED_READ_DIR[shared];
+export function openStandardBadge(t: TFunc) {
   return (
-    <Badge tone="info" title={t('agentBadge.openStandard.title', { dir })}>
+    <Badge tone="info" title={t('agentBadge.openStandard.title', { dir: RECOMMENDED_DIR })}>
       {t('agentBadge.openStandard')}
     </Badge>
   );
 }
 
-/** 该 Agent 的全局目录本身就是推荐目录（原生成员）→ 出一枚「开源生态推荐目录」徽标 */
+/** 该 Agent 的全局目录本身就是 `~/.agents/skills`（原生成员）→ 出一枚「开源生态推荐目录」徽标 */
 export function openStandardBadgeForAgent(t: TFunc, agent: Pick<AgentView, 'shared' | 'sharedOwn'>) {
-  const kind = sharedKindOf(agent.shared);
-  if (!kind || !agent.sharedOwn) return null;
-  return openStandardBadge(t, kind);
+  if (!readsAgentsDir(agent.shared) || !agent.sharedOwn) return null;
+  return openStandardBadge(t);
 }
 
 /** 「标签说明」弹窗的数据源：顺序即卡片上的常见排列顺序 */

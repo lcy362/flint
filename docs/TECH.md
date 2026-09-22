@@ -373,8 +373,8 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - `components/common/EntityList.tsx`：`EntityItem` 契约 + 卡片 / 列表两种渲染；技能、预设、项目、Agent、仓库、来源、归集候选等一切列表型实体统一走它。`EntityItem.variant` 目前只有 `standard`（共享标准目录卡片换色突出），用于需要与同类卡片拉开视觉层级的特例。
 - `components/common/FilterBar.tsx`：搜索 + 维度筛选 + 重置 + 视图切换 + 徽标说明入口。
 - `components/skill/SkillBadges.tsx`：技能徽标（reason / store / state / 已接管 / 目录）与「标签说明」数据源，卡片与列表行共用。
-- `components/agent/agentBadges.tsx`：Agent 徽标（活跃 / 开源生态推荐目录 / 自定义 / 家族 / 未安装 / 预设）与说明数据源。「开源生态推荐目录」标在多 Agent 共用的目录本身（`~/.agents/skills`、`~/.config/agents/skills`），不对每个读取它的 Agent 重复「另读」。
-- `components/agent/OpenStandardTitle.tsx`：推荐目录卡片的主标题——写明「开源生态推荐目录」并用 info 按钮悬停说明「大部分 Agent 都读这个目录、推荐优先管理，只装给某一个 Agent 请用该 Agent 自己的目录」。该卡片 `variant: 'standard'` 换用 `--c-standard` 强调色、使用它的 Agent 名退到副标题弱化，并在**活跃 / 非活跃各自分组内排第一位**（活跃状态仍由右上角徽标表达，非活跃时整卡退回灰调）。
+- `components/agent/agentBadges.tsx`：Agent 徽标（活跃 / 开源生态推荐目录 / 自定义 / 家族 / 未安装 / 预设）与说明数据源。「开源生态推荐目录」只标在 `~/.agents/skills` 这个目录本身（判定用 `readsAgentsDir`，即后端 `shared === 'agents'`），不对每个读取它的 Agent 重复「另读」；`~/.config/agents/skills` 等其它共用目录不做任何标记。
+- `components/agent/OpenStandardTitle.tsx`：`~/.agents/skills` 卡片的主标题——写明「开源生态推荐目录」并用 info 按钮悬停说明「大部分 Agent 都读这个目录、推荐优先管理，只装给某一个 Agent 请用该 Agent 自己的目录」。该卡片 `variant: 'standard'` 换用 `--c-standard` 强调色、使用它的 Agent 名退到副标题弱化，并在**活跃 / 非活跃各自分组内排第一位**（活跃状态仍由右上角徽标表达，非活跃时整卡退回灰调）。
 - `components/agent/agentGroups.ts`：按解析后的目录把 Agent 归并成卡片模型（主 Agent 在前）。
 - `domain/cards.ts` ↔ `api/types.ts`：后端领域行 → `SkillCardView`，前端按 `reason / store / state` 决定徽标与可执行操作（`toggle / collect / delete / detail`）。
 - **状态列只回答「装没装、可不可用」**：`state` 只有 `on`（该技能就在本目录里，本 Agent / 项目可用——本工具分发的、自带目录、外部软链、共享目录读到的都算）与 `off`（本工具曾分发、现已移出分发名单）。「本工具管不管它、能不能在这里开关」不占状态列，由 `reason` 徽标表达（自带 / 外部软链 / 只读），前端用 `isToolManaged(item)` 判断是否渲染开关、是否进「安装方式」清单。
