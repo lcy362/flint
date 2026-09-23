@@ -123,11 +123,11 @@ When same-named skills come from multiple sources, deduplication keeps one copy;
 | Module | Capabilities |
 |------|------|
 | **Library** | Browse / search / filter all skills; `SKILL.md` preview, tag editing, provenance; register / edit own and third-party repositories; collect from agents, import from directories |
-| **Agents** | One card per actual skill directory (agents sharing a directory merge into one card and share one strategy); set active, override directories, manual sync, linked preset, per-skill toggles, per-skill symlink / copy |
-| **Presets** | A skill bundle (explicit members ∪ linked-tag matches); no enable switch — membership or tag changes deploy to active agents immediately |
-| **Projects** | Register a project + tags → the desired set derives automatically; bodies are copied into `.agents/skills` (git-committable) and shared by symlink into each agent's project directory; supports collect / takeover / push back to repository |
+| **Agents** | One card per actual skill directory (agents sharing a directory merge into one card and share one strategy); set active, override directories, one-click "Add from the vault" / delete, "Apply preset" one-shot deploy, per-skill symlink / copy |
+| **Presets** | A skill bundle (explicit members ∪ linked-tag matches); press "Apply preset" to deploy it into a directory once — later membership or tag changes need another apply |
+| **Projects** | Register a project + tags → tags act as the deployment policy; "Sync" copies the matches into `.agents/skills` (git-committable) and shares them by symlink into each agent's project directory; supports collect / takeover / push back to repository |
 | **Health** | 6-dimension checkup (sync / duplicates / broken links / config / repositories / projects) with one-click fixes (confirm before running) |
-| **Settings** | Interface language (English / Chinese), default install mode (symlink / copy), optional copy watcher, custom agents, log viewing / download / copy diagnostics |
+| **Settings** | Interface language (English / Chinese), default install mode (symlink / copy), custom agents, log viewing / download / copy diagnostics |
 
 ## First run
 
@@ -224,14 +224,19 @@ On the "Presets" page in the sidebar, click "New preset" and give it a name; ope
 
 Open an agent's detail page:
 
-- First **set the agent as active** (joins the active set and syncs immediately);
-- Then choose your new preset under "Linked preset".
+- Pick your new preset under "Linked preset";
+- Press **"Apply preset"** — every skill configured in that preset is deployed into the
+  directory once (symlink or copy, following the directory's install mode).
 
-From then on, whenever the preset gains or loses skills / linked tags, active agents linked to it receive the change immediately. Use the skills in projects or agents as needed.
+From then on the directory is the source of truth: whatever physically sits there is what the
+agent sees. Skills are placed in a single shot — **applying a preset and adding a skill are
+one-shot actions, and vault / preset changes never sync back on their own**; run
+"Apply preset" again to pick up later membership or tag changes. Use the skills in projects or
+agents as needed.
 
-> A preset is only delivered to agents **linked to it**: no link means no follow — presets are never applied globally. Agents without a linked preset still work — toggle skills individually on their detail pages.
+> A preset is only delivered to agents **linked to it**: no link means no follow — presets are never applied globally. An agent without a linked preset still works — use "Add from the vault" on its detail page to deploy skills one by one.
 >
-> Presets have no separate enable switch: membership or tag changes deploy immediately. Agents outside the active set do not follow automatically, but any manual action on their detail page reconciles immediately.
+> The active set is organisational: it marks a directory and scopes the Health check, rather than acting as a trigger. Directories outside it are labelled as such, and either way there is nothing to auto-sync.
 
 > At this point the minimal path "register repository → configure preset → deliver to agent" is complete, and your skills are live.
 
@@ -245,7 +250,7 @@ From then on, whenever the preset gains or loses skills / linked tags, active ag
 - **Page state lives in the URL**: top-level pages, detail views, and filter conditions are all encoded in the address bar, so refreshes and shared links restore the same view.
 - **Project-specific skills**: register a path + tags in the "Projects" module; matching skills enter the project's `.agents/`; changes can be "pushed back to the repository", and the project skill directory can be deployed into each agent's project-level directory.
 - **Health and fixes**: the "Health" page runs a 6-dimension checkup (sync / duplicates / broken links / config / repositories / projects) with one-click fixes (confirm before running).
-- **Sync strategy**: symlink by default; switch to copy per agent or per skill on the agent detail page. For incremental sync in copy mode, enable the watcher in "Settings" (off by default).
+- **Sync strategy**: symlink by default; switch to copy per agent or per skill on the agent detail page. A copy is independent, so after editing a skill in the vault re-run the deploy for that directory ("Apply preset" / "Add").
 - **Interface language**: switch between English and Chinese on the "Settings" page; the change applies to UI copy and to messages returned by the server, and the preference is remembered locally.
 
 ## Project structure

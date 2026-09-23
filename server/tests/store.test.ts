@@ -96,10 +96,9 @@ describe('ConfigStore.load（加载与迁移）', () => {
     expect(new ConfigStore(file).data.foreignSources[0].layout).toBe('nested');
   });
 
-  it('watchers 只有显式 true 才算开启（历史配置一律按关闭处理）', () => {
-    expect(new ConfigStore(writeConfig({ schemaVersion: 3, watchers: true })).data.watchers).toBe(true);
-    expect(new ConfigStore(writeConfig({ schemaVersion: 3, watchers: 'yes' })).data.watchers).toBe(false);
-    expect(new ConfigStore(writeConfig({ schemaVersion: 3 })).data.watchers).toBe(false);
+  it('历史配置里的 watchers 字段被忽略，不再出现在加载结果里', () => {
+    const cfg = new ConfigStore(writeConfig({ schemaVersion: 3, watchers: true })).data as Record<string, unknown>;
+    expect(cfg.watchers).toBeUndefined();
   });
 
   it('各集合字段缺失时补成空集合，不出现 undefined', () => {

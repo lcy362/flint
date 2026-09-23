@@ -84,7 +84,7 @@ export const zh: Record<MsgKey, string> = {
   'library.untaggedOnly': '只看未打标签',
   'library.legend.title': '技能卡片上的标签是什么意思？',
   'library.legend.intro':
-    '技能卡片上的徽标只说明**本工具对它做了什么**：行首开关表示是否在分发名单里，徽标说明它的来源与装入目录的形态。',
+    '技能卡片上的徽标只说明**本工具对它做了什么**：它的来源，以及在技能目录里的装入形态（软链 / 复制 / 自带目录）。',
   'library.empty.title': '技能库为空',
   'library.empty.hint': '尚未导入任何技能。先在下方登记自有仓库，再通过其「归集 / 导入」添加技能。',
   'library.detail': '详情',
@@ -270,14 +270,17 @@ export const zh: Record<MsgKey, string> = {
 
   /* ---------- badges: agents ---------- */
   'agentBadge.active': '活跃',
-  'agentBadge.active.title': '已加入活跃集合：预设、技能库的改动会自动同步到这个目录。',
+  'agentBadge.active.title':
+    '已加入活跃集合：作为标记与扫描范围（诊断只看活跃目录）；技能库 / 预设的改动不会自动同步进来，需在 Agent 详情页手动部署。',
   'agentBadge.inactive': '非活跃',
-  'agentBadge.inactive.title': '未加入活跃集合：改动不会自动跟随，需要在 Agent 详情页手动点「同步」。',
+  'agentBadge.inactive.title':
+    '未加入活跃集合：不作为活跃目录参与扫描；无论活跃与否都不会自动跟随，需在 Agent 详情页手动部署。',
   'agentBadge.preset': '预设 {name}',
   'agentBadge.presetLabel': '预设 名称',
-  'agentBadge.preset.title': '分发基准：这些 Agent 跟随同一个预设，预设里开启的技能都会装到该目录。',
+  'agentBadge.preset.title':
+    '该目录记忆的关联预设：点详情页的「应用预设」，可把预设里配置的技能一次性部署到此目录。',
   'agentBadge.noPreset': '未关联预设',
-  'agentBadge.noPreset.title': '没有分发基准：只装你在 Agent 详情页里单独开启的技能，不跟随任何预设。',
+  'agentBadge.noPreset.title': '未关联预设：这里没有来自预设的投放；可在 Agent 详情页从技能库逐个「添加」。',
   'agentBadge.family': '{family} 系列',
   'agentBadge.family.title': '同系列产品（如国际版 / 国内版）：技能目录各自独立，只是归在一起便于对照。',
   'agentBadge.custom': '自定义',
@@ -316,7 +319,7 @@ export const zh: Record<MsgKey, string> = {
   'agents.deleteConfirm': '确定删除自定义 Agent「{name}」？此操作不可撤销。',
   'agents.deletedCustom': '已删除自定义 Agent',
   'agents.failed': '失败',
-  'agents.presetReason.title': '由关联预设「{preset}」带入；在这里关掉可让它只对本目录不生效',
+  'agents.presetReason.title': '由关联预设「{preset}」部署到此目录；在这里删除可让它只从本目录移除',
   'agents.installModeAria': '{name} 安装方式',
   'agents.install.symlink': '软链（不复制文件，即时生效）',
   'agents.install.copy': '复制（独立副本，需重新同步）',
@@ -413,10 +416,10 @@ export const zh: Record<MsgKey, string> = {
   'presets.autoTag.title':
     '该技能因打有本预设的关联标签而自动纳入，不可直接关闭；去掉对应标签即可停用',
   'presets.deployed': '已分发',
-  'presets.deployed.title': '这个技能目录有 Agent 在活跃集合里：本预设的变更会自动同步进去',
+  'presets.deployed.title': '这个技能目录已在活跃集合里（仅作标记）：点它的详情页「应用预设」可把当前成员部署进去',
   'presets.notDeployed': '未分发',
   'presets.notDeployed.title':
-    '这个技能目录没有 Agent 在活跃集合里：本预设的变更不会自动同步，需到 Agent 详情页手动同步',
+    '这个技能目录没有 Agent 在活跃集合里：点它的详情页「应用预设」即可部署当前成员，本预设不会自动同步',
   'presets.detail.enabled': '已开启 {n} 个技能',
   'presets.detail.enabledWithAuto': '已开启 {n} 个技能（含 {auto} 个按标签纳入）',
   'presets.section.current': '当前状态',
@@ -428,11 +431,11 @@ export const zh: Record<MsgKey, string> = {
   'presets.enabled.empty.hint': '在下方「调整方式」里打开技能开关，或添加关联标签。',
   'presets.applied.section': '已应用的 Agent',
   'presets.applied.hint':
-    '在 Agent 详情页把「关联预设」选为本预设，它就会接收这些技能；共用同一个技能目录的 Agent 合为一行（它们共用同一套策略）。「已分发」表示这个目录会跟随本预设的变更自动同步；没有 Agent 活跃的目录不会自动跟随，可在「设置」页把它加入活跃集合，或在其详情页手动同步。',
+    '在 Agent 详情页把「关联预设」选为本预设，并在那里点「应用预设」，技能才会部署进该技能目录；共用同一个技能目录的 Agent 合为一行（它们共用同一套策略）。「已分发」只标记目录在活跃集合里——本预设的变更永远不会自动同步，增删成员或关联标签后需要再应用一次。',
   'presets.applied.empty.title': '暂无 Agent 应用此预设',
   'presets.applied.empty.hint': '在 Agent 详情页把「关联预设」选为本预设，技能才会分发到该 Agent。',
   'presets.section.adjust': '调整方式',
-  'presets.section.adjust.note': '改动立即生效并同步',
+  'presets.section.adjust.note': '改动立即保存；到 Agent 详情页点「应用预设」后才部署',
   'presets.byTag.section': '按标签纳入',
   'presets.byTag.badge.title': '经由关联标签自动纳入的技能数',
   'presets.byTag.hint':
@@ -548,9 +551,6 @@ export const zh: Record<MsgKey, string> = {
   'settings.defaultSync.hint': '新建 Agent 的默认值；可在各 Agent 详情页单独覆盖',
   'settings.sync.symlink': '软链（不复制文件，即时生效）',
   'settings.sync.copy': '复制（独立副本，需重新同步）',
-  'settings.watchers': '自动跟随技能库变化（可选，默认关闭）',
-  'settings.watchers.hint':
-    '开启后会监听技能库的变化，自动把改动同步给用「复制」的 Agent（复制出来的副本不会自己更新）。平时同步都由操作触发，不需要常驻进程。',
   'settings.section.language': '界面语言',
   'settings.language.label': '语言',
   'settings.language.hint': '同时作用于界面文案与服务端返回的消息；默认为英文。',

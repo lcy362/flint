@@ -106,8 +106,6 @@ export interface HubConfig {
   skillMeta: Record<string, SkillMeta>;
   projects: ProjectLink[];
   defaultSync: SyncMode;
-  /** 复制模式下的目录级 watcher 开关（SY-04）；PRD 要求可选、默认关闭 */
-  watchers: boolean;
 }
 
 export const emptyConfig = (): HubConfig => ({
@@ -121,5 +119,4 @@ export const emptyConfig = (): HubConfig => ({
   skillMeta: {},
   projects: [],
   defaultSync: 'symlink',
-  watchers: false,
 });

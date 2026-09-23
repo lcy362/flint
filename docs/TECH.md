@@ -11,7 +11,6 @@
 |----|------|
 | 前端 | React 18 + TypeScript + Vite 5（`client/`） |
 | 后端 | Node.js ≥ 20 + TypeScript + Express 4（`server/`） |
-| 文件监听 | chokidar（复制模式可选 watcher） |
 | YAML | `yaml`（解析 / 回写 `SKILL.md` frontmatter） |
 | 编排 | npm workspaces（`server` / `client`）+ concurrently |
 | 配置 | JSON 文件 `~/.flint/config.json`（可由 `FLINT_CONFIG` 覆盖） |
@@ -35,7 +34,7 @@ flint/  (local-skills-hub)
 ├─ docs/TECH.md            # 本文件（技术架构）
 ├─ server/
 │  ├─ src/
-│  │  ├─ index.ts          # 入口：装配 ConfigStore / Router / Watcher，resync
+│  │  ├─ index.ts          # 入口：装配 ConfigStore / Router，resync（自动同步已停用）
 │  │  ├─ api/routes.ts     # 全部 REST 路由
 │  │  ├─ config/           # types.ts / store.ts / defaults.ts
 │  │  ├─ core/             # 领域逻辑（见 §4）
@@ -73,7 +72,7 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 文件系统：仓库目录 · Agent 各技能目录 · 项目 .agents
 ```
 
-- **副作用全部在后端**：扫描、软链 / 复制、watcher、配置持久化都发生在 `server`；前端只通过 REST 读写。
+- **副作用全部在后端**：扫描、软链 / 复制、配置持久化都发生在 `server`；前端只通过 REST 读写。
 - **前后端类型契约各自维护**：后端 `config/types.ts` 定义持久化模型，前端 `api/types.ts` 定义视图契约；后端用 `domain/cards.ts` 把领域行翻译成前端可直接渲染的卡片。
 
 ---
@@ -98,7 +97,6 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 | `core/projects.ts` | 项目投放（复制 `.agents` 本体、写 `INDEX.md` 登记）、投放 Agent 反读、接管（副本）、回写仓库。 |
 | `core/diagnose.ts` | 6 维度只读体检。 |
 | `core/fix.ts` | 按诊断项 key 分发就地修复。 |
-| `core/watcher.ts` | 复制模式可选目录 watcher（`CopyWatcher`）。 |
 | `core/picker.ts` | 系统原生目录 / 文件选择器（macOS osascript / Windows PowerShell / Linux zenity·kdialog）。 |
 | `domain/cards.ts` | `AgentSkillRow` / `ProjectSkillRow` → `SkillCardView`（reason / store / state / actions）。 |
 
@@ -118,7 +116,6 @@ interface HubConfig {
   skillMeta: Record<string, SkillMeta>;   // 兼容标签 / 来源追溯 / 合并记录
   projects: ProjectLink[];
   defaultSync: 'symlink' | 'copy';
-  watchers: boolean;              // 复制模式 watcher 开关（默认 false）
 }
 ```
 
@@ -135,7 +132,7 @@ interface HubConfig {
 **迁移与清理**（`config/store.ts`）：
 - 旧 Agent key → 新 key（`claude`→`claude_code`、`trae-cn`→`trae_cn`、`qwen-code`→`qwen_code`、`kilo-code`→`kilo_code`、`roo-code`→`roo_code`、`gemini-cli`→`gemini_cli`）。
 - 剔除历史残留死字段：preset 的 `active`、agent 的 `mode`、agent / project 的 `explicitOn` / `explicitOff`（开关已取消，agent / 项目完全以实际目录为准）。
-- `watchers` 仅当显式为 `true` 才开启。
+- 历史 `watchers`（复制模式 watcher 开关）随 watcher 退役一并忽略，保存后自然消失。
 
 ### 5.1 数据资产：两个世界
 
@@ -272,7 +269,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/state` | 资产库聚合视图：activeAgents / skills / presets / repos / sources / customAgents / settings / home |
-| GET / PUT | `/settings` | 默认同步方式、watcher 开关 |
+| GET / PUT | `/settings` | 默认同步方式 |
 
 **技能**
 
@@ -343,9 +340,8 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | POST | `/filesystem/pick` · `/filesystem/pick-file` | 调起系统目录 / 文件选择器 |
 
 **请求入口包装**（`index.ts`）：
-- `onChanged` / `onConfigChanged`：仅刷新状态 / 重启 watcher；**不再触发任何自动同步或对账**。
+- `onChanged` / `onConfigChanged`：结构性变更后的通知钩子，当前入口未注入订阅者；**不触发任何自动同步或对账**。
 - `POST /sync`（手动显式）保留为唯一的手动全量同步入口。
-- 启动时也按开关判断是否启动 watcher（默认关闭）。
 
 ---
 

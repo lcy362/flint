@@ -65,7 +65,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     });
     next();
   });
-  // 结构性变更后自动同步活跃 agent，由入口注入实现
+  // 结构性变更后的通知钩子：由入口按需注入（自动同步链已停用，当前没有订阅者）
   const touch = () => opts?.onChanged?.();
   const touchConfig = () => opts?.onConfigChanged?.();
 
@@ -89,7 +89,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       repos: cfg.data.repos,
       sources: cfg.data.foreignSources,
       customAgents: cfg.data.customAgents,
-      settings: { defaultSync: cfg.data.defaultSync, watchers: cfg.data.watchers },
+      settings: { defaultSync: cfg.data.defaultSync },
       // 供前端把绝对路径显示成 ~ 开头的形式（如 ~/.agents/skills）
       home: os.homedir(),
     });
@@ -97,15 +97,14 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
 
   // ---- 全局设置（UI-03 设置） ----
   r.get('/settings', (_req, res) => {
-    res.json({ defaultSync: cfg.data.defaultSync, watchers: cfg.data.watchers });
+    res.json({ defaultSync: cfg.data.defaultSync });
   });
   r.put('/settings', (req, res) => {
     const body = req.body ?? {};
     if (body.defaultSync === 'symlink' || body.defaultSync === 'copy') cfg.data.defaultSync = body.defaultSync;
-    if (typeof body.watchers === 'boolean') cfg.data.watchers = body.watchers;
     cfg.save();
     touchConfig();
-    res.json({ defaultSync: cfg.data.defaultSync, watchers: cfg.data.watchers });
+    res.json({ defaultSync: cfg.data.defaultSync });
   });
 
   // 合并仲裁（IM-02）：同名多来源时保留指定来源

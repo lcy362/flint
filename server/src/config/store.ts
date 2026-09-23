@@ -68,6 +68,16 @@ function stripLegacyRepoLayout(repos: Repo[]): Repo[] {
   });
 }
 
+/**
+ * 顶层的 `watchers`（复制模式目录 watcher 开关）随自动投放链一并退役。
+ * 加载时剔除：留下一个已经不起作用的开关只会让用户以为它还有效（C5：只存有效决策）。
+ */
+function stripLegacyConfigFields(parsed: Partial<HubConfig>): Partial<HubConfig> {
+  const next = { ...parsed } as Partial<HubConfig> & { watchers?: unknown };
+  delete next.watchers;
+  return next;
+}
+
 export class ConfigStore {
   private cfg: HubConfig;
 
@@ -99,7 +109,7 @@ export class ConfigStore {
     }
     const cfg: HubConfig = {
       ...emptyConfig(),
-      ...parsed,
+      ...stripLegacyConfigFields(parsed),
       repos: stripLegacyRepoLayout(parsed.repos ?? []),
       foreignSources: parsed.foreignSources ?? [],
       customAgents: parsed.customAgents ?? [],
@@ -109,8 +119,6 @@ export class ConfigStore {
       skillMeta: parsed.skillMeta ?? {},
       projects: stripLegacyProjectFields(parsed.projects ?? []),
       defaultSync: parsed.defaultSync ?? emptyConfig().defaultSync,
-      // PRD：watcher 为可选项，历史配置一律按「关闭」处理
-      watchers: parsed.watchers === true,
     } as HubConfig;
     this.migrateAgentKeys(cfg);
     if (cfg.schemaVersion !== emptyConfig().schemaVersion) {

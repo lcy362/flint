@@ -88,7 +88,7 @@ export const en = {
   'library.untaggedOnly': 'Untagged only',
   'library.legend.title': 'What do the badges on a skill card mean?',
   'library.legend.intro':
-    'Badges on a skill card only describe **what this tool did with it**: the switch at the start of a row says whether it is on the distribution list, and the badges describe where it came from and how it is stored.',
+    'Badges on a skill card only describe **what this tool did with it**: where the skill came from, and how it is stored inside a skill directory (link / copy / own directory).',
   'library.empty.title': 'Library is empty',
   'library.empty.hint':
     'No skills imported yet. Register an own repository below, then add skills through "Collect" / "Import".',
@@ -283,17 +283,17 @@ export const en = {
   /* ---------- badges: agents ---------- */
   'agentBadge.active': 'Active',
   'agentBadge.active.title':
-    'In the active set: changes to presets and the vault are synced to this directory automatically.',
+    'In the active set: a marking and scan scope (the Health check looks at active directories). Vault and preset changes are not synced into this directory automatically — deploy them on the agent detail page.',
   'agentBadge.inactive': 'Inactive',
   'agentBadge.inactive.title':
-    'Not in the active set: changes do not follow automatically; use "Sync" on the agent detail page.',
+    'Not in the active set: it is not scanned as an active directory. Changes never follow automatically regardless — deploy them on the agent detail page.',
   'agentBadge.preset': 'Preset {name}',
   'agentBadge.presetLabel': 'Preset NAME',
   'agentBadge.preset.title':
-    'Distribution baseline: these agents follow the same preset, and every skill enabled in that preset is installed into this directory.',
+    'The linked preset this directory remembers: press "Apply preset" on the detail page to deploy the skills it configures into this directory once.',
   'agentBadge.noPreset': 'No preset',
   'agentBadge.noPreset.title':
-    'No distribution baseline: only skills you enable individually on the agent detail page are installed, following no preset.',
+    'No linked preset: nothing is deployed from a preset here; add skills from the vault one by one on the agent detail page instead.',
   'agentBadge.family': '{family} family',
   'agentBadge.family.title':
     'Products of the same family (e.g. international / China editions): their skill directories are independent, they are just grouped for comparison.',
@@ -335,7 +335,7 @@ export const en = {
   'agents.deletedCustom': 'Custom agent deleted',
   'agents.failed': 'Failed',
   'agents.presetReason.title':
-    'Brought in by the linked preset "{preset}"; switch it off here to exclude it for this directory only',
+    'Deployed into this directory by the linked preset "{preset}"; delete it here to remove it from this directory only',
   'agents.installModeAria': 'Install mode for {name}',
   'agents.install.symlink': 'Link (no file copy, takes effect immediately)',
   'agents.install.copy': 'Copy (independent copy, needs re-sync)',
@@ -436,10 +436,10 @@ export const en = {
   'presets.autoTag.title':
     'Automatically included because it carries a tag linked to this preset; not directly switchable. Remove the matching tag to disable it',
   'presets.deployed': 'Distributed',
-  'presets.deployed.title': 'This skill directory has an active agent, so changes to this preset sync in automatically',
+  'presets.deployed.title': 'This skill directory is marked as active: press "Apply preset" on its detail page to (re)deploy the current members',
   'presets.notDeployed': 'Not distributed',
   'presets.notDeployed.title':
-    'No agent in this skill directory is active, so changes to this preset do not sync automatically; sync manually on the agent detail page',
+    'No agent in this skill directory is in the active set: press "Apply preset" on its detail page to deploy the current members; nothing syncs automatically',
   'presets.detail.enabled': '{n} skills enabled',
   'presets.detail.enabledWithAuto': '{n} skills enabled (including {auto} included by tag)',
   'presets.section.current': 'Current state',
@@ -451,11 +451,11 @@ export const en = {
   'presets.enabled.empty.hint': 'Turn on skill switches under "How to adjust" below, or link tags.',
   'presets.applied.section': 'Agents using this preset',
   'presets.applied.hint':
-    'Pick this preset under "Linked preset" on an agent detail page and it will receive these skills; agents sharing one skill directory are merged into a row (they share the same settings). "Distributed" means that directory follows changes to this preset automatically; directories with no active agent do not, so add one to the active set on the Settings page or sync manually on its detail page.',
+    'Link this preset on an agent detail page and press "Apply preset" there to deploy the members into that skill directory; agents sharing one skill directory are merged into a row (they share the same settings). "Distributed" only marks directories in the active set — changes to this preset never sync on their own, so apply them again after editing members or linked tags.',
   'presets.applied.empty.title': 'No agent uses this preset',
   'presets.applied.empty.hint': 'Pick this preset under "Linked preset" on an agent detail page to distribute skills to it.',
   'presets.section.adjust': 'How to adjust',
-  'presets.section.adjust.note': 'Changes take effect and sync immediately',
+  'presets.section.adjust.note': 'Changes are saved immediately; deploy them with "Apply preset" on the agent detail page',
   'presets.byTag.section': 'Include by tag',
   'presets.byTag.badge.title': 'Skills included automatically through linked tags',
   'presets.byTag.hint':
@@ -572,9 +572,6 @@ export const en = {
   'settings.defaultSync.hint': 'Default for new agents; can be overridden on each agent detail page',
   'settings.sync.symlink': 'Link (no file copy, takes effect immediately)',
   'settings.sync.copy': 'Copy (independent copy, needs re-sync)',
-  'settings.watchers': 'Follow vault changes automatically (optional, off by default)',
-  'settings.watchers.hint':
-    'When enabled, vault changes are watched and pushed to agents using "copy" (copied files do not update themselves). Normal syncing is trigger-based and needs no long-running process.',
   'settings.section.language': 'Language',
   'settings.language.label': 'Interface language',
   'settings.language.hint':

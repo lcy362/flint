@@ -54,7 +54,7 @@ export interface AgentView {
   project?: string;
 }
 export interface CustomAgentView { key: string; name: string; globalDir: string; projectDir?: string; recursive?: boolean }
-export interface SettingsView { defaultSync: 'symlink' | 'copy'; watchers: boolean }
+export interface SettingsView { defaultSync: 'symlink' | 'copy' }
 export interface StateView {
   activeAgents: string[];
   skills: SkillView[];

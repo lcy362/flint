@@ -5,7 +5,6 @@ import express from 'express';
 import { ConfigStore } from './infra/config-store.js';
 import { makeRouter } from './api/routes.js';
 import { CONFIG_PATH } from './config/defaults.js';
-import { CopyWatcher } from './core/watcher.js';
 import { scanAll } from './core/scanner.js';
 import { syncActive } from './core/sync.js';
 import { log } from './infra/logger.js';
@@ -30,12 +29,12 @@ function resolveClientDist(): string | undefined {
 }
 
 // Per-request locale (from Accept-Language), applied to every user-facing message.
-// Out of band contexts (watcher / smoke) fall back to English, keeping logs English-only.
+// Out of band contexts (smoke / background tasks) fall back to English, keeping logs English-only.
 app.use((req, res, next) => {
   withLocale(resolveLocale(req.headers['accept-language']), () => next());
 });
 
-// 自动同步已停用（agent / 项目目录不再由 watcher / touch 触发部署）：
+// 自动同步已停用（agent / 项目目录只由显式操作部署，不再由后台事件触发）：
 // 预设只作一次性「应用」，由 Agent/项目页显式触发（syncActive / POST 部署）。
 // `resync` 保留给自动化任务按需调用（仅补齐、不删除，prune:false）。
 function resync(reason: string = 'manual') {
@@ -50,15 +49,9 @@ function resync(reason: string = 'manual') {
 // 供自动化任务触发的句柄（可通过环境变量约定，或后续注册任务模块）
 export { resync };
 
-// watcher 的变更回调不再部署（复制模式的增量同步在本模型下不再自动运行）
-const watcher = new CopyWatcher();
-const onChange = () => {};
-
-app.use('/api', makeRouter(cfg, {
-  // 结构性变更后仅刷新，不触发部署（自动同步链停用）
-  onChanged: () => { watcher.start(cfg, onChange); },
-  onConfigChanged: () => watcher.start(cfg, onChange),
-}));
+// 目录级 watcher 已退役：库扫描按请求现算（无缓存），自动投放链停用后它无事可做。
+// 需要后台任务时在这里注入 onChanged / onConfigChanged，或从外部调用上面导出的 resync。
+app.use('/api', makeRouter(cfg));
 
 // ---------- 静态托管前端构建产物（仅生产 / npx 运行；开发态跳过） ----------
 const clientDist = resolveClientDist();
@@ -78,9 +71,6 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   log.error('http', 'Unhandled request error', { message });
   res.status(500).json({ error: message });
 });
-
-// 启动时也需判断开关，默认关闭
-watcher.start(cfg, onChange);
 
 const server = app.listen(PORT, () => {
   log.info('server', 'Server started', {

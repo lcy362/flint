@@ -19,7 +19,7 @@ config.json ──(生成式：预设一次性应用 / 手动添加)──▶ �
 
 ## 2. 技术栈与命令
 
-- 后端：Node.js ≥ 20 + TypeScript + Express（`server/`），文件监听 chokidar，YAML 解析 `yaml`。
+- 后端：Node.js ≥ 20 + TypeScript + Express（`server/`），YAML 解析 `yaml`。
 - 前端：React 18 + TypeScript + Vite（`client/`）。
 - 依赖管理：npm workspaces（根 `package.json`）。
 
@@ -45,7 +45,7 @@ node bin/flint.mjs --no-open    # 按 npm 包的方式启一次（等价 npx fli
 
 ```
 server/src/
-├─ index.ts         # 入口：装配 ConfigStore / Router / CopyWatcher，resync（触发式同步）
+├─ index.ts         # 入口：装配 ConfigStore / Router，resync（供自动化任务按需调用）
 ├─ api/routes.ts    # 全部 REST 路由（唯一 HTTP 出口）
 ├─ config/          # types.ts（数据模型）/ store.ts（加载·迁移·保存）/ defaults.ts
 ├─ core/            # 领域逻辑：scan / sync / agents / tags / collect / takeover / projects / diagnose / fix ...

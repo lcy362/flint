@@ -4,7 +4,6 @@ import EntityList from '../components/common/EntityList';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
-import Switch from '../components/ui/Switch';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingBoundary from '../components/ui/LoadingBoundary';
 import { FieldSelect } from '../components/ui/Field';
@@ -14,7 +13,7 @@ import { useAsync } from '../state/useAsync';
 import { LANG_OPTIONS, useI18n } from '../i18n';
 
 /**
- * 设置：界面语言、默认同步策略、watcher 开关、自定义 Agent、日志。
+ * 设置：界面语言、默认同步策略、自定义 Agent、日志。
  *
  * 不含「活跃 Agent 集合」——它回答的是「这个目录要不要跟着自动同步」，
  * 属于 Agent 自身的决策，放在「智能体」页各 Agent 详情页里设置（单 Agent 粒度，就近可改）。
@@ -119,17 +118,6 @@ export default function Settings() {
                   <option value="symlink">{t('settings.sync.symlink')}</option>
                   <option value="copy">{t('settings.sync.copy')}</option>
                 </FieldSelect>
-              </div>
-              <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-                  <Switch checked={s.watchers} onChange={(v) => void putSetting({ watchers: v })} />
-                  <span style={{ color: 'var(--c-ink-2)', fontSize: 'var(--fs-13)' }}>
-                    {t('settings.watchers')}
-                  </span>
-                </label>
-                <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 'var(--sp-1)' }}>
-                  {t('settings.watchers.hint')}
-                </div>
               </div>
             </div>
           )}
