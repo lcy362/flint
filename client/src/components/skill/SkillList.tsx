@@ -1,6 +1,7 @@
 import type { SkillAction, SkillCardView } from '../../api/types';
 import EntityList, { type EntityItem, type EntityListProps } from '../common/EntityList';
 import Switch from '../ui/Switch';
+import Badge from '../ui/Badge';
 import { isOn, isToolManaged, skillBadges, stateBadge } from './SkillBadges';
 import SkillActions from './SkillActions';
 import { useI18n, type TFunc } from '../../i18n';
@@ -46,9 +47,11 @@ export function skillToEntity(
     id: item.id,
     title: item.title || item.name,
     sub: <span className="mono" title={sub}>{sub}</span>,
-    desc: item.description,
+    desc: item.bodyHit
+      ? <span className="body-hit" title={item.description}>{t('skillList.bodyHit')}: {item.bodyHit}</span>
+      : item.description,
     status: stateBadge(t, item),
-    badges: skillBadges(t, item),
+    badges: <>{skillBadges(t, item)}{item.bodyHit && <Badge tone="info" title={item.bodyHit}>{t('skillList.bodyHit')}</Badge>}</>,
     tags: (item.tags ?? []).map((tag) => ({ label: tag, onClick: onTag ? () => onTag(item, tag) : undefined })),
     meta: <>{item.source}</>,
     // 不在本工具分发范围内的项（本地自有目录 / 外部软链 / 共享目录读取）开关对它没有意义，

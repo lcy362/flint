@@ -70,7 +70,7 @@ export const en = {
   /* ---------- filters & list titles ---------- */
   'filter.source': 'Source',
   'filter.tags': 'Tags',
-  'filter.searchSkills': 'Search skill name / description',
+  'filter.searchSkills': 'Search by name / description / body',
   'filter.searchAgent': 'Search name / key / directory',
   'filter.searchAgentName': 'Search agent name / key',
   'list.filtered': 'Filtered',
@@ -97,6 +97,17 @@ export const en = {
   /* ---------- skill detail dialog ---------- */
   'skillDetail.origin': 'from {origin}',
   'skillDetail.newTag': 'New tag',
+  'skillDetail.stale': 'Update available',
+  'skillDetail.upToDate': 'Up to date',
+  'skillDetail.sourceKind': 'Source: {kind}',
+  'skillDetail.sourceGit': 'local git repo',
+  'skillDetail.sourceDir': 'external directory',
+  'skillDetail.kind.git': 'git repo',
+  'skillDetail.kind.dir': 'directory',
+  'skillDetail.takenAt': 'updated {date}',
+  'skillDetail.refresh': 'Refresh from source',
+  'skillDetail.refreshHint': 'Overwrite the repo copy with the source content (source is read-only and never modified)',
+  'skillDetail.refreshed': 'Refreshed from source',
   'skillDetail.files': 'Extra files: {files}',
 
   /* ---------- repositories ---------- */
@@ -130,6 +141,15 @@ export const en = {
   'repo.layout.flat': 'flat',
   'repo.flatOnly': 'flat only',
   'repo.flatOnlyHint': 'Own repositories are flat-only: skills are read from the direct subdirectories of {root}. To keep category folders, register that folder as a read-only source instead.',
+  'repo.hasUpdates': 'Updates available',
+  'repo.remoteHint': 'The remote has new commits, click Sync to pull',
+  'repo.check': 'Check',
+  'repo.checkHint': 'Query the remote for new commits (does not touch local files)',
+  'repo.upToDateChecked': 'Up to date',
+  'repo.sync': 'Sync',
+  'repo.syncHint': 'Run git pull to fetch remote updates',
+  'repo.synced': 'Synced from remote',
+  'repo.alreadyUpToDate': 'Up to date',
   'repo.root': 'root (optional)',
   'repo.rootHint': 'Skills root directory; defaults to <path>/skills',
   'repo.scanRoot': 'Skill scan root:',
@@ -616,6 +636,7 @@ export const en = {
 
   /* ---------- skill list ---------- */
   'skillList.toggleDisabledAria': '{name}: included automatically by a tag, cannot be switched off directly',
+  'skillList.bodyHit': 'Body match',
   'skillList.enableAria': 'Enable {name}',
   'skillList.disableAria': 'Disable {name}',
 

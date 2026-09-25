@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import { scanDir, detectLayoutAbs } from './scanner.js';
+import { recordIngestedSource } from './source-update.js';
 import { expandTilde, repoSkillRoot } from './agents.js';
 import { t } from '../i18n/index.js';
 
@@ -56,10 +57,11 @@ export function importDirs(cfg: ConfigStore, sourceDirs: string[], repoId?: stri
       if (fs.existsSync(dest)) { res.skipped.push(t('import.existsSkip', { name: s.name })); continue; }
       try {
         fs.cpSync(srcReal, dest, { recursive: true });
-        // 来源追溯（IM-04）
+        // 来源追溯（IM-04）+ 可追踪来源（F4）
         const meta = cfg.data.skillMeta[`${s.name}@${repo.id}`] ?? { tags: [] };
         meta.origin = abs;
         cfg.data.skillMeta[`${s.name}@${repo.id}`] = meta;
+        recordIngestedSource(cfg, repo.id, s.name, srcReal);
         res.imported.push(s.name);
       } catch (e) { res.skipped.push(t('import.failed', { name: s.name, msg: (e as Error).message })); }
     }

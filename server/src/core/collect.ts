@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import { Repo } from '../config/types.js';
 import { scanDir } from './scanner.js';
+import { recordIngestedSource } from './source-update.js';
 import { listAgents, repoSkillRoot, isLinkInRepo } from './agents.js';
 import { t } from '../i18n/index.js';
 
@@ -151,6 +152,8 @@ export function collectFromSource(
     }
     try {
       fs.cpSync(srcReal, dest, { recursive: true });
+      // 可追踪来源（F4）：记录来源（git/dir）与时间
+      recordIngestedSource(cfg, repo.id, s.name, srcReal);
       res.collected.push(s.name);
     } catch (e) { res.skipped.push(t('collect.copyFailed', { name: s.name, msg: (e as Error).message })); }
   }

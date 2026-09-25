@@ -80,12 +80,21 @@ export interface Preset {
   tags: string[];
 }
 
+/** 可追踪来源类型：git=本地 git 仓库内；dir=外部普通目录 */
+export type SourceKind = 'git' | 'dir';
+
 export interface SkillMeta {
   tags: string[];
   /** 合并仲裁后保留来源（POST /skills/merge 记录归属） */
   mergeSource?: string;
-  /** 来源追溯：收编自哪个 Agent / 外部目录（IM-04） */
+  /** 来源追溯：收编自哪个 Agent / 外部目录（IM-04，展示文案） */
   origin?: string;
+  /** 可更新来源的定位（本地 git 仓库根或外部源目录绝对路径）（F4） */
+  sourceRef?: string;
+  /** 来源类型（F4） */
+  sourceType?: SourceKind;
+  /** 收编 / 最近一次从来源更新的时间 ISO（F4） */
+  takenAt?: string;
 }
 
 export interface ProjectLink {

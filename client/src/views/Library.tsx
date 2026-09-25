@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillAction } from '../api/types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillAction, type SkillSearchResp, type SkillCardView, type RepoStatus } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
 import { skillBadgeLegend } from '../components/skill/SkillBadges';
@@ -69,20 +69,46 @@ export default function Library() {
   }, [data]);
 
   const cards = useMemo(() => (data?.skills ?? []).map((s) => skillViewToCard(s, [{ kind: 'detail', label: t('library.detail') }])), [data, t]);
+
+  // 正文搜索（F3）：关键词非空时按需拉取正文命中（防抖，避免连打触发多次请求）。
+  // bodyHits: id -> 命中上下文；null 表示尚未加载（此时仅正文命中的卡片稍后出现）。
+  const qTrim = q.trim().toLowerCase();
+  const [bodyHits, setBodyHits] = useState<Record<string, string> | null>(null);
+  useEffect(() => {
+    if (!qTrim) { setBodyHits(null); return; }
+    let alive = true;
+    const handle = setTimeout(async () => {
+      try {
+        const resp = await api<SkillSearchResp>(`/skills/search?q=${encodeURIComponent(qTrim)}`);
+        if (!alive) return;
+        setBodyHits(Object.fromEntries(resp.hits.map((h) => [h.id, h.context ?? ''])));
+      } catch {
+        if (alive) setBodyHits({});
+      }
+    }, 220);
+    return () => { alive = false; clearTimeout(handle); };
+  }, [qTrim]);
+
   const shown = useMemo(() => {
-    const kw = q.trim().toLowerCase();
-    return cards.filter((c) => {
-      // 多选条件之间为「或」：命中任一选中项即保留，与来源筛选保持一致
-      if (facets.length > 0 && !facets.some((tag) => c.tags.includes(tag))) return false;
-      if (srcs.length > 0 && !srcs.includes(c.source)) return false;
-      if (untaggedOnly && c.tags.length > 0) return false;
+    const kw = qTrim;
+    const out: SkillCardView[] = [];
+    for (const c of cards) {
+      if (facets.length > 0 && !facets.some((tag) => c.tags.includes(tag))) continue;
+      if (srcs.length > 0 && !srcs.includes(c.source)) continue;
+      if (untaggedOnly && c.tags.length > 0) continue;
       if (kw) {
         const hay = `${c.name} ${c.title ?? ''} ${c.description ?? ''}`.toLowerCase();
-        if (!hay.includes(kw)) return false;
+        const metaHit = hay.includes(kw);
+        const bodyCtx = bodyHits ? bodyHits[c.id] : undefined;
+        // 元数据命中 → 常规展示；仅正文命中 → 附上下文；都没命中 → 排除
+        if (!metaHit && bodyCtx === undefined) continue;
+        out.push(c.bodyHit ? c : { ...c, bodyHit: bodyCtx !== undefined ? bodyCtx : undefined });
+        continue;
       }
-      return true;
-    });
-  }, [cards, facets, q, srcs, untaggedOnly]);
+      out.push(c);
+    }
+    return out;
+  }, [cards, facets, qTrim, srcs, untaggedOnly, bodyHits]);
 
   // 来源默认值（自有仓库）不算筛选；仅当用户在地址栏显式筛过来源时，重置才出现
   const srcInUrl = route.query.get('src');
@@ -184,6 +210,50 @@ function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; source
   const [addFor, setAddFor] = useState<RepoView | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<WarehouseTarget | null>(null);
+  // F4·仓库级来源：并发拉取 git 状态（远端地址 / 领先落后）。
+  // mount 时不联网（fetch=false），只读本地引用秒回；「检查更新」才联网校验。
+  const [repoStatus, setRepoStatus] = useState<Record<string, RepoStatus>>({});
+  const refreshStatus = useCallback(async (rs: { id: string }[], fetch = false) => {
+    const m: Record<string, RepoStatus> = {};
+    await Promise.all(
+      rs.map(async (r) => {
+        try {
+          const st = await api<RepoStatus>(`/repos/${encodeURIComponent(r.id)}/status${fetch ? '?fetch=1' : ''}`);
+          if (st?.remote) m[r.id] = st;
+        } catch { /* 非 git 仓库 → 忽略 */ }
+      })
+    );
+    setRepoStatus(m);
+  }, []);
+  useEffect(() => { refreshStatus([...repos, ...sources]); }, [repos, sources, refreshStatus]);
+
+  // 显式「检查更新」：联网 fetch 一次（后端异步 + 短超时，绝不阻塞页面）
+  const [checking, setChecking] = useState<string | null>(null);
+  const checkUpdates = async (id: string) => {
+    setChecking(id);
+    try {
+      const st = await api<RepoStatus>(`/repos/${encodeURIComponent(id)}/status?fetch=1`);
+      if (st?.remote) setRepoStatus((prev) => ({ ...prev, [id]: st }));
+      toast.push(st?.behind ? t('repo.hasUpdates') : t('repo.upToDateChecked'), st?.behind ? 'good' : 'info');
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : String(e), 'bad');
+    } finally { setChecking(null); }
+  };
+
+  // 仓库同步：git pull 后重拉状态与目录列表
+  const [syncing, setSyncing] = useState<string | null>(null);
+  const syncRepo = async (id: string) => {
+    setSyncing(id);
+    try {
+      const out = await api<{ updated: boolean }>(`/repos/${encodeURIComponent(id)}/sync`, { method: 'POST' });
+      toast.push(out.updated ? t('repo.synced') : t('repo.alreadyUpToDate'), out.updated ? 'good' : 'info');
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : String(e), 'bad');
+    } finally {
+      setSyncing(null);
+      reload();
+    }
+  };
 
   const remove = async (kind: 'repos' | 'sources', id: string) => {
     try {
@@ -200,36 +270,84 @@ function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; source
   // 两类仓库统一展示：标题取名称（自有仓库以 id 兼作名称，第三方仓库用 name、缺省回落 id），
   // 副标题取磁盘路径，类型与状态一律用徽标区分。
   const items: EntityItem[] = [
-    ...repos.map((repo) => ({
-      id: `repo:${repo.id}`,
-      title: repo.name || repo.id,
-      sub: <span className="mono">{repo.path}{repo.root ? ` · ${repo.root}` : ''}</span>,
-      status: <Badge tone="info">{t('repo.kind.own')}</Badge>,
-      // 自有仓库恒为扁平、没有布局可配：徽标把这条契约显式说出来，避免用户以为漏配了
-      badges: <Badge tone="neutral">{t('repo.flatOnly')}</Badge>,
-      actions: (
-        <>
-          <Button size="sm" variant="ghost" onClick={() => setEditTarget({ ...repo, kind: 'repo' })}>{t('common.edit')}</Button>
-          <Button size="sm" variant="primary" onClick={() => setAddFor(repo)} title={t('repo.addSkills.hint')}>
-            {t('repo.addSkills')}
-          </Button>
-          <Button size="sm" variant="danger" loading={busy === `del:${repo.id}`} onClick={() => remove('repos', repo.id)}>{t('common.delete')}</Button>
-        </>
-      ),
-    })),
-    ...sources.map((s) => ({
-      id: `source:${s.id}`,
-      title: s.name || s.id,
-      sub: <span className="mono">{s.path}</span>,
-      status: <Badge tone="accent">{t('repo.kind.third')}</Badge>,
-      badges: <Badge tone="neutral">{s.layout}</Badge>,
-      actions: (
-        <>
-          <Button size="sm" variant="ghost" onClick={() => setEditTarget({ ...s, kind: 'source' })}>{t('common.edit')}</Button>
-          <Button size="sm" variant="danger" loading={busy === `del:${s.id}`} onClick={() => remove('sources', s.id)}>{t('common.delete')}</Button>
-        </>
-      ),
-    })),
+    ...repos.map((repo) => {
+      const st = repoStatus[repo.id];
+      return {
+        id: `repo:${repo.id}`,
+        title: repo.name || repo.id,
+        sub: (
+          <span className="mono">
+            {repo.path}{repo.root ? ` · ${repo.root}` : ''}
+            {st?.remote && <><br/><span className="repo-remote">{st.remote}</span></>}
+          </span>
+        ),
+        status: <Badge tone="info">{t('repo.kind.own')}</Badge>,
+        // 自有仓库恒为扁平、没有布局可配：徽标把这条契约显式说出来，避免用户以为漏配了
+        badges: (
+          <>
+            {st?.behind != null && st.behind > 0 && (
+              <Badge tone="warn" title={t('repo.remoteHint')}>{t('repo.hasUpdates')}</Badge>
+            )}
+            <Badge tone="neutral">{t('repo.flatOnly')}</Badge>
+          </>
+        ),
+        actions: (
+          <>
+            {st?.remote && (
+              <>
+                <Button size="sm" variant="ghost" loading={checking === repo.id} onClick={() => checkUpdates(repo.id)} title={t('repo.checkHint')}>
+                  {t('repo.check')}
+                </Button>
+                <Button size="sm" variant="ghost" loading={syncing === repo.id} onClick={() => syncRepo(repo.id)} title={t('repo.syncHint')}>
+                  {t('repo.sync')}
+                </Button>
+              </>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setEditTarget({ ...repo, kind: 'repo' })}>{t('common.edit')}</Button>
+            <Button size="sm" variant="primary" onClick={() => setAddFor(repo)} title={t('repo.addSkills.hint')}>
+              {t('repo.addSkills')}
+            </Button>
+            <Button size="sm" variant="danger" loading={busy === `del:${repo.id}`} onClick={() => remove('repos', repo.id)}>{t('common.delete')}</Button>
+          </>
+        ),
+      };
+    }),
+    ...sources.map((s) => {
+      const st = repoStatus[s.id];
+      return {
+        id: `source:${s.id}`,
+        title: s.name || s.id,
+        sub: (
+          <span className="mono">
+            {s.path}
+            {st?.remote && <><br/><span className="repo-remote">{st.remote}</span></>}
+          </span>
+        ),
+        status: <Badge tone="accent">{t('repo.kind.third')}</Badge>,
+        badges: (
+          <>
+            {st?.behind != null && st.behind > 0 && <Badge tone="warn" title={t('repo.remoteHint')}>{t('repo.hasUpdates')}</Badge>}
+            <Badge tone="neutral">{s.layout}</Badge>
+          </>
+        ),
+        actions: (
+          <>
+            {st?.remote && (
+              <>
+                <Button size="sm" variant="ghost" loading={checking === s.id} onClick={() => checkUpdates(s.id)} title={t('repo.checkHint')}>
+                  {t('repo.check')}
+                </Button>
+                <Button size="sm" variant="ghost" loading={syncing === s.id} onClick={() => syncRepo(s.id)} title={t('repo.syncHint')}>
+                  {t('repo.sync')}
+                </Button>
+              </>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setEditTarget({ ...s, kind: 'source' })}>{t('common.edit')}</Button>
+            <Button size="sm" variant="danger" loading={busy === `del:${s.id}`} onClick={() => remove('sources', s.id)}>{t('common.delete')}</Button>
+          </>
+        ),
+      };
+    }),
   ];
 
   return (
@@ -869,6 +987,8 @@ function SkillDetailModal({
   const [newTag, setNewTag] = useState('');
   const [saving, setSaving] = useState(false);
   const [syncedId, setSyncedId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const toast = useToast();
 
   if (id && skill && syncedId !== id) {
     setSyncedId(id);
@@ -877,7 +997,7 @@ function SkillDetailModal({
   }
   if (!id && syncedId !== null) setSyncedId(null);
 
-  const { data: content, loading } = useAsync<SkillContent>(
+  const { data: content, loading, reload: reloadContent } = useAsync<SkillContent>(
     () => (id ? api(`/skills/${encodeURIComponent(id)}/content`) : Promise.resolve(null as unknown as SkillContent)),
     [id]
   );
@@ -908,6 +1028,19 @@ function SkillDetailModal({
     } finally { setSaving(false); }
   };
 
+  /** F4：从已登记来源刷新仓库副本（用户显式动作）。成功后在当前弹窗内重拉内容。 */
+  const refreshFromSource = async () => {
+    if (!skill || !content?.provenance) return;
+    setRefreshing(true);
+    try {
+      await api(`/skills/${encodeURIComponent(skill.id)}/refresh`, { method: 'POST' });
+      toast.push(t('skillDetail.refreshed'), 'good');
+      reloadContent();
+    } catch (e) {
+      toast.push(String((e as Error)?.message ?? e), 'bad');
+    } finally { setRefreshing(false); }
+  };
+
   return (
     <Modal
       open={!!id}
@@ -922,7 +1055,27 @@ function SkillDetailModal({
             <Badge tone="info">{skill.source}</Badge>
             {skill.version && <Badge tone="neutral">v{skill.version}</Badge>}
             {skill.origin && <Badge tone="accent" title={t('badge.reason.own.title')}>{t('skillDetail.origin', { origin: skill.origin })}</Badge>}
+            {content?.provenance && (
+              <>
+                {content.provenance.takenAt && (
+                  <Badge tone="neutral" title={content.provenance.sourceType === 'git' ? t('skillDetail.sourceGit') : t('skillDetail.sourceDir')}>
+                    {t('skillDetail.sourceKind', { kind: content.provenance.sourceType === 'git' ? t('skillDetail.kind.git') : t('skillDetail.kind.dir') })}
+                  </Badge>
+                )}
+              </>
+            )}
           </div>
+          {content?.provenance && content.provenance.takenAt && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+              <span className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{content.provenance.sourceRef}</span>
+              <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
+                {t('skillDetail.takenAt', { date: new Date(content.provenance.takenAt).toLocaleString() })}
+              </span>
+              <Button size="sm" variant="primary" loading={refreshing} onClick={refreshFromSource} title={t('skillDetail.refreshHint')}>
+                {t('skillDetail.refresh')}
+              </Button>
+            </div>
+          )}
           <div className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{skill.dir}</div>
           {skill.description && <p style={{ color: 'var(--c-ink-2)' }}>{skill.description}</p>}
 

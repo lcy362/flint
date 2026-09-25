@@ -66,7 +66,7 @@ export const zh: Record<MsgKey, string> = {
   /* ---------- filters & list titles ---------- */
   'filter.source': '来源',
   'filter.tags': '标签',
-  'filter.searchSkills': '搜索技能名称 / 描述',
+  'filter.searchSkills': '搜索技能名称 / 描述 / 正文',
   'filter.searchAgent': '搜索名称 / key / 目录',
   'filter.searchAgentName': '搜索 Agent 名称 / key',
   'list.filtered': '筛选结果',
@@ -92,6 +92,17 @@ export const zh: Record<MsgKey, string> = {
   /* ---------- skill detail dialog ---------- */
   'skillDetail.origin': '来自 {origin}',
   'skillDetail.newTag': '新标签',
+  'skillDetail.stale': '来源有更新',
+  'skillDetail.upToDate': '已是最新',
+  'skillDetail.sourceKind': '来源：{kind}',
+  'skillDetail.sourceGit': '本地 git 仓库',
+  'skillDetail.sourceDir': '外部目录',
+  'skillDetail.kind.git': 'git 仓库',
+  'skillDetail.kind.dir': '目录',
+  'skillDetail.takenAt': '更新于 {date}',
+  'skillDetail.refresh': '从来源更新',
+  'skillDetail.refreshHint': '把仓库副本覆盖为来源当前内容（来源只读，不会改动来源）',
+  'skillDetail.refreshed': '已从来源更新',
   'skillDetail.files': '附带文件：{files}',
 
   /* ---------- repositories ---------- */
@@ -124,6 +135,15 @@ export const zh: Record<MsgKey, string> = {
   'repo.layout.flat': 'flat（扁平）',
   'repo.flatOnly': '仅扁平',
   'repo.flatOnlyHint': '自有仓库恒为扁平：只识别 {root} 的直接子目录。想保留分类目录，请把该目录登记为只读来源。',
+  'repo.hasUpdates': '来源有更新',
+  'repo.remoteHint': '远端有新提交，可点「同步」拉取',
+  'repo.check': '检查更新',
+  'repo.checkHint': '联网查询远端是否有新提交（不影响本地文件）',
+  'repo.upToDateChecked': '已是最新',
+  'repo.sync': '同步',
+  'repo.syncHint': '直接 git pull 拉取远端更新',
+  'repo.synced': '已从远端同步',
+  'repo.alreadyUpToDate': '已是最新',
   'repo.root': 'root（可选）',
   'repo.rootHint': 'skills 根目录，缺省 <路径>/skills',
   'repo.scanRoot': '技能扫描根：',
@@ -596,6 +616,7 @@ export const zh: Record<MsgKey, string> = {
   'skillList.toggleDisabledAria': '{name}：由标签自动纳入，不可直接关闭',
   'skillList.enableAria': '启用 {name}',
   'skillList.disableAria': '停用 {name}',
+  'skillList.bodyHit': '正文命中',
 
   /* ---------- path fields ---------- */
   'path.pick': '选择…',

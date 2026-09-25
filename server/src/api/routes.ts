@@ -18,6 +18,9 @@ import { syncActive, diffSync, deployOne, copySkill } from '../core/sync.js';
 import { collectCandidates } from '../core/integrate.js';
 import { addProject, syncProject, projectSkillRows, projectAddable, deployedAgents, pushProjectToRepo, takeoverProjectSkill, writeIndex, INDEX_NAME } from '../core/projects.js';
 import { readSkill } from '../core/skill.js';
+import { bodyText, firstHitContext, type BodyCache } from '../core/skillindex.js';
+import { detectStale, refreshSkill } from '../core/source-update.js';
+import { pullRepo, repoStatus } from '../core/repo-sync.js';
 import { importDirs, previewImportDirs } from '../core/import.js';
 import { previewCollect, collectAgentSkill, previewCollectSource, collectFromSource, projectCollectSource } from '../core/collect.js';
 import { migrateTagsToFrontmatter } from '../core/repo-tags.js';
@@ -123,7 +126,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   });
 
   // SKILL.md 预览（UI-03 资产库详情）
-  r.get('/skills/:id/content', (req, res) => {
+  r.get('/skills/:id/content', async (req, res) => {
     const id = decodeURIComponent(req.params.id);
     const sk = library().skills.find((s) => s.id === id);
     if (!sk) return res.status(404).json({ error: 'skill not found' });
@@ -131,7 +134,41 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (!fs.existsSync(file)) return res.status(404).json({ error: 'SKILL.md not found' });
     let files: string[] = [];
     try { files = fs.readdirSync(sk.dir).filter((f) => f !== 'SKILL.md'); } catch { /* ignore */ }
-    res.json({ id: sk.id, dir: sk.dir, content: fs.readFileSync(file, 'utf-8'), files });
+    // F4：来源/版本可追踪信息（仅已登记来源才返回）。detectStale 异步执行 git，不阻塞事件循环。
+    const meta = cfg.data.skillMeta[id];
+    const provenance = meta?.sourceRef
+      ? { sourceRef: meta.sourceRef, sourceType: meta.sourceType, takenAt: meta.takenAt, stale: await detectStale(sk.dir, meta) }
+      : undefined;
+    res.json({ id: sk.id, dir: sk.dir, content: fs.readFileSync(file, 'utf-8'), files, provenance });
+  });
+
+  // F4：从已登记来源刷新仓库副本（用户显式动作，来源只读、不联网）
+  r.post('/skills/:id/refresh', (req, res) => {
+    const id = decodeURIComponent(req.params.id);
+    const sk = library().skills.find((s) => s.id === id);
+    if (!sk) return res.status(404).json({ error: 'skill not found' });
+    const repo = cfg.data.repos.find((r) => r.id === sk.source);
+    if (!repo) return res.status(400).json({ error: 'skill is not in a managed repo' });
+    const out = refreshSkill(cfg, repo, sk.name);
+    if (!out.refreshed) return res.status(400).json({ error: `refresh failed: ${out.reason ?? 'unknown'}` });
+    touch();
+    res.json({ refreshed: true });
+  });
+
+  // 技能正文全文搜索（F3）：关键词命中 SKILL.md 正文，返回命中 id 与上下文样例。
+  // 与 /state 分工：/state 只给元数据；正文检索按需走这里，不加重冷启动。
+  r.get('/skills/search', (req, res) => {
+    const q = String(req.query.q ?? '').trim().toLowerCase();
+    if (!q) return res.json({ hits: [] });
+    const cache = new Map<string, BodyCache>();
+    const hits: { id: string; context?: string }[] = [];
+    for (const s of library().skills) {
+      const body = bodyText(s.dir, cache);
+      if (!body.includes(q)) continue;
+      const context = firstHitContext(body, q);
+      hits.push({ id: s.id, ...(context ? { context } : {}) });
+    }
+    res.json({ hits });
   });
 
   // ---- filesystem ----
@@ -163,6 +200,27 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     cfg.save();
     touch();
     res.json(cfg.data.repos);
+  });
+  // F4·仓库级来源（git remote）：读取远端地址与相对远端的领先/落后提交数。
+  // 自有仓库与第三方仓库（foreignSources）均可；非 git 仓库 / 无 remote 返回 404。
+  r.get('/repos/:id/status', async (req, res) => {
+    const target = cfg.data.repos.find((x) => x.id === req.params.id)
+      ?? cfg.data.foreignSources.find((x) => x.id === req.params.id);
+    if (!target) return res.status(404).json({ error: 'repo not found' });
+    // fetch=1 才联网校验（短超时）；默认读本地引用秒回，避免拖慢/卡死
+    const st = await repoStatus(target.path, { fetch: req.query.fetch === '1' });
+    if (!st) return res.status(404).json({ error: 'repo has no git remote' });
+    res.json(st);
+  });
+  // F4·仓库级同步：直接 git pull（自有/第三方均可），成功后触发 resync 让变更生效
+  r.post('/repos/:id/sync', async (req, res) => {
+    const target = cfg.data.repos.find((x) => x.id === req.params.id)
+      ?? cfg.data.foreignSources.find((x) => x.id === req.params.id);
+    if (!target) return res.status(404).json({ error: 'repo not found' });
+    const out = await pullRepo(target.path);
+    if (!out.ok) return res.status(500).json({ error: out.message || 'pull failed' });
+    touch();
+    res.json(out);
   });
   // 编辑自有仓库：改名称 / 路径 / 布局 / root；kind='source' 时转为第三方仓库。
   // 转换保持 id 不变，故 skill 标识 name@id 与标签、preset、项目引用均不受影响。

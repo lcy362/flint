@@ -111,6 +111,8 @@ export interface SkillCardView {
   dirLabel?: string;
   dirTitle?: string;
   actions: SkillAction[];
+  /** 客户端派生：仅由正文命中搜索词时置位，值为命中上下文（F3） */
+  bodyHit?: string;
 }
 export interface AddableSkill { id: string; name: string; repo: string }
 export interface AgentSkillsResp { skills: SkillCardView[]; addable: AddableSkill[]; active: boolean }
@@ -152,7 +154,16 @@ export interface AgentCollectItem {
 }
 export interface AgentCollectPreview { agentKey: string; agentName: string; installedDir: string; items: AgentCollectItem[] }
 export interface CollectResult { collected: string[]; skipped: string[] }
-export interface SkillContent { id: string; dir: string; content: string; files: string[] }
+/** F4：来源/版本可追踪信息（仅已登记来源时返回） */
+export interface SkillProvenance { sourceRef: string; sourceType?: 'git' | 'dir'; takenAt?: string; stale?: boolean }
+export interface SkillContent { id: string; dir: string; content: string; files: string[]; provenance?: SkillProvenance }
+
+/* ---------- 正文搜索（F3） ---------- */
+export interface SkillSearchHit { id: string; context?: string }
+export interface SkillSearchResp { hits: SkillSearchHit[] }
+
+/* ---------- 仓库级 git 来源 / 同步（F4） ---------- */
+export interface RepoStatus { remote: string; ahead?: number; behind?: number; checked?: boolean }
 
 /* ---------- 日志 ---------- */
 export interface LogView { path: string; size: number; lines: string[]; version: string }
