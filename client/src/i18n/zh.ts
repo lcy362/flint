@@ -169,6 +169,19 @@ export const zh: Record<MsgKey, string> = {
   'repo.rootHint': 'skills 根目录，缺省 <路径>/skills',
   'repo.scanRoot': '技能扫描根：',
   'repo.idPathRequired': '标识与路径必填',
+  /* ---------- 登记预览（确认后才落库） ---------- */
+  'repo.preview': '预览',
+  'repo.preview.title': '识别预览',
+  'repo.preview.back': '返回修改',
+  'repo.preview.confirm': '确认登记',
+  'repo.preview.count': '识别到 {n} 个技能',
+  'repo.preview.none': '未识别到任何技能：请确认目录存在且含 SKILL.md',
+  'repo.preview.missing': '目录不存在：{root}',
+  'repo.preview.id': '登记标识：{id}',
+  'repo.preview.idFromDir': '未填标识，将使用目录名 {id}',
+  'repo.preview.idTaken': '标识 {id} 已被其他仓库使用，请更换',
+  'repo.preview.needId': '无法从目录名推导合法标识，请在上方手动填写标识 ID',
+  'repo.idDefaultHint': '留空则使用目录名（预览时校验）',
 
   /* ---------- collect wizard (library page) ---------- */
   'collect.taken.fully': '已接管',

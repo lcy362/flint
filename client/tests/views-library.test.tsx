@@ -172,21 +172,53 @@ describe('Library 技能库', () => {
     await waitFor(() => expect(screen.getByText('no remote')).toBeTruthy());
   });
 
-  it('注册自有仓库并提示；缺 id/路径时提示必填', async () => {
-    baseRoutes({ 'POST /repos': () => [], 'PUT /repos/1': () => ({ repos: [], sources: [] }) });
+  it('登记自有仓库：先预览确认才落库，未预览时不能提交', async () => {
+    baseRoutes({
+      'POST /repos/preview': () => ({
+        id: 'team', idFromDir: false, exists: true, scanRoot: '/tmp/team/skills',
+        layout: 'flat', skillCount: 1, skills: [{ name: 'alpha', description: 'Alpha skill' }],
+      }),
+      'POST /repos': () => [],
+    });
     render(wrap(<Library />));
     await waitFor(() => expect(screen.getByText('My Repo')).toBeTruthy());
     await userEvent.click(screen.getByRole('button', { name: 'Register repository' }));
-    const submit = await screen.findByRole('button', { name: 'Register' });
-    // 未填必填项时提交按钮禁用
-    expect(submit).toBeDisabled();
+    // 第一步只有「预览」：路径未填时禁用
+    const previewBtn = await screen.findByRole('button', { name: 'Preview' });
+    expect(previewBtn).toBeDisabled();
 
-    await userEvent.type(screen.getByLabelText(/^ID/), 'team');
     await userEvent.type(screen.getByPlaceholderText('/path/to/library'), '/tmp/team');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Register' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Register' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Preview' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    // 预览面板展示识别结果（布局 / 技能数 / 技能名）
+    await waitFor(() => expect(screen.getByText('Detection preview')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('1 skills detected')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Register ID: team/)).toBeTruthy());
+    // 预览后出现「确认登记」，此时 POST /repos 尚未发生
+    const confirm = await screen.findByRole('button', { name: 'Confirm registration' });
+    expect(apiMock.mock.calls.some((c) => c[0] === '/repos' && c[1]?.method === 'POST')).toBe(false);
+    await userEvent.click(confirm);
     await waitFor(() => expect(screen.getByText(/Own repository team registered/)).toBeTruthy());
     expect(apiMock.mock.calls.some((c) => c[0] === '/repos' && c[1]?.method === 'POST')).toBe(true);
+  });
+
+  it('登记预览：id 不合法（目录名推导失败）时必须手动输入才能确认', async () => {
+    baseRoutes({
+      'POST /repos/preview': () => ({
+        id: '', idFromDir: false, idIssue: 'Invalid ID :', exists: true, scanRoot: '/tmp/我的 库',
+        layout: 'flat', skillCount: 0, skills: [],
+      }),
+      'POST /repos': () => [],
+    });
+    render(wrap(<Library />));
+    await waitFor(() => expect(screen.getByText('My Repo')).toBeTruthy());
+    await userEvent.click(screen.getByRole('button', { name: 'Register repository' }));
+    await userEvent.type(screen.getByPlaceholderText('/path/to/library'), '/tmp/我的 库');
+    await userEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    const confirm = await screen.findByRole('button', { name: 'Confirm registration' });
+    // id 校验失败：确认按钮禁用，提示用户手动输入
+    await waitFor(() => expect(confirm).toBeDisabled());
+    expect(screen.getByText('Invalid ID :')).toBeTruthy();
   });
 
   it('编辑仓库：改名并切换类型为第三方来源', async () => {

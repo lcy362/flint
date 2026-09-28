@@ -156,6 +156,24 @@ export interface ProjectSyncResult { project: string; copied: string[]; removed:
 export interface ProjectPushResult { project: string; repo: string; pushed: string[]; skipped: string[]; errors: string[] }
 
 /* ---------- 导入/收集/合并 ---------- */
+/* ---------- 登记预览（登记确认前先看识别结果） ---------- */
+export interface RegisterPreview {
+  /** 最终将采用的 id（用户输入优先，否则目录名推导） */
+  id: string;
+  /** id 是否取自目录名缺省（用户未填写） */
+  idFromDir: boolean;
+  /** id 校验失败原因；非空时必须由用户输入合法 id */
+  idIssue?: string;
+  /** 与已登记仓库 / 来源重名 */
+  idTaken?: boolean;
+  exists: boolean;
+  /** 实际扫描根（自有 = root ?? <path>/skills；第三方 = path 本身） */
+  scanRoot: string;
+  layout: string;
+  skillCount: number;
+  skills: { name: string; description?: string }[];
+}
+
 export interface ImportPreviewItem { source: string; layout: string; count: number; tags?: string[]; error?: string }
 export interface ImportResult { source: string; imported: string[]; skipped: string[] }
 export interface MergeCandidate { name: string; source: string; sourceLabel: string; description?: string; version?: string; dir: string; existing: boolean }

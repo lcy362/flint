@@ -175,6 +175,19 @@ export const en = {
   'repo.rootHint': 'Skills root directory; defaults to <path>/skills',
   'repo.scanRoot': 'Skill scan root:',
   'repo.idPathRequired': 'ID and path are required',
+  /* ---------- register preview (confirm before persisting) ---------- */
+  'repo.preview': 'Preview',
+  'repo.preview.title': 'Detection preview',
+  'repo.preview.back': 'Back to edit',
+  'repo.preview.confirm': 'Confirm registration',
+  'repo.preview.count': '{n} skills detected',
+  'repo.preview.none': 'No skills detected: make sure the directory exists and contains SKILL.md',
+  'repo.preview.missing': 'Directory does not exist: {root}',
+  'repo.preview.id': 'Register ID: {id}',
+  'repo.preview.idFromDir': 'No ID given; the directory name {id} will be used',
+  'repo.preview.idTaken': 'ID {id} is already taken by another repository; choose another',
+  'repo.preview.needId': 'Cannot derive a valid ID from the directory name; enter the ID manually above',
+  'repo.idDefaultHint': 'Leave empty to use the directory name (validated on preview)',
 
   /* ---------- collect wizard (library page) ---------- */
   'collect.taken.fully': 'Taken over',

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus } from '../api/types';
+import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
 import SkillDistributeModal from '../components/skill/SkillDistributeModal';
@@ -882,18 +882,47 @@ function WarehouseModal({
   const [d, setD] = useState<WarehouseDraft>(EMPTY_DRAFT);
   const [busy, setBusy] = useState(false);
   const [wasOpen, setWasOpen] = useState(false);
+  // 登记预览（仅新建）：先看识别结果，确认后才落库；编辑不预览
+  const [preview, setPreview] = useState<RegisterPreview | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
 
   // 每次打开时载入目标值（新建则重置），避免残留上一次的输入
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) setD(draftFrom(target));
+    if (open) { setD(draftFrom(target)); setPreview(null); }
   }
 
-  const set = <K extends keyof WarehouseDraft>(k: K, v: WarehouseDraft[K]) =>
+  // 表单一有改动，旧预览即失效，须重新预览
+  const set = <K extends keyof WarehouseDraft>(k: K, v: WarehouseDraft[K]) => {
     setD((prev) => ({ ...prev, [k]: v }));
+    setPreview(null);
+  };
+
+  const runPreview = async () => {
+    if (!d.path.trim()) return;
+    setPreviewBusy(true);
+    try {
+      const p = await api<RegisterPreview>('/repos/preview', {
+        method: 'POST',
+        body: JSON.stringify({
+          kind: d.kind,
+          path: d.path.trim(),
+          root: d.kind === 'repo' ? (d.root.trim() || undefined) : undefined,
+          layout: d.kind === 'source' ? d.layout : undefined,
+          id: d.id.trim() || undefined,
+        }),
+      });
+      setPreview(p);
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : String(e), 'bad');
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
 
   const switchKind = (k: 'repo' | 'source') => {
     if (k === d.kind) return;
+    setPreview(null); // 布局 / 扫描根都会变，旧预览作废
     setD((prev) => {
       const p = prev.path.trim();
       if (k === 'source') {
@@ -909,8 +938,9 @@ function WarehouseModal({
   const submit = async () => {
     setBusy(true);
     try {
-      if (!d.id.trim() || !d.path.trim()) throw new Error(t('repo.idPathRequired'));
-      const id = d.id.trim();
+      // 登记时允许 id 缺省取目录名（预览已校验合法性与重名）；编辑必须显式 id
+      const id = d.id.trim() || (editing ? '' : preview?.id || '');
+      if (!id || !d.path.trim()) throw new Error(t('repo.idPathRequired'));
       if (d.kind === 'repo') {
         // 自有仓库不接受 layout：恒为扁平，按分类组织请走第三方来源或标签
         const body = { name: d.name.trim() || undefined, path: d.path.trim(), root: d.root.trim() || undefined };
@@ -942,6 +972,9 @@ function WarehouseModal({
     }
   };
 
+  // 登记阻塞：id 不合法或重名时必须先解决；编辑不受预览约束
+  const previewBlocked = !editing && !!preview && (!!preview.idIssue || !!preview.idTaken);
+
   const kindLabel = (k: 'repo' | 'source') => (k === 'repo' ? t('repo.kind.own') : t('repo.kind.third'));
 
   return (
@@ -950,12 +983,31 @@ function WarehouseModal({
       title={editing ? t('repo.editTitle') : t('repo.registerTitle')}
       onClose={onClose}
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
-          <Button variant="primary" loading={busy} disabled={!d.id.trim() || !d.path.trim()} onClick={submit}>
-            {editing ? t('common.save') : t('common.register')}
-          </Button>
-        </>
+        editing ? (
+          <>
+            <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button variant="primary" loading={busy} disabled={!d.id.trim() || !d.path.trim()} onClick={submit}>
+              {t('common.save')}
+            </Button>
+          </>
+        ) : preview ? (
+          // 第二步：预览确认后才能登记
+          <>
+            <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button variant="ghost" onClick={() => setPreview(null)}>{t('repo.preview.back')}</Button>
+            <Button variant="primary" loading={busy} disabled={previewBlocked} onClick={submit}>
+              {t('repo.preview.confirm')}
+            </Button>
+          </>
+        ) : (
+          // 第一步：只预览不落库
+          <>
+            <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button variant="primary" loading={previewBusy} disabled={!d.path.trim()} onClick={runPreview}>
+              {t('repo.preview')}
+            </Button>
+          </>
+        )
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
@@ -981,7 +1033,7 @@ function WarehouseModal({
             placeholder="my-lib"
             value={d.id}
             readOnly={editing}
-            hint={editing ? t('repo.idHint') : undefined}
+            hint={editing ? t('repo.idHint') : t('repo.idDefaultHint')}
             onChange={(e) => set('id', e.target.value)}
           />
           <FieldInput
@@ -1020,6 +1072,62 @@ function WarehouseModal({
         <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
           {t('repo.scanRoot')} <span className="mono">{scanRoot}</span>
         </div>
+
+        {/* 登记预览面板：识别到的布局 / 技能清单 / 缺省 id，确认后才落库 */}
+        {!editing && preview && (
+          <div
+            style={{
+              border: '1px solid var(--c-line)',
+              borderRadius: 'var(--rd-md)',
+              padding: 'var(--sp-3)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--sp-2)',
+            }}
+          >
+            <div style={{ fontWeight: 600 }}>{t('repo.preview.title')}</div>
+            {!preview.exists && (
+              <div style={{ color: 'var(--c-bad)', fontSize: 'var(--fs-12)' }}>
+                {t('repo.preview.missing', { root: preview.scanRoot })}
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+              <Badge tone="neutral">{preview.layout}</Badge>
+              <Badge tone="accent">{t('repo.preview.count', { n: preview.skillCount })}</Badge>
+            </div>
+            {preview.exists && preview.skillCount === 0 && (
+              <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{t('repo.preview.none')}</div>
+            )}
+            {preview.skills.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: 180, overflowY: 'auto' }}>
+                {preview.skills.map((s) => (
+                  <div key={s.name} style={{ fontSize: 'var(--fs-12)', lineHeight: 1.6 }}>
+                    <span style={{ fontWeight: 600 }}>{s.name}</span>
+                    {s.description && (
+                      <span style={{ color: 'var(--c-ink-3)' }}>
+                        {' — '}{s.description.length > 80 ? `${s.description.slice(0, 80)}…` : s.description}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ fontSize: 'var(--fs-12)', lineHeight: 1.6 }}>
+              {preview.idIssue ? (
+                <>
+                  <span style={{ color: 'var(--c-bad)' }}>{preview.idIssue}</span>
+                  <span style={{ color: 'var(--c-ink-3)' }}> {t('repo.preview.needId')}</span>
+                </>
+              ) : preview.idTaken ? (
+                <span style={{ color: 'var(--c-bad)' }}>{t('repo.preview.idTaken', { id: preview.id })}</span>
+              ) : preview.idFromDir ? (
+                <span style={{ color: 'var(--c-ink-3)' }}>{t('repo.preview.idFromDir', { id: preview.id })}</span>
+              ) : (
+                <span>{t('repo.preview.id', { id: preview.id })}</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );

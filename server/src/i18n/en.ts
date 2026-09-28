@@ -103,6 +103,9 @@ export const en = {
   'api.repoExists': 'Repository {id} already exists',
   'api.agentExists': 'Agent {key} already exists',
   'api.noInstalledAgent': 'No installed agent to collect from',
+  /* ---------- register preview ---------- */
+  'register.idEmpty': 'ID must not be empty',
+  'register.idInvalid': 'Invalid ID {id}: only letters, digits and . _ - are allowed, starting with a letter or digit',
   'api.skillEnabled': 'This skill is currently enabled; disable it first (remove it from the desired set) before deleting',
   'api.onlyRealDir': 'Only real skill directories inside the project directory can be deleted',
   'api.noRepoToCollect': 'No repository to collect into',

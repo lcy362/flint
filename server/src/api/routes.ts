@@ -11,6 +11,7 @@ import {
   setPrimary, pruneAliasStrategies, isManagedLinkTarget,
 } from '../core/agents.js';
 import { scanAll, detectLayoutAbs } from '../core/scanner.js';
+import { previewRegister, idIssue, type RegisterPreviewInput } from '../core/register.js';
 import * as presets from '../core/presets.js';
 import * as active from '../core/active.js';
 import { syncActive, diffSync, deployOne, copySkill } from '../core/sync.js';
@@ -245,9 +246,19 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
 
   // ---- repos ----
   r.get('/repos', (_req, res) => res.json(cfg.data.repos));
+  // 登记预览：只扫描不落库。返回扫描根 / 布局 / 技能清单与缺省 id（缺省取目录名，不合法须用户输入）
+  r.post('/repos/preview', (req, res) => {
+    const body = req.body as Partial<RegisterPreviewInput>;
+    if (!body?.path) return res.status(400).json({ error: 'path required' });
+    try { res.json(previewRegister(cfg, body as RegisterPreviewInput)); }
+    catch (e) { res.status(500).json({ error: (e as Error).message }); }
+  });
   r.post('/repos', (req, res) => {
     const { id, path: p, root } = req.body as Partial<Repo>;
     if (!id || !p) return res.status(400).json({ error: 'id/path required' });
+    // 兜底校验：前端预览已拦一道，直接调 API 也不能绕过 id 规则
+    const issue = idIssue(id);
+    if (issue) return res.status(400).json({ error: issue });
     if (cfg.data.repos.some((x) => x.id === id)) return res.status(409).json({ error: t('api.repoExists', { id }) });
     // 自有仓库恒为扁平：没有 layout 可配。按分类组织请用第三方来源（只读）或标签。
     cfg.data.repos.push({ id, path: p, root: root ?? undefined });
@@ -398,6 +409,12 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   r.post('/sources', (req, res) => {
     const body = req.body as ForeignSource;
     if (!body.id || !body.path) return res.status(400).json({ error: 'id/path required' });
+    // 兜底校验：id 规则与重名检查（仓库 / 来源共用一个 id 命名空间）
+    const issue = idIssue(body.id);
+    if (issue) return res.status(400).json({ error: issue });
+    if (cfg.data.repos.some((x) => x.id === body.id) || cfg.data.foreignSources.some((x) => x.id === body.id)) {
+      return res.status(409).json({ error: t('api.repoExists', { id: body.id }) });
+    }
     cfg.data.foreignSources.push({
       ...body,
       layout: body.layout ?? 'auto',
