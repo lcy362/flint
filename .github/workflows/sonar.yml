@@ -1,0 +1,80 @@
+name: SonarQube
+
+# SonarCloud 的 CI 扫描：先跑出两包覆盖率，再带着 lcov 扫一次。
+#
+# 为什么必须是 CI 扫描：SonarCloud 的「自动分析」无法导入测试覆盖率
+# （两者互斥），而覆盖率是质量门条件之一（新代码 ≥ 80%）。因此本仓库在
+# SonarCloud 侧关闭了自动分析，改由这里导入覆盖率后扫描。
+#
+# 覆盖率作业必须先成功：缺一方 lcov 时该包所有文件会被判为未覆盖，
+# 面板上会出现一次并不存在的覆盖率暴跌，所以 scan 用 needs 卡住。
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonar-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: Coverage (server + client)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --ignore-scripts
+
+      # 两个包各自产出 <pkg>/coverage/lcov.info（脚本会把 SF 路径改写成仓库根相对）
+      - name: Server coverage
+        run: npm run test:coverage -w server
+
+      - name: Client coverage
+        run: npm run test:coverage -w client
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v6
+        with:
+          name: sonar-coverage
+          path: |
+            server/coverage/
+            client/coverage/
+          retention-days: 1
+
+  scan:
+    name: Scan
+    runs-on: ubuntu-latest
+    needs: coverage
+    # fork PR 拿不到 SONAR_TOKEN：跳过扫描而不是让作业失败
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # Sonar 读 git blame 给问题定位「新代码」，浅克隆会让它两眼一抹黑
+          fetch-depth: 0
+
+      - name: Download coverage
+        uses: actions/download-artifact@v6
+        with:
+          name: sonar-coverage
+
+      - name: Scan
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          # SonarQube Cloud 是扫描 action 的默认宿主，故无需 SONAR_HOST_URL；
+          # token 是 sandgrid 组织在 sonarcloud.io 上的用户令牌
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

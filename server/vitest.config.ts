@@ -18,5 +18,15 @@ export default defineConfig({
     env: { FLINT_CONFIG: sandboxConfig },
     // 通过用例的 console 输出不打印，避免日志淹没有效信息；失败用例仍完整输出
     silent: 'passed-only',
+    coverage: {
+      provider: 'v8',
+      // lcov 供 SonarQube 读取（server/coverage/lcov.info）
+      reporter: ['text-summary', 'lcov'],
+      reportsDirectory: 'coverage',
+      include: ['src/**/*.ts'],
+      // 与 sonar-project.properties 的 sonar.coverage.exclusions 保持一致：
+      // 这些是进程入口 / 装配层，由 smoke 与手工验证覆盖，不进单测口径
+      exclude: ['src/index.ts'],
+    },
   },
 });

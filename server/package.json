@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage && node ../scripts/prefix-lcov.mjs coverage/lcov.info server/",
     "smoke": "tsx smoke.ts"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.2.7",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^3.2.4"

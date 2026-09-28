@@ -24,7 +24,8 @@
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w server && npm run build -w client",
     "start": "npm run start -w server",
-    "test": "npm run test -w server",
+    "test": "npm run test -w server && npm run test -w client",
+    "test:coverage": "npm run test:coverage -w server && npm run test:coverage -w client",
     "test:watch": "npm run test:watch -w server"
   },
   "dependencies": {
