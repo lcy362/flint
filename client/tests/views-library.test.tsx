@@ -60,6 +60,11 @@ function baseRoutes(overrides: Record<string, Handler> = {}) {
     }),
     'PATCH /skills/alpha%40default': () => ({ tags: ['x', 'y'] }),
     'POST /skills/alpha%40default/refresh': () => ({ refreshed: true }),
+    // 详情里的「分发到 Agent」面板：默认一个目录、里面还没有这个技能
+    '/agents': () => [
+      { key: 'codex', name: 'Codex', globalDir: '/tmp/agents/skills', installed: true, primaryKey: 'codex', sync: 'symlink', active: true, sharedWith: [] },
+    ],
+    '/agents/codex/skills': () => ({ skills: [], addable: [], active: true }),
     '/repos/default/status': () => ({ remote: 'git@x:y', behind: 2 }),
     'POST /repos/default/sync': () => ({ updated: true }),
     'DELETE /repos/default': () => [],
@@ -288,6 +293,63 @@ describe('技能详情', () => {
     await waitFor(() => expect(apiMock.mock.calls.some((c) => c[1]?.method === 'PATCH')).toBe(true));
     const patch = apiMock.mock.calls.find((c) => c[1]?.method === 'PATCH');
     expect(JSON.parse(patch?.[1]?.body as string)).toEqual({ tags: [] });
+  });
+
+  it('详情里可分发到 Agent，并显示该技能已落在哪些目录', async () => {
+    // 目录内容随分发 / 移除变化，面板据此重读「已分发到哪些 Agent」
+    let installed = false;
+    const deployedRow = {
+      id: 'alpha@default', name: 'alpha', source: 'default', dir: '/tmp/agents/skills/alpha',
+      tags: [], reason: 'manual', store: 'symlink', actions: [],
+    };
+    openDetail({
+      '/agents/codex/skills': () => ({ skills: installed ? [deployedRow] : [], addable: [], active: true }),
+      'POST /agents/codex/skills': () => { installed = true; return { agent: 'codex', created: ['alpha'], removed: [], failed: [] }; },
+      'DELETE /agents/codex/skills/alpha': () => { installed = false; return { ok: true, removed: 'alpha' }; },
+    });
+    await waitFor(() => expect(screen.getByText('2 skills in total')).toBeTruthy());
+    await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
+    await waitFor(() => expect(screen.getByText('# alpha')).toBeTruthy());
+
+    const modal = screen.getByText('# alpha').closest('.modal') as HTMLElement;
+    const toggle = await within(modal).findByRole('switch', { name: 'Distribute alpha to Codex' });
+    expect(toggle).not.toBeChecked();
+    expect(within(modal).getByText('Not distributed')).toBeTruthy();
+    // 目录路径按 home 压成 ~ 展示
+    expect(within(modal).getByText('~/agents/skills')).toBeTruthy();
+
+    await userEvent.click(toggle);
+    await waitFor(() => expect(screen.getByText('Distributed to Codex')).toBeTruthy());
+    const post = apiMock.mock.calls.find((c) => c[0] === '/agents/codex/skills' && c[1]?.method === 'POST');
+    expect(JSON.parse(post?.[1]?.body as string)).toEqual({ id: 'alpha@default' });
+
+    // 重读后该目录显示「已分发」，再关闭开关走删除接口
+    const on = await within(modal).findByRole('switch', { name: 'Distribute alpha to Codex' });
+    expect(on).toBeChecked();
+    await waitFor(() => expect(within(modal).getByText('Distributed')).toBeTruthy());
+    await userEvent.click(on);
+    await waitFor(() => expect(screen.getByText('Removed from Codex')).toBeTruthy());
+    expect(apiMock.mock.calls.some((c) => c[0] === '/agents/codex/skills/alpha' && c[1]?.method === 'DELETE')).toBe(true);
+  });
+
+  it('目录里是 Agent 自带技能时开关禁用并说明原因', async () => {
+    openDetail({
+      '/agents/codex/skills': () => ({
+        skills: [{
+          id: 'alpha@default', name: 'alpha', source: 'default', dir: '/tmp/agents/skills/alpha',
+          tags: [], reason: 'own', store: 'own', actions: [],
+        }],
+        addable: [], active: true,
+      }),
+    });
+    await waitFor(() => expect(screen.getByText('2 skills in total')).toBeTruthy());
+    await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
+    await waitFor(() => expect(screen.getByText('# alpha')).toBeTruthy());
+
+    const modal = screen.getByText('# alpha').closest('.modal') as HTMLElement;
+    await waitFor(() => expect(within(modal).getByText('Distributed')).toBeTruthy());
+    expect(within(modal).getByRole('switch', { name: 'Distribute alpha to Codex' })).toBeDisabled();
+    expect(within(modal).getByText('Agent-owned directory')).toBeTruthy();
   });
 
   it('详情弹窗可关闭', async () => {

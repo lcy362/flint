@@ -379,6 +379,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - **乐观更新 + 串行提交**：Agent 页「直接添加技能」与预设页「按技能纳入」用本地草稿即时反映，请求进串行队列，避免连点时后发先至。
 - **路径输入统一可调起系统选择器**：`components/ui/PathField.tsx`（`PathField` / `PathListField`）；相对路径（如 `.my-tool/skills`）因选择器无法表达，保留纯文本输入并注明。
 - **技能详情**：`views/Library.tsx` 的 `SkillDetailModal` 提供元数据 + 标签编辑 + 来源追溯 + `SKILL.md` 预览。
+- **分发入口可以有多处，逻辑只有一套**：技能详情里的「分发到 Agent」（`components/skill/SkillDistributePanel.tsx`）只是把 Agent 详情页的两个接口搬到技能视角——`POST /agents/:key/skills`（添加）与 `DELETE /agents/:key/skills/:name`（移除），按目录读实际内容反查「已分发到哪些 Agent」（只读共享目录读到的行不计入）。界面按「一个实际目录一行」归并（`groupAgentsByDir`），Agent 自带目录与外部软链的开关置灰（后端不会删）。
 
 ---
 

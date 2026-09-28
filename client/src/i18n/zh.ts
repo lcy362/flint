@@ -104,6 +104,21 @@ export const zh: Record<MsgKey, string> = {
   'skillDetail.refreshHint': '把仓库副本覆盖为来源当前内容（来源只读，不会改动来源）',
   'skillDetail.refreshed': '已从来源更新',
   'skillDetail.files': '附带文件：{files}',
+  'skillDetail.distribute': '分发到 Agent',
+  'skillDetail.distribute.count': '{n} / {total} 个目录',
+  'skillDetail.distribute.count.title': '该技能当前落在多少个 Agent 技能目录里',
+  'skillDetail.distribute.hint':
+    '按「实际技能目录」列出（同一个目录的多个 Agent 共用一份实体）。打开开关＝把该技能部署进这个目录；关闭＝只移除**本工具部署的软链 / 副本**，Agent 自带目录与外部软链不会被删。',
+  'skillDetail.distribute.installed': '已分发',
+  'skillDetail.distribute.missing': '未分发',
+  'skillDetail.distribute.toggleAria': '把 {name} 分发到 {agent}',
+  'skillDetail.distribute.added': '已分发到 {agent}',
+  'skillDetail.distribute.removed': '已从 {agent} 移除',
+  'skillDetail.distribute.locked.own': 'Agent 自带目录',
+  'skillDetail.distribute.locked.own.title': '该目录里是 Agent 自带的真实目录，本工具不会删除',
+  'skillDetail.distribute.locked.external': '外部软链',
+  'skillDetail.distribute.locked.external.title': '该软链由其它工具创建，本工具不会删除',
+  'skillDetail.distribute.empty': '没有可用的 Agent 技能目录',
 
   /* ---------- repositories ---------- */
   'repo.kind.own': '自有仓库',

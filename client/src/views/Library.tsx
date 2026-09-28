@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
+import SkillDistributePanel from '../components/skill/SkillDistributePanel';
 import { skillBadgeLegend } from '../components/skill/SkillBadges';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
 import BadgeLegend from '../components/common/BadgeLegend';
@@ -233,8 +234,10 @@ export default function Library() {
         id={detailTarget ? detailId : null}
         skill={detailTarget}
         allTags={allTags}
+        home={data?.home}
         onClose={closeDetail}
         onSaved={() => { closeDetail(); reload(); }}
+        onChanged={reload}
       />
     </>
   );
@@ -1012,14 +1015,20 @@ function SkillDetailModal({
   id,
   skill,
   allTags,
+  home,
   onClose,
   onSaved,
+  onChanged,
 }: Readonly<{
   id: string | null;
   skill?: StateView['skills'][number];
   allTags: string[];
+  /** 用户主目录：分发面板把绝对路径压成 ~ 展示 */
+  home?: string;
   onClose: () => void;
   onSaved: () => void;
+  /** 分发 / 移除后刷新技能库（面板内部自行重读，这里只同步外层状态） */
+  onChanged: () => void;
 }>) {
   const { t } = useI18n();
   const [tags, setTags] = useState<string[]>([]);
@@ -1136,6 +1145,9 @@ function SkillDetailModal({
               />
             </div>
           </div>
+
+          {/* 分发到 Agent：把 Agent 详情页的「直接添加 / 删除」搬到技能视角，顺便回答「装到了哪些 Agent」 */}
+          <SkillDistributePanel skill={skill} home={home} onChanged={onChanged} />
 
           <div>
             <span className="field-label">SKILL.md</span>
