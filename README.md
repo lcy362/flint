@@ -155,26 +155,30 @@ npm install -g flint-skills-hub
 flint
 ```
 
+The command returns as soon as the server answers: Flint keeps running in the background and the CLI exits (same model as `./start.sh`). It prints the URL, the PID, and the log paths — stop the instance with `kill <PID>`. Running it again while an instance is up just re-opens the page instead of starting a second one.
+
 Then open **http://localhost:8787**. Both commands are registered, with the same flags below.
 
 #### 2. Command reference
 
 | Command | Description |
 | --- | --- |
-| `flint` | Start the server and open the browser — the only overarching command |
+| `flint` | Start in the background and open the browser — the only overarching command |
 | `flint -p 9000` / `flint --port 9000` | Listen on a custom port (default `8787`, or `$PORT`) |
-| `flint -r` / `flint --restart` | Force-stop whatever already occupies the port, then start fresh |
+| `flint -y` / `flint -r` / `flint --restart` | Force restart: stop the running Flint instance, then start fresh |
 | `flint --no-open` | Start without auto-opening the browser (CI / headless) |
+| `flint -f` / `flint --foreground` | Run in the foreground (log to the console) instead of detaching |
 | `flint -h` / `flint --help` | Show usage |
 | `flint -v` / `flint --version` | Print the installed version |
 
-Same flags work with `flint-skills-hub` (e.g. `flint-skills-hub -r`).
+Same flags work with `flint-skills-hub` (e.g. `flint-skills-hub -y`). Ports held by other programs are never killed — Flint reports them and exits; only `-y` restarts a Flint instance.
 
 | Environment variable | Meaning |
 | --- | --- |
 | `PORT` | Same as `--port` |
 | `FLINT_CONFIG` | Config file path (default `~/.flint/config.json`) |
 | `FLINT_CLIENT_DIST` | Override the built Web UI directory |
+| `FLINT_LOGS` | Log directory (default `<config dir>/logs`, i.e. `~/.flint/logs`) |
 
 **Updating, and checking the version:**
 
@@ -184,7 +188,7 @@ flint -v                                   # print the version in use
 npm ls -g --depth=0 flint-skills-hub       # what is installed globally
 ```
 
-- A running instance is **not hot-updated** — stop it (`Ctrl+C`) and start it again.
+- A running instance is **not hot-updated** — restart it with `flint -y` (or `kill <PID>` from the startup output, then start again).
 - `npx` caches packages, so ask for the version explicitly: `npx flint-skills-hub@latest`.
 - Running from a source checkout instead: `git pull && npm install && npm run build`.
 - Updating never touches your data — `~/.flint/config.json`, your repositories and your agents' skill directories are left as they are.
@@ -284,7 +288,7 @@ npm run build          # Build: server (tsc) + client (vite build)
 npm start              # Start the backend from build output
 npm test               # Unit tests (vitest)
 npm run smoke -w server  # End-to-end smoke
-node bin/flint.mjs --no-open   # Run the CLI the way the npm package does
+node bin/flint.mjs --no-open   # Run the CLI the way the npm package does (background)
 ```
 
 - Ports: backend `8787` (`PORT`), frontend `5173` (`CLIENT_PORT`); Vite proxies `/api` to the backend.

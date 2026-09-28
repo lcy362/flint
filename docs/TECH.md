@@ -19,6 +19,7 @@
 - 根 `package.json` 定义 workspaces 与脚本：`dev`（并行起前后端）、`dev:server`、`dev:client`、`build`、`start`。
 - 端口：后端默认 `8787`（`PORT`），前端默认 `5173`（`CLIENT_PORT`）；Vite 将 `/api` 代理到后端。
 - `start.sh`：一键启动（检查 Node ≥ 20 / 依赖 / 端口占用 → 后台启动 → 等待就绪 → 打开浏览器 → 脚本退出，进程驻留后台）。支持 `-y`（强制重启）、`-h`；日志写 `~/.flint/logs/`。
+- `bin/flint.mjs`（`flint` / `flint-skills-hub`）：npm 包入口，与 `start.sh` 同一套启动模型——detached 拉起 `server/dist/index.js`，日志落 `~/.flint/logs/flint.log`，等就绪后开浏览器并退出，服务驻留后台；PID 记录在 `~/.flint/logs/flint.pid` 用于识别「已在运行」。参数：`-p/--port`、`-y/--yes`、`-r/--restart`（同 `-y`）、`--no-open`、`-f/--foreground`（同进程前台运行，用于排错 / 容器）、`-h`、`-v`。端口被他人进程占用时只报错不杀；`-y` 只重启 Flint 自己的实例。
 
 ---
 

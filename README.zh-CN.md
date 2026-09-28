@@ -109,7 +109,9 @@ npm install -g flint-skills-hub
 flint
 ```
 
-然后打开 **http://localhost:8787**。常用参数：`flint --port 9000`、`flint --no-open`、`flint --help`。
+命令会在服务就绪后立刻返回：Flint 常驻后台，CLI 自己退出（与 `./start.sh` 同一套行为），并打印访问地址、进程 PID 与日志路径；用 `kill <PID>` 停止实例。实例已在运行时再次执行只会重新打开页面，不会重复启动。
+
+然后打开 **http://localhost:8787**。常用参数：`flint --port 9000`、`flint -y`（强制重启）、`flint --no-open`、`flint --foreground`（前台排错）、`flint --help`。他人进程占用的端口不会被杀，只报错退出。
 
 **更新与查看版本：**
 
@@ -119,7 +121,7 @@ flint -v                                   # 打印当前生效的版本
 npm ls -g --depth=0 flint-skills-hub       # 查看全局装的是哪个版本
 ```
 
-- **正在运行的实例不会热更新** —— 先 `Ctrl+C` 停掉，再重新启动。
+- **正在运行的实例不会热更新** —— 用 `flint -y` 重启（或按启动输出里的 `kill <PID>` 停掉后重开）。
 - `npx` 会缓存包，必须显式指定版本：`npx flint-skills-hub@latest`。
 - 从源码跑的话：`git pull && npm install && npm run build`。
 - 更新**不动你的数据** —— `~/.flint/config.json`、仓库目录、各 Agent 技能目录都原样保留。
@@ -214,7 +216,7 @@ npm run build          # 构建：server (tsc) + client (vite build)
 npm start              # 以构建产物启动后端
 npm test               # 单元测试（vitest）
 npm run smoke -w server  # 端到端 smoke
-node bin/flint.mjs --no-open   # 按 npm 包的方式启动一次
+node bin/flint.mjs --no-open   # 按 npm 包的方式启动一次（后台驻留）
 ```
 
 - 端口：后端 `8787`（`PORT`），前端 `5173`（`CLIENT_PORT`）；Vite 将 `/api` 代理到后端。

@@ -34,7 +34,7 @@ npm start            # 以构建产物启动后端
 npm test             # 单元测试（vitest，server workspace）
 npm run test:watch -w server    # 单测 watch 模式
 npm run smoke -w server         # 端到端 smoke（临时目录，不碰本机真实目录）
-node bin/flint.mjs --no-open    # 按 npm 包的方式启一次（等价 npx flint-skills-hub）
+node bin/flint.mjs --no-open    # 按 npm 包的方式启一次（后台驻留，等价 npx flint-skills-hub）
 ```
 
 - 端口：后端 `8787`（`PORT`），前端 `5173`（`CLIENT_PORT`）；Vite 代理 `/api` → 后端。
