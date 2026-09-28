@@ -300,3 +300,107 @@ describe('技能详情', () => {
     await waitFor(() => expect(screen.queryByText('# alpha')).toBeNull());
   });
 });
+
+describe('仓库来源的操作与来源刷新', () => {
+  it('第三方来源行：检查更新 / 同步 / 删除', async () => {
+    baseRoutes({
+      // 仓库与来源共用同一组 git 状态接口（/repos/:id/...）
+      '/repos/upstream/status': () => ({ remote: 'git@x:upstream', behind: 1 }),
+      'POST /repos/upstream/sync': () => ({ updated: false }),
+      'DELETE /sources/upstream': () => [],
+    });
+    render(wrap(<Library />));
+    await waitFor(() => expect(screen.getByText('Upstream')).toBeTruthy());
+    // 仓库行与来源行都有检查/同步按钮：定位到来源那一行
+    const srcRow = screen.getByText('Upstream').closest('.entity-card') as HTMLElement;
+
+    await userEvent.click(within(srcRow).getByRole('button', { name: 'Check' }));
+    await waitFor(() => expect(screen.getAllByText('Updates available').length).toBeGreaterThan(0));
+
+    await userEvent.click(within(srcRow).getByRole('button', { name: 'Sync' }));
+    await waitFor(() => expect(screen.getAllByText('Up to date').length).toBeGreaterThan(0));
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' })[1]);
+    await waitFor(() => expect(screen.getByText('Deleted')).toBeTruthy());
+    expect(apiMock.mock.calls.some((c) => c[0] === '/sources/upstream' && c[1]?.method === 'DELETE')).toBe(true);
+  });
+
+  it('第三方来源：编辑名称 / 布局并保存', async () => {
+    baseRoutes({ 'PUT /sources/upstream': () => ({ repos: [], sources: [] }) });
+    render(wrap(<Library />));
+    await waitFor(() => expect(screen.getByText('Upstream')).toBeTruthy());
+    await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1]);
+    await waitFor(() => expect(screen.getByText('Edit repository')).toBeTruthy());
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /Layout/ }), 'flat');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByText('Repository updated')).toBeTruthy());
+    const putCall = apiMock.mock.calls.find((c) => c[0] === '/sources/upstream' && c[1]?.method === 'PUT');
+    expect(JSON.parse(putCall?.[1]?.body as string)).toMatchObject({ layout: 'flat', kind: 'source' });
+  });
+
+  it('导入预览失败时提示错误', async () => {
+    baseRoutes({ '/import/preview': () => { throw new Error('preview boom'); } });
+    render(wrap(<Library />));
+    await waitFor(() => expect(screen.getByText('My Repo')).toBeTruthy());
+    await userEvent.click(screen.getByRole('button', { name: 'Add skills' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Import from folders' }));
+    await userEvent.type(screen.getByRole('textbox'), '/tmp/up');
+    await userEvent.click(screen.getByRole('button', { name: 'Detect' }));
+    await waitFor(() => expect(screen.getByText('preview boom')).toBeTruthy());
+  });
+
+  it('同步失败时提示错误', async () => {
+    baseRoutes({ 'POST /repos/default/sync': () => { throw new Error('sync boom'); } });
+    render(wrap(<Library />));
+    await waitFor(() => expect(screen.getByText('My Repo')).toBeTruthy());
+    await userEvent.click(screen.getAllByRole('button', { name: 'Sync' })[0]);
+    await waitFor(() => expect(screen.getByText('sync boom')).toBeTruthy());
+  });
+
+  it('删除失败时提示错误', async () => {
+    baseRoutes({ 'DELETE /repos/default': () => { throw new Error('del boom'); } });
+    render(wrap(<Library />));
+    await waitFor(() => expect(screen.getByText('My Repo')).toBeTruthy());
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
+    await waitFor(() => expect(screen.getByText('del boom')).toBeTruthy());
+  });
+
+  it('已登记来源的技能：展示来源信息、附带文件并可从来源刷新', async () => {
+    baseRoutes({
+      '/skills/alpha%40default/content': () => ({
+        id: 'alpha@default',
+        dir: '/r/alpha',
+        content: '# alpha',
+        files: ['extra.txt'],
+        provenance: { sourceRef: '/ext/alpha', sourceType: 'dir', takenAt: '2026-01-02T03:04:05.000Z', stale: false },
+      }),
+      'POST /skills/alpha%40default/refresh': () => ({ refreshed: true }),
+    });
+    render(wrap(<Library />));
+    await waitFor(() => expect(screen.getByText('2 skills in total')).toBeTruthy());
+    await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
+    await waitFor(() => expect(screen.getByText('/ext/alpha')).toBeTruthy());
+    expect(screen.getByText(/Extra files: extra\.txt/)).toBeTruthy();
+    expect(screen.getByText(/Source: directory/)).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh from source' }));
+    await waitFor(() => expect(screen.getByText('Refreshed from source')).toBeTruthy());
+    expect(apiMock.mock.calls.some((c) => c[0] === '/skills/alpha%40default/refresh' && c[1]?.method === 'POST')).toBe(true);
+  });
+
+  it('来源刷新失败时提示错误', async () => {
+    baseRoutes({
+      '/skills/alpha%40default/content': () => ({
+        id: 'alpha@default', dir: '/r/alpha', content: '# alpha', files: [],
+        provenance: { sourceRef: '/ext/alpha', sourceType: 'git', takenAt: '2026-01-02T03:04:05.000Z' },
+      }),
+      'POST /skills/alpha%40default/refresh': () => { throw new Error('refresh boom'); },
+    });
+    render(wrap(<Library />));
+    await waitFor(() => expect(screen.getByText('2 skills in total')).toBeTruthy());
+    await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
+    await waitFor(() => expect(screen.getByText('/ext/alpha')).toBeTruthy());
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh from source' }));
+    await waitFor(() => expect(screen.getByText('refresh boom')).toBeTruthy());
+  });
+});

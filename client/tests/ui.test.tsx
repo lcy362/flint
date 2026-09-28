@@ -390,7 +390,8 @@ describe('Toast', () => {
     }
     render(wrap(<ToastProvider><Trigger /></ToastProvider>));
 
-    act(() => { fireEvent.click(screen.getByRole('button', { name: '推' })); });
+    // fireEvent 自身已经包在 act 里，不需要再套一层
+    fireEvent.click(screen.getByRole('button', { name: '推' }));
     expect(screen.getByText('已保存')).toBeTruthy();
     expect(document.querySelector('.toast--good')).toBeTruthy();
 
