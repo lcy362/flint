@@ -44,7 +44,7 @@ function keywordBodyHit(c: SkillCardView, f: CardFilters): string | undefined | 
   const bodyCtx = f.bodyHits ? f.bodyHits[c.id] : undefined;
   // 元数据命中 → 常规展示；仅正文命中 → 附上下文；都没命中 → 排除
   if (hay.includes(f.kw)) return bodyCtx;
-  return bodyCtx === undefined ? null : bodyCtx;
+  return bodyCtx ?? null;
 }
 
 /** 标签 / 来源 / 未打标签三项条件是否都通过（关键词另算） */

@@ -114,7 +114,8 @@ const LSOF_BIN = ['/usr/sbin/lsof', '/usr/bin/lsof', '/sbin/lsof']
 
 const NETSTAT_BIN = [
   process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32', 'netstat.exe') : null,
-  'C:\\Windows\\System32\\netstat.exe',
+  // path.win32 拼出 Windows 路径，避免在源码里写转义反斜杠
+  path.win32.join('C:', 'Windows', 'System32', 'netstat.exe'),
 ].filter(Boolean).find((p) => fs.existsSync(p)) ?? null;
 
 /** Windows：从 netstat -ano 的输出里挑出占用该端口的 PID */

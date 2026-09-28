@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import Button from './Button';
 
 interface ModalProps {
@@ -12,23 +12,28 @@ interface ModalProps {
 }
 
 export default function Modal({ open, title, onClose, footer, children, width }: Readonly<ModalProps>) {
+  const backdropRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose?.();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // 点遮罩空白处关闭：监听挂在 document 上，而不是给非交互元素绑事件处理器（无障碍要求）
+    const onDown = (e: MouseEvent) => {
+      if (e.target === backdropRef.current) onClose?.();
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
   }, [open, onClose]);
 
   if (!open) return null;
   return (
-    <div
-      className="modal-backdrop"
-      // 遮罩本身不是可交互控件：标记为 presentation，点击关闭只是「点空白处」的便利
-      role="presentation"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
-    >
+    <div ref={backdropRef} className="modal-backdrop">
       <div className="modal" style={width ? { width: `min(${width}px, 100%)` } : undefined}>
         {title !== undefined && (
           <div className="modal__head">

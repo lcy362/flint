@@ -112,7 +112,7 @@ export function refreshSkill(cfg: ConfigStore, repo: Repo, name: string): Refres
     // 删旧副本失败不致命：下面 rename 会覆盖同名目标，真正失败会落到外层 catch
     try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* 交给 rename 覆盖 */ }
     fs.renameSync(tmp, dest);
-  } catch (e) {
+  } catch {
     // 清理临时目录失败不影响结论：残留的 .name.tmp-* 会在下次刷新时被覆盖，不会污染仓库
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* 残留目录无害 */ }
     return { refreshed: false, reason: 'copy-failed' };

@@ -46,12 +46,17 @@ const SERVER_VERSION = (() => {
   return '0.0.0';
 })();
 
+/** 只接受非空字符串的请求字段：对象 / 数组一律视为「未提供」，避免把 [object Object] 写进配置 */
+function asText(v: unknown): string | undefined {
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
 /** 目录覆盖属于 Agent 自身：它决定「这个 Agent 解析到哪个目录」 */
 function applyDirOverrides(cfg: ConfigStore, key: string, globalDir: unknown, projectDir: unknown): void {
   if (globalDir === undefined && projectDir === undefined) return;
   const own = cfg.data.agents[key] ?? {};
-  if (globalDir !== undefined) { if (globalDir) own.globalDir = String(globalDir); else delete own.globalDir; }
-  if (projectDir !== undefined) { if (projectDir) own.projectDir = String(projectDir); else delete own.projectDir; }
+  if (globalDir !== undefined) { const dir = asText(globalDir); if (dir) own.globalDir = dir; else delete own.globalDir; }
+  if (projectDir !== undefined) { const dir = asText(projectDir); if (dir) own.projectDir = dir; else delete own.projectDir; }
   if (Object.keys(own).length > 0) cfg.data.agents[key] = own;
   else delete cfg.data.agents[key];
 }
@@ -67,7 +72,7 @@ function applyAgentStrategy(cfg: ConfigStore, key: string, body: Record<string, 
   const { sync } = body;
   if (sync === 'symlink' || sync === 'copy') over.sync = sync;
   // 关联预设 = 记忆该目录「一次应用」哪套预设；保存决策，不再触发自动部署
-  if ('preset' in body) { if (body.preset) over.preset = String(body.preset); else delete over.preset; }
+  if ('preset' in body) { const preset = asText(body.preset); if (preset) over.preset = preset; else delete over.preset; }
   // 每关系同步策略（SY-01）：{ skill, sync } 写入 skillSync
   if ('skillSync' in body && body.skillSync && typeof body.skillSync === 'object') {
     over.skillSync = { ...over.skillSync, ...(body.skillSync as Record<string, SyncMode>) };
@@ -79,19 +84,27 @@ function applyAgentStrategy(cfg: ConfigStore, key: string, body: Record<string, 
   return target;
 }
 
+/** 请求体里的目录数组：只保留非空字符串项 */
+function dirList(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((d): d is string => typeof d === 'string' && d.length > 0);
+}
+
 /** 导入预览的目录来源：body.dirs > body.path > ?path（均为单个目录） */
 function previewDirs(body: Record<string, unknown>, queryPath?: unknown): string[] {
-  if (Array.isArray(body.dirs)) return body.dirs.map(String);
-  if (body.path) return [String(body.path)];
-  if (queryPath) return [String(queryPath)];
-  return [];
+  const dirs = dirList(body.dirs);
+  if (dirs.length > 0) return dirs;
+  const single = asText(body.path) ?? asText(queryPath);
+  return single ? [single] : [];
 }
 
 /** 执行导入的目录来源：body.dirs > body.path（按行拆分，便于粘贴多行） */
 function importDirsFrom(body: Record<string, unknown>): string[] {
-  if (Array.isArray(body.dirs)) return body.dirs.map(String);
-  if (!body.path) return [];
-  return String(body.path).split('\n').map((s) => s.trim()).filter(Boolean);
+  const dirs = dirList(body.dirs);
+  if (dirs.length > 0) return dirs;
+  const raw = asText(body.path);
+  if (!raw) return [];
+  return raw.split('\n').map((s) => s.trim()).filter(Boolean);
 }
 
 export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; onConfigChanged?: () => void }): Router {
