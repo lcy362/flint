@@ -44,6 +44,11 @@ schema.org structured data for SEO/GEO indexing. GitHub does not execute this sc
 [![npm version](https://img.shields.io/npm/v/flint-skills-hub.svg)](https://www.npmjs.com/package/flint-skills-hub)
 [![npm downloads](https://img.shields.io/npm/dm/flint-skills-hub.svg)](https://www.npmjs.com/package/flint-skills-hub)
 [![License](https://img.shields.io/npm/l/flint-skills-hub.svg)](https://www.npmjs.com/package/flint-skills-hub)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=lcy362_flint&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=lcy362_flint)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=lcy362_flint&metric=coverage)](https://sonarcloud.io/component_measures?id=lcy362_flint&metric=coverage)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=lcy362_flint&metric=reliability_rating)](https://sonarcloud.io/component_measures?id=lcy362_flint&metric=reliability_rating)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=lcy362_flint&metric=security_rating)](https://sonarcloud.io/component_measures?id=lcy362_flint&metric=security_rating)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=lcy362_flint&metric=sqale_rating)](https://sonarcloud.io/component_measures?id=lcy362_flint&metric=sqale_rating)
 
 > **Flint** · `local-skills-hub`
 > Obsidian collects knowledge; flint sparks skills.

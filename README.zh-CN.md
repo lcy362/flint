@@ -2,6 +2,12 @@
 
 > [English](./README.md) | 简体中文
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=lcy362_flint&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=lcy362_flint)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=lcy362_flint&metric=coverage)](https://sonarcloud.io/component_measures?id=lcy362_flint&metric=coverage)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=lcy362_flint&metric=reliability_rating)](https://sonarcloud.io/component_measures?id=lcy362_flint&metric=reliability_rating)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=lcy362_flint&metric=security_rating)](https://sonarcloud.io/component_measures?id=lcy362_flint&metric=security_rating)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=lcy362_flint&metric=sqale_rating)](https://sonarcloud.io/component_measures?id=lcy362_flint&metric=sqale_rating)
+
 > **Flint** · `local-skills-hub`
 > 黑曜石收藏知识，燧石点燃技能。
 
