@@ -131,6 +131,13 @@ export interface SkillCardView {
 }
 export interface AddableSkill { id: string; name: string; repo: string }
 export interface AgentSkillsResp { skills: SkillCardView[]; addable: AddableSkill[]; active: boolean }
+/**
+ * 一条技能在某个智能体**自身目录**里的存在情况（只读总览，`GET /skills/:name/agents`）。
+ * 只回答「有没有」与它的来源原因：不看只读共享目录读到的行，也不算「可添加」，
+ * 因此服务端不必为了它重扫技能库。
+ */
+export interface AgentSkillPresence { key: string; present: boolean; reason?: SkillReason }
+export interface SkillAgentsResp { agents: AgentSkillPresence[] }
 export interface ProjectSkillsResp { skills: SkillCardView[]; addable: AddableSkill[] }
 
 /* ---------- 同步/诊断 ---------- */

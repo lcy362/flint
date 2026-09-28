@@ -60,11 +60,11 @@ function baseRoutes(overrides: Record<string, Handler> = {}) {
     }),
     'PATCH /skills/alpha%40default': () => ({ tags: ['x', 'y'] }),
     'POST /skills/alpha%40default/refresh': () => ({ refreshed: true }),
-    // 详情里的「分发到 Agent」面板：默认一个目录、里面还没有这个技能
+    // 详情里的「分发到智能体」弹窗：默认一个目录、里面还没有这个技能
     '/agents': () => [
       { key: 'codex', name: 'Codex', globalDir: '/tmp/agents/skills', installed: true, primaryKey: 'codex', sync: 'symlink', active: true, sharedWith: [] },
     ],
-    '/agents/codex/skills': () => ({ skills: [], addable: [], active: true }),
+    '/skills/alpha/agents': () => ({ agents: [] }),
     '/repos/default/status': () => ({ remote: 'git@x:y', behind: 2 }),
     'POST /repos/default/sync': () => ({ updated: true }),
     'DELETE /repos/default': () => [],
@@ -296,14 +296,10 @@ describe('技能详情', () => {
   });
 
   it('分发弹窗：卡片视图 + 搜索，开关即分发 / 移除', async () => {
-    // 目录内容随分发 / 移除变化，弹窗据此重读「已分发到哪些智能体」
+    // 分发总览随分发 / 移除变化（乐观更新就地改行，不整份重拉）
     let installed = false;
-    const deployedRow = {
-      id: 'alpha@default', name: 'alpha', source: 'default', dir: '/tmp/agents/skills/alpha',
-      tags: [], reason: 'manual', store: 'symlink', actions: [],
-    };
     openDetail({
-      '/agents/codex/skills': () => ({ skills: installed ? [deployedRow] : [], addable: [], active: true }),
+      '/skills/alpha/agents': () => ({ agents: installed ? [{ key: 'codex', present: true, reason: 'manual' }] : [] }),
       'POST /agents/codex/skills': () => { installed = true; return { agent: 'codex', created: ['alpha'], removed: [], failed: [] }; },
       'DELETE /agents/codex/skills/alpha': () => { installed = false; return { ok: true, removed: 'alpha' }; },
     });
@@ -342,22 +338,36 @@ describe('技能详情', () => {
     const post = apiMock.mock.calls.find((c) => c[0] === '/agents/codex/skills' && c[1]?.method === 'POST');
     expect(JSON.parse(post?.[1]?.body as string)).toEqual({ id: 'alpha@default' });
 
-    // 重读后该目录显示「已分发」，再关闭开关走删除接口
+    // 就地改为「已分发」（乐观更新），再关闭开关走删除接口
     await waitFor(() => expect(within(modal).getByText('Distributed')).toBeTruthy());
     await userEvent.click(within(modal).getByRole('switch', { name: 'Distribute alpha to Codex' }));
     await waitFor(() => expect(screen.getByText('Removed from Codex')).toBeTruthy());
     expect(apiMock.mock.calls.some((c) => c[0] === '/agents/codex/skills/alpha' && c[1]?.method === 'DELETE')).toBe(true);
+    // 弹窗始终开着：整个过程中标题都在
+    expect(within(modal).getByText('Distribute to agents · alpha')).toBeTruthy();
+  });
+
+  it('部署静默失败（200 但 failed 非空）时提示原因且不改状态', async () => {
+    openDetail({
+      '/skills/alpha/agents': () => ({ agents: [] }),
+      'POST /agents/codex/skills': () => ({ agent: 'codex', created: [], removed: [], failed: [{ skill: 'alpha@default', reason: 'skill vanished' }] }),
+    });
+    await waitFor(() => expect(screen.getByText('2 skills in total')).toBeTruthy());
+    await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
+    await waitFor(() => expect(screen.getByText('# alpha')).toBeTruthy());
+    await userEvent.click(screen.getByRole('button', { name: 'Distribute to agents' }));
+
+    const modal = (await screen.findByText('Distribute to agents · alpha')).closest('.modal') as HTMLElement;
+    await userEvent.click(await within(modal).findByRole('switch', { name: 'Distribute alpha to Codex' }));
+    await waitFor(() => expect(screen.getByText('skill vanished')).toBeTruthy());
+    // 状态保持「未分发」，开关仍可再试
+    expect(within(modal).getByText('Not distributed')).toBeTruthy();
+    expect(within(modal).getByRole('switch', { name: 'Distribute alpha to Codex' })).toBeEnabled();
   });
 
   it('目录里是智能体自带技能时开关禁用并说明原因', async () => {
     openDetail({
-      '/agents/codex/skills': () => ({
-        skills: [{
-          id: 'alpha@default', name: 'alpha', source: 'default', dir: '/tmp/agents/skills/alpha',
-          tags: [], reason: 'own', store: 'own', actions: [],
-        }],
-        addable: [], active: true,
-      }),
+      '/skills/alpha/agents': () => ({ agents: [{ key: 'codex', present: true, reason: 'own' }] }),
     });
     await waitFor(() => expect(screen.getByText('2 skills in total')).toBeTruthy());
     await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);

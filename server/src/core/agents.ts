@@ -529,6 +529,26 @@ function ownedSkillRow(ownDir: string, name: string): AgentSkillRow {
   };
 }
 
+/**
+ * 只问一个名字：该 Agent **自身目录**里有没有这条技能（含它的形态与来源原因）。
+ *
+ * 与 `ownDirSkillRows` 同一套判定（软链 / 自带真实目录，隐藏项不算技能），
+ * 但只 lstat 这一个条目、也不碰只读共享目录；供「一次问遍所有目录」的聚合查询用
+ * （技能详情「分发到智能体」弹窗据此反查已分发到哪些目录，不需要每个目录都重扫一遍技能库）。
+ */
+export function agentOwnSkillRow(agentKey: string, cfg: HubConfig, name: string): AgentSkillRow | undefined {
+  if (!name || name.startsWith('.')) return undefined;
+  const def = findAgentDef(cfg, agentKey);
+  if (!def) return undefined;
+  const ownDir = resolveGlobalDir(def, cfg.agents[agentKey]?.globalDir);
+  const p = path.join(ownDir, name);
+  let st: fs.Stats | undefined;
+  try { st = fs.lstatSync(p, { throwIfNoEntry: false }); } catch { st = undefined; }
+  if (!st) return undefined;
+  if (st.isSymbolicLink()) return symlinkSkillRow(cfg, ownDir, name);
+  return isSkillDir(p) ? ownedSkillRow(ownDir, name) : undefined;
+}
+
 /** 自身目录里实际存在的行（物理为准）：软链与自带真实目录各一条 */
 function ownDirSkillRows(cfg: HubConfig, ownDir: string): AgentSkillRow[] {
   const rows: AgentSkillRow[] = [];

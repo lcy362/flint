@@ -115,6 +115,7 @@ export const en = {
   'skillDetail.distribute': 'Distribute to agents',
   'skillDetail.distribute.title': 'Distribute to agents · {name}',
   'skillDetail.distribute.count': '{n} / {total} directories',
+  'skillDetail.distribute.list': 'All agents',
   'skillDetail.distribute.count.title': 'How many agent skill directories currently contain this skill',
   'skillDetail.distribute.hint':
     'Listed per real skill directory (agents sharing one directory share a single copy). Turning it on deploys this skill into that directory; turning it off removes **the link / copy deployed by this tool** — an agent-owned directory or an external symlink is never deleted.',

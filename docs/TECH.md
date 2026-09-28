@@ -278,6 +278,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | GET | `/skills/:id/content` | SKILL.md 正文 + 附带文件列表 |
 | PATCH | `/skills/:id` | 保存标签（归一化后写入 `skillMeta`） |
 | POST | `/skills/merge` | 同名合并仲裁 |
+| GET | `/skills/:name/agents` | 分发总览（只读）：这条技能在各智能体自身目录里的存在情况。聚合查询、不扫技能库——技能详情「分发到智能体」弹窗反查已分发清单用，避免逐目录调 `/agents/:key/skills` 造成 N 次技能库重扫 |
 
 **仓库 / 来源**
 
@@ -380,7 +381,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - **乐观更新 + 串行提交**：Agent 页「直接添加技能」与预设页「按技能纳入」用本地草稿即时反映，请求进串行队列，避免连点时后发先至。
 - **路径输入统一可调起系统选择器**：`components/ui/PathField.tsx`（`PathField` / `PathListField`）；相对路径（如 `.my-tool/skills`）因选择器无法表达，保留纯文本输入并注明。
 - **技能详情是页面，不是弹窗**：`views/Library.tsx` 的 `SkillDetail`（列表 / 详情按 `route.sub` 互斥渲染，与 Agent / 项目详情同一形态）提供元数据 + 标签编辑 + 来源追溯 + `SKILL.md` 预览；「分发到智能体」是详情页头部按钮打开的弹窗。
-- **分发入口可以有多处，逻辑与 UI 只有一套**：技能详情里的「分发到智能体」（`components/skill/SkillDistributeModal.tsx`）只是把智能体详情页的两个接口搬到技能视角——`POST /agents/:key/skills`（添加）与 `DELETE /agents/:key/skills/:name`（移除），按目录读实际内容反查「已分发到哪些智能体」（只读共享目录读到的行不计入）。列表按「一个实际目录一行」归并（`groupAgentsByDir`），卡片直接复用 `agentGroupItem`，搜索口径（名称 / key / 目录）与「只看已安装」也与智能体页一致，只是多出一个分发开关；智能体自带目录与外部软链的开关置灰（后端不会删）。视图沿用全站偏好（缺省卡片），切换器在同一筛选栏上。
+- **分发入口可以有多处，逻辑与 UI 只有一套**：技能详情里的「分发到智能体」（`components/skill/SkillDistributeModal.tsx`）只是把智能体详情页的两个接口搬到技能视角——`POST /agents/:key/skills`（添加）与 `DELETE /agents/:key/skills/:name`（移除）；已分发清单走一次聚合只读查询 `GET /skills/:name/agents`（只读共享目录读到的行不计入）。列表按「一个实际目录一行」归并（`groupAgentsByDir`），卡片直接复用 `agentGroupItem`，搜索口径（名称 / key / 目录）与「只看已安装」也与智能体页一致，只是多出一个分发开关；智能体自带目录与外部软链的开关置灰（后端不会删）。视图沿用全站偏好（缺省卡片），切换器在同一筛选栏上。开关成功后就地改这一行的状态（乐观更新，与预设页的高频开关同一约定），不整份重拉——失败保持原状并由 toast 说明原因（部署接口 HTTP 200 但 `failed` 非空的「静默失败」也按失败处理）。
 
 ---
 

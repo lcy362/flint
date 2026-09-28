@@ -110,6 +110,7 @@ export const zh: Record<MsgKey, string> = {
   'skillDetail.distribute': '分发到智能体',
   'skillDetail.distribute.title': '分发到智能体 · {name}',
   'skillDetail.distribute.count': '{n} / {total} 个目录',
+  'skillDetail.distribute.list': '全部智能体',
   'skillDetail.distribute.count.title': '该技能当前落在多少个 Agent 技能目录里',
   'skillDetail.distribute.hint':
     '按「实际技能目录」列出（同一个目录的多个 Agent 共用一份实体）。打开开关＝把该技能部署进这个目录；关闭＝只移除**本工具部署的软链 / 副本**，Agent 自带目录与外部软链不会被删。',

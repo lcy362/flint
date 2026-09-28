@@ -7,7 +7,7 @@ import { ConfigStore } from '../infra/config-store.js';
 import { log } from '../infra/logger.js';
 import { pickDirectory, pickFile } from '../infra/picker.js';
 import {
-  listAgents, agentSkillRows, findAgentDef, resolveGlobalDir, effectiveAgentKey,
+  listAgents, agentSkillRows, agentOwnSkillRow, allAgentDefs, findAgentDef, resolveGlobalDir, effectiveAgentKey,
   setPrimary, pruneAliasStrategies, isManagedLinkTarget,
 } from '../core/agents.js';
 import { scanAll, detectLayoutAbs } from '../core/scanner.js';
@@ -546,6 +546,19 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     }
     fs.unlinkSync(target);
     res.json({ ok: true, removed: name });
+  });
+  // 「这条技能分发到哪些目录了？」——一次问遍所有 Agent 自身目录的只读总览。
+  // 技能详情「分发到智能体」弹窗要用它反查已分发清单：若改成逐个目录调 /agents/:key/skills，
+  // 每个请求都会整体扫一遍技能库（N 个目录 = N 次全量扫描），纯属浪费；
+  // 判定只看各目录里有没有这个同名技能，不扫仓库、也不算「可添加」。
+  r.get('/skills/:name/agents', (req, res) => {
+    const name = req.params.name;
+    res.json({
+      agents: allAgentDefs(cfg.data).map((def) => {
+        const row = agentOwnSkillRow(def.key, cfg.data, name);
+        return { key: def.key, present: !!row, reason: row?.reason };
+      }),
+    });
   });
   // 活跃 Agent 集合（AA-01 / AA-04）
   r.get('/activeAgents', (_req, res) => res.json(cfg.data.activeAgents));

@@ -282,6 +282,30 @@ describe('Agent 接口', () => {
     expect(fs.existsSync(path.join(ctx.agentDir, 'alpha'))).toBe(false);
   });
 
+  it('GET /skills/:name/agents 一次给出该技能在各智能体目录的分发情况', async () => {
+    // 未分发：所有目录都是 present=false（不存在的目录也在清单里，只是没有这条技能）
+    const before = await call('GET', '/skills/alpha/agents');
+    expect(before.status).toBe(200);
+    expect(before.body.agents.length).toBeGreaterThan(0);
+    expect(before.body.agents.find((a: any) => a.key === 'cursor').present).toBe(false);
+
+    // 部署后：本工具部署的软链 → reason=manual
+    await call('POST', '/agents/cursor/skills', { id: 'alpha@default' });
+    const deployed = await call('GET', '/skills/alpha/agents');
+    expect(deployed.body.agents.find((a: any) => a.key === 'cursor')).toMatchObject({ present: true, reason: 'manual' });
+
+    // 用户自带的真实目录 → reason=own；指向外部库之外的软链 → reason=external
+    writeSkill(ctx.agentDir, 'owned');
+    expect((await call('GET', '/skills/owned/agents')).body.agents.find((a: any) => a.key === 'cursor'))
+      .toMatchObject({ present: true, reason: 'own' });
+    expect((await call('GET', '/skills/external/agents')).body.agents.find((a: any) => a.key === 'cursor'))
+      .toMatchObject({ present: true, reason: 'external' });
+
+    // 移除后回到未分发
+    await call('DELETE', '/agents/cursor/skills/alpha');
+    expect((await call('GET', '/skills/alpha/agents')).body.agents.find((a: any) => a.key === 'cursor').present).toBe(false);
+  });
+
   it('POST /agents/:key/sync 按绑定预设做一次性部署', async () => {
     await call('POST', '/presets', { name: 'demo-preset', skills: ['alpha@default'], tags: [] });
     await call('PUT', '/agents/cursor', { preset: 'demo-preset' });

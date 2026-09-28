@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
@@ -160,7 +160,11 @@ export default function Library() {
     setQ(''); setSrcs([]); setFacets([]); setUntaggedOnly(false);
   };
 
-  const detailTarget = detailId ? data?.skills.find((s) => s.id === detailId) : undefined;
+  // 重新拉取 /state 期间 data 会短暂为 null：详情页不能因此被卸载（会闪一下、并丢掉页面内的弹窗与编辑态），
+  // 用最近一次成功的数据兜住详情目标。
+  const lastData = useRef<StateView | null>(null);
+  if (data) lastData.current = data;
+  const detailTarget = detailId ? (data ?? lastData.current)?.skills.find((s) => s.id === detailId) : undefined;
 
   return (
     <>
@@ -1187,7 +1191,6 @@ function SkillDetail({
         open={distributeOpen}
         skill={skill}
         onClose={() => setDistributeOpen(false)}
-        onChanged={onChanged}
       />
     </>
   );
