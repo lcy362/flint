@@ -104,21 +104,38 @@ async function waitReady(port, timeoutMs = 20000) {
   return false;
 }
 
+/**
+ * 外部排查命令一律解析成绝对路径，绝不交给 PATH 查找（S4036）：
+ * PATH 可能被注入，且 npx 场景下的 PATH 未必等同于用户 shell 的 PATH。
+ * 找不到对应工具时返回 null，由调用方降级为空结果。
+ */
+const LSOF_BIN = ['/usr/sbin/lsof', '/usr/bin/lsof', '/sbin/lsof']
+  .find((p) => fs.existsSync(p)) ?? null;
+
+const NETSTAT_BIN = [
+  process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32', 'netstat.exe') : null,
+  'C:\\Windows\\System32\\netstat.exe',
+].filter(Boolean).find((p) => fs.existsSync(p)) ?? null;
+
+/** Windows：从 netstat -ano 的输出里挑出占用该端口的 PID */
+function pidsFromNetstat(port) {
+  if (!NETSTAT_BIN) return [];
+  const out = spawnSync(NETSTAT_BIN, ['-ano'], { encoding: 'utf8' }).stdout || '';
+  const pids = new Set();
+  for (const line of out.split('\n')) {
+    if (!line.includes(`:${port}`) || !/TCP|UDP/.test(line)) continue;
+    const pid = line.trim().split(/\s+/).pop();
+    if (/^\d+$/.test(pid) && pid !== '0') pids.add(pid);
+  }
+  return [...pids];
+}
+
 /** 找到占用某端口的进程 PID（mac/Linux 用 lsof，Windows 用 netstat）；找不到或无权限返回空数组 */
 function findPidsOnPort(port) {
   try {
-    if (process.platform === 'win32') {
-      const out = spawnSync('netstat', ['-ano'], { encoding: 'utf8' }).stdout || '';
-      const pids = new Set();
-      for (const line of out.split('\n')) {
-        if (line.includes(`:${port}`) && /TCP|UDP/.test(line)) {
-          const pid = line.trim().split(/\s+/).pop();
-          if (/^\d+$/.test(pid) && pid !== '0') pids.add(pid);
-        }
-      }
-      return [...pids];
-    }
-    const out = spawnSync('lsof', ['-ti', `tcp:${port}`], { encoding: 'utf8' }).stdout || '';
+    if (process.platform === 'win32') return pidsFromNetstat(port);
+    if (!LSOF_BIN) return [];
+    const out = spawnSync(LSOF_BIN, ['-ti', `tcp:${port}`], { encoding: 'utf8' }).stdout || '';
     return out.split('\n').map((s) => s.trim()).filter(Boolean);
   } catch {
     return [];
@@ -157,12 +174,15 @@ function forceRestart(port) {
   }
 }
 
+/** 各平台「打开链接」的命令与参数（Windows 需经 cmd /c start） */
+function openCommand(url) {
+  if (process.platform === 'darwin') return ['open', [url]];
+  if (process.platform === 'win32') return ['cmd', ['/c', 'start', '', url]];
+  return ['xdg-open', [url]];
+}
+
 function openBrowser(url) {
-  const [cmd, args] = process.platform === 'darwin'
-    ? ['open', [url]]
-    : process.platform === 'win32'
-      ? ['cmd', ['/c', 'start', '', url]]
-      : ['xdg-open', [url]];
+  const [cmd, args] = openCommand(url);
   try {
     spawn(cmd, args, { stdio: 'ignore', detached: true }).unref();
   } catch {
@@ -228,7 +248,10 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+// 顶层 await：.mjs 直接等待，失败时统一打印并退出（不再走 promise 链）
+try {
+  await main();
+} catch (err) {
   console.error(`[flint] ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
-});
+}

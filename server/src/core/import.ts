@@ -4,6 +4,7 @@ import { ConfigStore } from '../config/store.js';
 import { scanDir, detectLayoutAbs } from './scanner.js';
 import { recordIngestedSource } from './source-update.js';
 import { expandTilde, repoSkillRoot } from './agents.js';
+import { Repo } from '../config/types.js';
 import { t } from '../i18n/index.js';
 
 export interface ImportResult { source: string; imported: string[]; skipped: string[] }
@@ -44,30 +45,37 @@ export function importDirs(cfg: ConfigStore, sourceDirs: string[], repoId?: stri
     const res: ImportResult = { source: sd, imported: [], skipped: [] };
     if (!fs.existsSync(abs)) { res.skipped.push(t('import.dirMissing')); out.push(res); continue; }
     if (!repo) { res.skipped.push(t('import.noRepo')); out.push(res); continue; }
-    // 用统一的仓库 skill 根换算（honors repo.root）：否则自定义 root 的仓库会出现"导入了却扫不到"
-    const skillsRoot = repoSkillRoot(repo);
-    fs.mkdirSync(skillsRoot, { recursive: true });
-    const found = scanDir(abs, 'import', 'nested');
-    for (const s of found) {
-      // 解引用源软链：导入的是真实位置的内容，而非把链接本身复制进仓库
-      let srcReal: string;
-      try { srcReal = fs.realpathSync(s.dir); }
-      catch (e) { res.skipped.push(t('import.srcUnreachable', { name: s.name, msg: (e as Error).message })); out.push(res); continue; }
-      const dest = path.join(skillsRoot, s.name);
-      if (fs.existsSync(dest)) { res.skipped.push(t('import.existsSkip', { name: s.name })); continue; }
-      try {
-        fs.cpSync(srcReal, dest, { recursive: true });
-        // 来源追溯（IM-04）+ 可追踪来源（F4）
-        const meta = cfg.data.skillMeta[`${s.name}@${repo.id}`] ?? { tags: [] };
-        meta.origin = abs;
-        cfg.data.skillMeta[`${s.name}@${repo.id}`] = meta;
-        recordIngestedSource(cfg, repo.id, s.name, srcReal);
-        res.imported.push(s.name);
-      } catch (e) { res.skipped.push(t('import.failed', { name: s.name, msg: (e as Error).message })); }
-    }
+    importOneDir(cfg, repo, abs, res);
     out.push(res);
   }
   cfg.save();
   return out;
+}
+
+/** 把一个来源目录下扫到的 skill 逐条导入仓库（同名已存在则跳过；软链解引用后再复制） */
+function importOneDir(cfg: ConfigStore, repo: Repo, abs: string, res: ImportResult): void {
+  // 用统一的仓库 skill 根换算（honors repo.root）：否则自定义 root 的仓库会出现"导入了却扫不到"
+  const skillsRoot = repoSkillRoot(repo);
+  fs.mkdirSync(skillsRoot, { recursive: true });
+  for (const s of scanDir(abs, 'import', 'nested')) {
+    // 解引用源软链：导入的是真实位置的内容，而非把链接本身复制进仓库
+    let srcReal: string;
+    try { srcReal = fs.realpathSync(s.dir); }
+    catch (e) {
+      res.skipped.push(t('import.srcUnreachable', { name: s.name, msg: (e as Error).message }));
+      return; // 来源已不可达，该目录后续条目同样读不到，直接收工
+    }
+    const dest = path.join(skillsRoot, s.name);
+    if (fs.existsSync(dest)) { res.skipped.push(t('import.existsSkip', { name: s.name })); continue; }
+    try {
+      fs.cpSync(srcReal, dest, { recursive: true });
+      // 来源追溯（IM-04）+ 可追踪来源（F4）
+      const meta = cfg.data.skillMeta[`${s.name}@${repo.id}`] ?? { tags: [] };
+      meta.origin = abs;
+      cfg.data.skillMeta[`${s.name}@${repo.id}`] = meta;
+      recordIngestedSource(cfg, repo.id, s.name, srcReal);
+      res.imported.push(s.name);
+    } catch (e) { res.skipped.push(t('import.failed', { name: s.name, msg: (e as Error).message })); }
+  }
 }
 

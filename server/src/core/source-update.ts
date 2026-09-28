@@ -62,26 +62,32 @@ function mtime(file: string): number | undefined {
  */
 export async function detectStale(repoDir: string, meta?: SkillMeta): Promise<boolean | undefined> {
   if (!meta?.sourceRef) return undefined;
-  if (meta.sourceType === 'git') {
-    if (!fs.existsSync(meta.sourceRef)) return undefined;
-    const root = findGitRoot(meta.sourceRef);
-    if (!root) return undefined;
-    // git log 只看该技能在仓库内的相对路径，避免整个仓库的提交干扰。
-    // 走异步执行器：绝不用 spawnSync（会阻塞事件循环）。
-    const out = await gitText(root, ['log', '-1', '--format=%cI', '--', path.relative(root, meta.sourceRef)], 5000);
-    if (!out) return undefined;
-    const srcTime = Date.parse(out);
-    if (Number.isNaN(srcTime)) return undefined;
-    const taken = meta.takenAt ? Date.parse(meta.takenAt) : undefined;
-    return taken !== undefined ? srcTime > taken : undefined;
-  }
-  if (meta.sourceType === 'dir') {
-    const a = mtime(path.join(meta.sourceRef, SKILL_FILE));
-    const b = mtime(path.join(repoDir, SKILL_FILE));
-    if (a === undefined || b === undefined) return undefined;
-    return a > b;
-  }
+  if (meta.sourceType === 'git') return gitSourceStale(meta.sourceRef, meta.takenAt);
+  if (meta.sourceType === 'dir') return dirSourceStale(repoDir, meta.sourceRef);
   return undefined;
+}
+
+/** git 源：比较来源最后一次提交时间与登记时间；任一不可读则不判定 */
+async function gitSourceStale(sourceRef: string, takenAt?: string): Promise<boolean | undefined> {
+  if (!fs.existsSync(sourceRef)) return undefined;
+  const root = findGitRoot(sourceRef);
+  if (!root) return undefined;
+  // git log 只看该技能在仓库内的相对路径，避免整个仓库的提交干扰。
+  // 走异步执行器：绝不用 spawnSync（会阻塞事件循环）。
+  const out = await gitText(root, ['log', '-1', '--format=%cI', '--', path.relative(root, sourceRef)], 5000);
+  if (!out) return undefined;
+  const srcTime = Date.parse(out);
+  if (Number.isNaN(srcTime)) return undefined;
+  const taken = takenAt ? Date.parse(takenAt) : undefined;
+  return taken !== undefined ? srcTime > taken : undefined;
+}
+
+/** dir 源：比较源与仓库副本的 SKILL.md mtime；任一缺失则不判定 */
+function dirSourceStale(repoDir: string, sourceRef: string): boolean | undefined {
+  const a = mtime(path.join(sourceRef, SKILL_FILE));
+  const b = mtime(path.join(repoDir, SKILL_FILE));
+  if (a === undefined || b === undefined) return undefined;
+  return a > b;
 }
 
 export interface RefreshResult { refreshed: boolean; reason?: string }
@@ -97,15 +103,18 @@ export function refreshSkill(cfg: ConfigStore, repo: Repo, name: string): Refres
   if (!fs.existsSync(meta.sourceRef)) return { refreshed: false, reason: 'missing-source' };
   const dest = path.join(repoSkillRoot(repo), name);
   if (!fs.existsSync(dest)) return { refreshed: false, reason: 'missing-dest' };
-  // 防自毁：源与仓库副本是同一文件时禁止覆盖
-  try { if (fs.realpathSync(meta.sourceRef) === fs.realpathSync(dest)) return { refreshed: false, reason: 'same-body' }; } catch { /* ignore */ }
+  // 防自毁：源与仓库副本是同一文件时禁止覆盖。
+  // 这里 catch 掉的是「路径已不存在」这类取真实路径失败：取不到就当两者不同，交给后面的复制流程处理。
+  try { if (fs.realpathSync(meta.sourceRef) === fs.realpathSync(dest)) return { refreshed: false, reason: 'same-body' }; } catch { /* 见上：不作判定，继续覆盖 */ }
   const tmp = path.join(path.dirname(dest), `.${name}.tmp-${Date.now()}`);
   try {
     fs.cpSync(meta.sourceRef, tmp, { recursive: true });
-    try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* ignore */ }
+    // 删旧副本失败不致命：下面 rename 会覆盖同名目标，真正失败会落到外层 catch
+    try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* 交给 rename 覆盖 */ }
     fs.renameSync(tmp, dest);
   } catch (e) {
-    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* ignore */ }
+    // 清理临时目录失败不影响结论：残留的 .name.tmp-* 会在下次刷新时被覆盖，不会污染仓库
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* 残留目录无害 */ }
     return { refreshed: false, reason: 'copy-failed' };
   }
   meta.takenAt = new Date().toISOString();

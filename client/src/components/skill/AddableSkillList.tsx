@@ -9,11 +9,11 @@ export default function AddableSkillList({
   items,
   onAdd,
   title,
-}: {
+}: Readonly<{
   items: AddableSkill[];
   onAdd: (a: AddableSkill) => void;
   title?: string;
-}) {
+}>) {
   const { t } = useI18n();
   if (items.length === 0) return <EmptyState title={t('agents.list.empty')} />;
   const entities: EntityItem[] = items.map((a) => ({

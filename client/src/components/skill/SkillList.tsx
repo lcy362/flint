@@ -16,7 +16,7 @@ interface SkillListProps {
   /** 点击整块（卡片/行）打开详情 */
   onOpen?: (item: SkillCardView) => void;
   /** 强制布局，用于弹窗等固定形态 */
-  mode?: EntityListProps['mode'];
+  mode?: NonNullable<EntityListProps['mode']>;
   empty?: EntityListProps['empty'];
   /** 视图切换器已上移到筛选条 */
   hideToggle?: boolean;
@@ -24,6 +24,12 @@ interface SkillListProps {
   collapsible?: boolean;
   /** 折叠状态持久化 key（localStorage） */
   storageKey?: string;
+}
+
+/** 开关按钮的无障碍标签：禁用优先，其次按当前开关状态提示「启用 / 停用」 */
+function toggleAriaLabel(t: TFunc, item: SkillCardView, on: boolean): string {
+  if (item.toggleDisabled) return t('skillList.toggleDisabledAria', { name: item.name });
+  return t(on ? 'skillList.disableAria' : 'skillList.enableAria', { name: item.name });
 }
 
 /** SkillCardView → 通用 EntityItem，保证与其他实体列表风格一致 */
@@ -58,13 +64,7 @@ export function skillToEntity(
     // 改用「归集到仓库 / 删除」等操作表达可做的事，避免"明明装着却开关关闭"这类自相矛盾。
     toggle: onToggle && isToolManaged(item) ? (
       <Switch
-        aria-label={
-          item.toggleDisabled
-            ? t('skillList.toggleDisabledAria', { name: item.name })
-            : on
-              ? t('skillList.disableAria', { name: item.name })
-              : t('skillList.enableAria', { name: item.name })
-        }
+        aria-label={toggleAriaLabel(t, item, on)}
         checked={on}
         disabled={item.toggleDisabled}
         onChange={() => onToggle(item)}
@@ -91,7 +91,7 @@ export default function SkillList({
   hideToggle,
   collapsible,
   storageKey,
-}: SkillListProps) {
+}: Readonly<SkillListProps>) {
   const { t } = useI18n();
   const entities = items.map((item) => skillToEntity(t, item, { onToggle, onAction, onTag, onOpen }));
   return (

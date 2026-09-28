@@ -14,11 +14,11 @@ export default function NavRail({
   active,
   onSelect,
   counts,
-}: {
+}: Readonly<{
   active: Tab;
   onSelect: (t: Tab) => void;
   counts?: Partial<Record<Tab, number>>;
-}) {
+}>) {
   const { t } = useI18n();
   return (
     <nav className="rail scroll">

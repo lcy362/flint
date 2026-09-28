@@ -21,7 +21,7 @@ function writeFrontmatterTags(file: string, tags: string[]): boolean {
     const y = YAML.parse(m[1]) ?? {};
     y.tags = tags;
     const body = md.slice(m[0].length);
-    fs.writeFileSync(file, `---\n${YAML.stringify(y).trimRight()}\n---\n${body}`, 'utf-8');
+    fs.writeFileSync(file, `---\n${YAML.stringify(y).trimEnd()}\n---\n${body}`, 'utf-8');
     return true;
   } catch { return false; }
 }

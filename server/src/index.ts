@@ -12,6 +12,8 @@ import { resolveLocale, withLocale } from './i18n/index.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const app = express();
+// 不对外暴露框架指纹（X-Powered-By: Express），减少无谓的信息泄露
+app.disable('x-powered-by');
 const cfg = new ConfigStore();
 
 /**

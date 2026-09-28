@@ -126,6 +126,19 @@ function planFix(t: TFunc, it: DiagItem): FixPlan {
   return { key, subject, intro: t('health.plan.generic.intro'), ops: [t('health.plan.generic.ops')] };
 }
 
+/** 诊断状态 → 展示色调（ok / warn / error 逐一对应） */
+const TONE_BY_STATUS: Record<DiagItem['status'], 'good' | 'warn' | 'bad'> = {
+  ok: 'good',
+  warn: 'warn',
+  error: 'bad',
+};
+
+/** 非 ok 状态 → 文案键（ok 直接显示 'OK'） */
+const STATUS_LABEL_KEY: Record<Exclude<DiagItem['status'], 'ok'>, MsgKey> = {
+  warn: 'health.status.warn',
+  error: 'health.status.error',
+};
+
 export default function Health() {
   const { data, loading, error, reload } = useAsync<DiagnoseResult>(() => api('/diagnose'));
   const { t } = useI18n();
@@ -153,12 +166,8 @@ export default function Health() {
     }
   };
 
-  const tone = (s: DiagItem['status']) => {
-    if (s === 'ok') return 'good' as const;
-    if (s === 'warn') return 'warn' as const;
-    return 'bad' as const;
-  };
-  const label = (s: DiagItem['status']) => (s === 'ok' ? 'OK' : s === 'warn' ? t('health.status.warn') : t('health.status.error'));
+  const tone = (s: DiagItem['status']) => TONE_BY_STATUS[s];
+  const label = (s: DiagItem['status']) => (s === 'ok' ? 'OK' : t(STATUS_LABEL_KEY[s]));
 
   return (
     <>
@@ -198,7 +207,7 @@ export default function Health() {
                   <div className="diag-group" style={{ padding: 'var(--sp-2) var(--sp-6)' }}>
                     {items.map((it) => (
                       <div key={it.key} className="diag-row">
-                        <Badge tone={tone(it.status)} dot={it.status === 'ok' ? 'good' : it.status === 'warn' ? 'warn' : 'bad'}>
+                        <Badge tone={tone(it.status)} dot={TONE_BY_STATUS[it.status]}>
                           {label(it.status)}
                         </Badge>
                         <span className="diag-row__msg">{it.message}</span>
@@ -249,8 +258,8 @@ export default function Health() {
               <span className="field-label">{t('health.fixModal.ops')}</span>
               <span style={{ fontSize: 'var(--fs-13)', color: 'var(--c-ink-2)' }}>{plan.intro}</span>
               <ul style={{ margin: 0, paddingLeft: '1.2em', display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
-                {plan.ops.map((op, i) => (
-                  <li key={i} style={{ fontSize: 'var(--fs-13)', color: 'var(--c-ink-2)', wordBreak: 'break-all' }}>{op}</li>
+                {plan.ops.map((op) => (
+                  <li key={String(op)} style={{ fontSize: 'var(--fs-13)', color: 'var(--c-ink-2)', wordBreak: 'break-all' }}>{op}</li>
                 ))}
               </ul>
             </div>

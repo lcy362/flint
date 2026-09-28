@@ -1,6 +1,21 @@
 import { log } from '../log/logger';
 import { getLang } from '../i18n';
 
+/**
+ * 站内接口路径白名单：必须以 `/` 开头，且只含合法 URI 字符。
+ * 反斜杠、空白、控制字符、尖括号等一律拒绝——它们是把相对地址
+ * 拼成外部请求（CSRF / 请求伪造）的常见载体。
+ */
+const API_PATH = /^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%/?#[\]]*$/;
+
+/** 校验并返回安全的站内路径；不合法直接抛错，绝不发出可疑请求 */
+export function assertApiPath(path: string): string {
+  if (!API_PATH.test(path)) {
+    throw new Error(`Blocked malformed API path: ${path}`);
+  }
+  return path;
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   // 把当前界面语言带给服务端，使返回的用户可见消息（错误 / 诊断等）与之保持一致
@@ -10,7 +25,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     ...(init?.headers as Record<string, string> | undefined),
   };
   try {
-    res = await fetch(`/api${path}`, { ...init, headers });
+    res = await fetch(`/api${assertApiPath(path)}`, { ...init, headers });
   } catch (e) {
     log.error('api', `Request failed: ${(e as Error).message}`, { method: init?.method ?? 'GET', path });
     throw e;

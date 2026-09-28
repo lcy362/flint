@@ -8,14 +8,14 @@ export default function Topbar({
   onToggleTheme,
   onReload,
   reloading,
-}: {
+}: Readonly<{
   title: string;
   sub?: string;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
   onReload?: () => void;
   reloading?: boolean;
-}) {
+}>) {
   const { t, lang, setLang } = useI18n();
   return (
     <header className="topbar">

@@ -1229,6 +1229,8 @@ select.field {
   line-height: 1;
   cursor: help;
   transition: background var(--dur-150) var(--ease), color var(--dur-150) var(--ease);
+  /* 承载自绘气泡（::after）的定位上下文 */
+  position: relative;
 }
 .entity-card--standard.is-off .std-title__info {
   border-color: color-mix(in srgb, var(--c-standard) 45%, var(--c-line));
@@ -1242,9 +1244,6 @@ select.field {
   color: var(--c-on-accent);
 }
 /* info 的悬浮说明：自绘气泡，即时出现、样式受控（原生 title 要停留约一秒，容易被当成没反应） */
-.std-title__info {
-  position: relative;
-}
 .std-title__info::after {
   content: attr(data-tip);
   position: absolute;

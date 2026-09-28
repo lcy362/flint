@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { api, type AgentView, type PresetView, type StateView, type SkillCardView, type SkillView } from '../api/types';
+import { api, type AgentView, type PresetView, type StateView, type SkillView } from '../api/types';
 import SkillList from '../components/skill/SkillList';
 import { skillViewToCard } from '../components/skill/adapters';
 import { skillBadgeLegend } from '../components/skill/SkillBadges';
@@ -99,7 +99,7 @@ export default function Presets() {
   const allTags = useMemo(() => {
     const set = new Set<string>();
     data?.skills.forEach((s) => s.tags?.forEach((tag) => set.add(tag)));
-    return [...set].sort();
+    return [...set].sort((a, b) => a.localeCompare(b));
   }, [data]);
 
   return (
@@ -163,7 +163,7 @@ export default function Presets() {
 }
 
 /** 新建预设：只填名称，创建后立即进入详情页做后续管理 */
-function CreatePresetModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (name: string) => void }) {
+function CreatePresetModal({ open, onClose, onCreated }: Readonly<{ open: boolean; onClose: () => void; onCreated: (name: string) => void }>) {
   const { t } = useI18n();
   const toast = useToast();
   const [name, setName] = useState('');
@@ -219,7 +219,7 @@ function PresetDetail({
   ownSources,
   onBack,
   onChanged,
-}: {
+}: Readonly<{
   preset: PresetView;
   skills: SkillView[];
   allTags: string[];
@@ -227,7 +227,7 @@ function PresetDetail({
   ownSources: string[];
   onBack: () => void;
   onChanged: () => void;
-}) {
+}>) {
   const { t } = useI18n();
   const toast = useToast();
   const [q, setQ] = useState('');
@@ -314,7 +314,7 @@ function PresetDetail({
   const allSources = useMemo(() => {
     const set = new Set<string>();
     skills.forEach((s) => set.add(s.source));
-    return [...set].sort();
+    return [...set].sort((a, b) => a.localeCompare(b));
   }, [skills]);
 
   const tagCounts = useMemo(() => {
@@ -575,7 +575,7 @@ function PresetDetail({
               />
               <div style={{ marginTop: 'var(--sp-4)' }}>
                 <SkillList
-                  title={`${hasFilter ? t('list.filtered') : t('list.allSkills')} · ${shown.length}${hasFilter ? ` / ${cards.length}` : ''}`}
+                  title={`${hasFilter ? t('list.filtered') : t('list.allSkills')} · ${shown.length}${hasFilter ? ' / ' + cards.length : ''}`}
                   items={shown}
                   onToggle={(item) => toggleSkill(item.id, !current.includes(item.id))}
                   hideToggle

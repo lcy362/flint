@@ -147,8 +147,7 @@ export default function Agents() {
           <Button onClick={() => setAddOpen(true)} title={t('agents.addCustom.title')}>{t('agents.addCustom')}</Button>
         </>}
       />
-      {selectedKey ? (
-        selected ? (
+      {selectedKey !== null && (selected ? (
           <AgentDetail agent={selected} siblings={siblings} onBack={backToList} onChanged={reload} />
         ) : (
           <LoadingBoundary
@@ -157,8 +156,8 @@ export default function Agents() {
           >
             {() => null}
           </LoadingBoundary>
-        )
-      ) : (
+        ))}
+      {selectedKey === null && (
         <>
           <div className="panel">
             <FilterBar
@@ -183,7 +182,7 @@ export default function Agents() {
             {() => (
               <EntityList
                 items={items}
-                title={`${filtered ? t('list.filtered') : t('list.allSkillDirs')} · ${items.length}${filtered ? ` / ${groups.length}` : ''}`}
+                title={`${filtered ? t('list.filtered') : t('list.allSkillDirs')} · ${items.length}${filtered ? ' / ' + groups.length : ''}`}
                 hideToggle
               />
             )}
@@ -195,13 +194,13 @@ export default function Agents() {
   );
 }
 
-function AgentDetail({ agent, siblings, onBack, onChanged }: {
+function AgentDetail({ agent, siblings, onBack, onChanged }: Readonly<{
   agent: AgentView;
   /** 与它指向同一技能目录的其它 Agent */
   siblings: AgentView[];
   onBack: () => void;
   onChanged: () => void;
-}) {
+}>) {
   const { t, lang } = useI18n();
   const toast = useToast();
   const { data, loading, error, reload } = useAsync<AgentSkillsResp>(
@@ -361,13 +360,19 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
     [library, rowsByName, agent.preset, t]
   );
 
-  const allSources = useMemo(() => [...new Set(library.map((s) => s.source))].sort(), [library]);
+  const allSources = useMemo(
+    () => [...new Set(library.map((s) => s.source))].sort((a, b) => a.localeCompare(b)),
+    [library]
+  );
   const sourceCounts = useMemo(() => {
     const m: Record<string, number> = {};
     library.forEach((s) => { m[s.source] = (m[s.source] ?? 0) + 1; });
     return m;
   }, [library]);
-  const allTags = useMemo(() => [...new Set(library.flatMap((s) => s.tags ?? []))].sort(), [library]);
+  const allTags = useMemo(
+    () => [...new Set(library.flatMap((s) => s.tags ?? []))].sort((a, b) => a.localeCompare(b)),
+    [library]
+  );
   const tagCounts = useMemo(() => {
     const m: Record<string, number> = {};
     library.forEach((s) => s.tags?.forEach((tag) => { m[tag] = (m[tag] ?? 0) + 1; }));
@@ -624,7 +629,7 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
           />
           <div style={{ marginTop: 'var(--sp-4)' }}>
             <SkillList
-              title={`${directFiltered ? t('list.filtered') : t('nav.library')} · ${shownDirect.length}${directFiltered ? ` / ${directCards.length}` : ''}`}
+              title={`${directFiltered ? t('list.filtered') : t('nav.library')} · ${shownDirect.length}${directFiltered ? ' / ' + directCards.length : ''}`}
               items={shownDirect}
               onAction={onDirectAction}
               hideToggle
@@ -701,7 +706,7 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: {
 }
 
 /** Agent 目录覆盖（AG-04 / AG-05） */
-function DirModal({ open, agent, onClose, onDone }: { open: boolean; agent: AgentView; onClose: () => void; onDone: () => void }) {
+function DirModal({ open, agent, onClose, onDone }: Readonly<{ open: boolean; agent: AgentView; onClose: () => void; onDone: () => void }>) {
   const { t } = useI18n();
   const toast = useToast();
   const [globalDir, setGlobalDir] = useState(agent.globalDir);

@@ -51,7 +51,8 @@ function rotate(): void {
 
 function write(level: LogLevel, mod: string, msg: string, meta?: Record<string, unknown>): void {
   if (LEVELS[level] < LEVELS[MIN_LEVEL]) return;
-  const line = `${new Date().toISOString()} [${level}] [${mod}] ${msg}${meta ? ` ${JSON.stringify(maskMeta(meta))}` : ''}\n`;
+  const metaPart = meta ? ` ${JSON.stringify(maskMeta(meta))}` : '';
+  const line = `${new Date().toISOString()} [${level}] [${mod}] ${msg}${metaPart}\n`;
   if (level === 'debug') console.debug(line.trimEnd());
   else if (level === 'error') console.error(line.trimEnd());
   else console.log(line.trimEnd());

@@ -5,12 +5,12 @@ export default function EmptyState({
   hint,
   action,
   icon,
-}: {
+}: Readonly<{
   title?: string;
   hint?: ReactNode;
   action?: ReactNode;
   icon?: string;
-}) {
+}>) {
   return (
     <div className="empty">
       {icon && <div style={{ fontSize: '28px' }}>{icon}</div>}

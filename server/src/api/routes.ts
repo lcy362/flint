@@ -1,9 +1,8 @@
-import { Router } from 'express';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import express from 'express';
+import express, { Router } from 'express';
 import { ConfigStore } from '../infra/config-store.js';
 import { log } from '../infra/logger.js';
 import { pickDirectory, pickFile } from '../infra/picker.js';
@@ -28,7 +27,7 @@ import { takeover } from '../core/takeover.js';
 import { applyFix } from '../core/fix.js';
 import { diagnose } from '../core/diagnose.js';
 import { mergeSkill } from '../core/merge.js';
-import { Repo, ForeignSource, CustomAgent } from '../config/types.js';
+import { Repo, ForeignSource, CustomAgent, SyncMode } from '../config/types.js';
 import { agentCards, projectCards } from '../domain/cards.js';
 import { t } from '../i18n/index.js';
 
@@ -47,6 +46,54 @@ const SERVER_VERSION = (() => {
   return '0.0.0';
 })();
 
+/** 目录覆盖属于 Agent 自身：它决定「这个 Agent 解析到哪个目录」 */
+function applyDirOverrides(cfg: ConfigStore, key: string, globalDir: unknown, projectDir: unknown): void {
+  if (globalDir === undefined && projectDir === undefined) return;
+  const own = cfg.data.agents[key] ?? {};
+  if (globalDir !== undefined) { if (globalDir) own.globalDir = String(globalDir); else delete own.globalDir; }
+  if (projectDir !== undefined) { if (projectDir) own.projectDir = String(projectDir); else delete own.projectDir; }
+  if (Object.keys(own).length > 0) cfg.data.agents[key] = own;
+  else delete cfg.data.agents[key];
+}
+
+/**
+ * 分发策略（预设 / 安装方式 / 每关系策略）一律落到该目录的**主 Agent**：
+ * 目录只有一份实体，别名与主 Agent 必须共用同一套策略，否则两边互相覆盖。
+ * 返回实际写入的 Agent key（主 Agent 可能刚被重新指定，故在此重新解析）。
+ */
+function applyAgentStrategy(cfg: ConfigStore, key: string, body: Record<string, unknown>): string {
+  const target = effectiveAgentKey(cfg.data, key);
+  const over = cfg.data.agents[target] ?? {};
+  const { sync } = body;
+  if (sync === 'symlink' || sync === 'copy') over.sync = sync;
+  // 关联预设 = 记忆该目录「一次应用」哪套预设；保存决策，不再触发自动部署
+  if ('preset' in body) { if (body.preset) over.preset = String(body.preset); else delete over.preset; }
+  // 每关系同步策略（SY-01）：{ skill, sync } 写入 skillSync
+  if ('skillSync' in body && body.skillSync && typeof body.skillSync === 'object') {
+    over.skillSync = { ...over.skillSync, ...(body.skillSync as Record<string, SyncMode>) };
+  }
+  cfg.data.agents[target] = over;
+  // 别名自己那份策略永远不生效，清掉避免配置里留下看似有效、实则被忽略的旧值
+  const cleared = pruneAliasStrategies(cfg.data, target);
+  if (cleared.length > 0) log.info('http', 'Cleared ignored alias strategies', { primary: target, aliases: cleared });
+  return target;
+}
+
+/** 导入预览的目录来源：body.dirs > body.path > ?path（均为单个目录） */
+function previewDirs(body: Record<string, unknown>, queryPath?: unknown): string[] {
+  if (Array.isArray(body.dirs)) return body.dirs.map(String);
+  if (body.path) return [String(body.path)];
+  if (queryPath) return [String(queryPath)];
+  return [];
+}
+
+/** 执行导入的目录来源：body.dirs > body.path（按行拆分，便于粘贴多行） */
+function importDirsFrom(body: Record<string, unknown>): string[] {
+  if (Array.isArray(body.dirs)) return body.dirs.map(String);
+  if (!body.path) return [];
+  return String(body.path).split('\n').map((s) => s.trim()).filter(Boolean);
+}
+
 export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; onConfigChanged?: () => void }): Router {
   const r = Router();
   r.use(express.json({ limit: '2mb' }));
@@ -63,7 +110,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       log.info('http', `${req.method} ${req.originalUrl.split('?')[0]}`, {
         status: res.statusCode,
         ms: Date.now() - started,
-        ...(bodyKeys && bodyKeys.length ? { bodyKeys } : {}),
+        ...(bodyKeys?.length ? { bodyKeys } : {}),
       });
     });
     next();
@@ -289,17 +336,18 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     // 优先 selections（按 agent 指定 skill 明细）；兼容旧 agentKeys/agentKey（收全部）。
     // replaceNames：确认页明确选择「用 agent 版本覆盖仓库副本」的名字。
     const repl: string[] | undefined = Array.isArray(replaceNames) ? replaceNames.map(String) : undefined;
+    // 未给 selections 时回退到「显式 agentKeys > 单个 agentKey > 全部已安装 Agent」
+    let fallbackKeys: string[] = [];
+    if (Array.isArray(agentKeys)) fallbackKeys = agentKeys.map(String);
+    else if (agentKey) fallbackKeys = [String(agentKey)];
+    else fallbackKeys = listAgents(cfg.data).filter((a) => a.installed).map((a) => a.key);
+    const everyNames: string[] | undefined = Array.isArray(names) ? names.map(String) : undefined;
     const sel: { agentKey: string; names?: string[] }[] = Array.isArray(selections)
       ? selections.map((s: { agentKey: unknown; names?: unknown }) => ({
           agentKey: String(s.agentKey),
           names: Array.isArray(s.names) ? s.names.map(String) : undefined,
         }))
-      : (Array.isArray(agentKeys)
-          ? agentKeys
-          : agentKey
-            ? [String(agentKey)]
-            : listAgents(cfg.data).filter((a) => a.installed).map((a) => a.key)
-        ).map((k) => ({ agentKey: k, names: Array.isArray(names) ? names.map(String) : undefined }));
+      : fallbackKeys.map((k) => ({ agentKey: k, names: everyNames }));
     if (sel.length === 0) return res.status(400).json({ error: t('api.noInstalledAgent') });
     try {
       const results = sel.map((s) => collectAgentSkill(cfg, repo, s.agentKey, s.names, repl));
@@ -410,38 +458,17 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   r.put('/agents/:key', (req, res) => {
     const key = req.params.key;
     if (!findAgentDef(cfg.data, key)) return res.status(404).json({ error: 'unknown agent' });
-    const body = req.body ?? {};
-    const { sync, globalDir, projectDir, primary } = body;
+    const body = (req.body ?? {}) as Record<string, unknown>;
 
     // 1) 指定 / 取消主 Agent（AG-02）：这是「组的归属」而非该 Agent 的策略，
     //    写在自己身上并清掉同目录其它成员的指定，保证一个目录至多一个主 Agent。
-    if (primary !== undefined) setPrimary(cfg.data, key, primary === true);
+    if (body.primary !== undefined) setPrimary(cfg.data, key, body.primary === true);
 
     // 2) 目录覆盖属于 Agent 自身：它决定「这个 Agent 解析到哪个目录」
-    if (globalDir !== undefined || projectDir !== undefined) {
-      const own = cfg.data.agents[key] ?? {};
-      if (globalDir !== undefined) { if (globalDir) own.globalDir = globalDir; else delete own.globalDir; }
-      if (projectDir !== undefined) { if (projectDir) own.projectDir = projectDir; else delete own.projectDir; }
-      if (Object.keys(own).length > 0) cfg.data.agents[key] = own;
-      else delete cfg.data.agents[key];
-    }
+    applyDirOverrides(cfg, key, body.globalDir, body.projectDir);
 
-    // 3) 分发策略（预设 / 安装方式）一律落到该目录的主 Agent：目录只有一份实体，
-    //    别名与主 Agent 必须共用同一套策略，否则两边会互相覆盖。
-    //    主 Agent 可能刚被 1) 改变，所以在这里重新解析。
-    const target = effectiveAgentKey(cfg.data, key);
-    const over = cfg.data.agents[target] ?? {};
-    if (sync === 'symlink' || sync === 'copy') over.sync = sync;
-    // 关联预设 = 记忆该目录「一次应用」哪套预设；保存决策，不再触发自动部署
-    if ('preset' in body) { if (body.preset) over.preset = body.preset; else delete over.preset; }
-    // 每关系同步策略（SY-01）：{ skill, sync } 写入 skillSync
-    if ('skillSync' in body && body.skillSync && typeof body.skillSync === 'object') {
-      over.skillSync = { ...(over.skillSync ?? {}), ...body.skillSync };
-    }
-    cfg.data.agents[target] = over;
-    // 别名自己那份策略永远不生效，清掉避免配置里留下看似有效、实则被忽略的旧值
-    const cleared = pruneAliasStrategies(cfg.data, target);
-    if (cleared.length > 0) log.info('http', 'Cleared ignored alias strategies', { primary: target, aliases: cleared });
+    // 3) 分发策略落到该目录的主 Agent（主 Agent 可能刚被 1) 改变，故在 helper 内重新解析）
+    const target = applyAgentStrategy(cfg, key, body);
     cfg.save();
     res.json(cfg.data.agents[target] ?? {});
   });
@@ -455,7 +482,11 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const addable = lib.skills
       .filter((s) => !present.has(s.name))
       .map((s) => ({ id: s.id, name: s.name, repo: s.source }))
-      .filter((a) => { if (seenAddable.has(a.name)) return false; seenAddable.add(a.name); return true; });
+      .filter((a) => {
+        if (seenAddable.has(a.name)) return false;
+        seenAddable.add(a.name);
+        return true;
+      });
     res.json({ skills: agentCards(rows), addable, active: cfg.data.activeAgents.includes(key) });
   });
   // 「添加」：把单个技能部署进该 agent 目录（软链/复制，遵循其同步策略），不写 config（物理即真相）
@@ -706,7 +737,8 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const { repoId, name, names, replaceNames } = req.body ?? {};
     const repo = cfg.data.repos.find((x) => x.id === String(repoId ?? '')) ?? cfg.data.repos[0];
     if (!repo) return res.status(400).json({ error: t('api.noRepoToCollect') });
-    const want = name ? [String(name)] : Array.isArray(names) ? names.map(String) : undefined;
+    const wantedNames = Array.isArray(names) ? names.map(String) : undefined;
+    const want = name ? [String(name)] : wantedNames;
     try {
       const result = collectFromSource(
         cfg, repo, projectCollectSource(proj.path, id), want,
@@ -753,24 +785,12 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   // ---- batch import / diagnose ----
   // 预览：GET(?path=) 与 POST({dirs}) 均可
   const importPreview = (req: express.Request, res: express.Response) => {
-    const body = req.body ?? {};
-    const dirs = Array.isArray(body.dirs)
-      ? body.dirs
-      : body.path
-        ? [String(body.path)]
-        : req.query?.path
-          ? [String(req.query.path)]
-          : [];
-    res.json(previewImportDirs(dirs));
+    res.json(previewImportDirs(previewDirs((req.body ?? {}) as Record<string, unknown>, req.query?.path)));
   };
   r.get('/import/preview', importPreview);
   r.post('/import/preview', importPreview);
   r.post('/import', (req, res) => {
-    const dirs = Array.isArray(req.body?.dirs)
-      ? req.body.dirs
-      : req.body?.path
-        ? String(req.body.path).split('\n').map((s: string) => s.trim()).filter(Boolean)
-        : [];
+    const dirs = importDirsFrom((req.body ?? {}) as Record<string, unknown>);
     const repoId = req.body?.repoId;
     try {
       const result = importDirs(cfg, dirs, repoId);

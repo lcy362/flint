@@ -26,14 +26,12 @@ export default function Chip<T extends string = string>({
   onChange,
   multiple = false,
   size = 'md',
-}: ChipProps<T>) {
-  const toggle = (v: T) => {
-    if (multiple) {
-      onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
-    } else {
-      onChange(selected.includes(v) ? [] : [v]);
-    }
-  };
+}: Readonly<ChipProps<T>>) {
+  // 两种点选语义各写一个方法：多选增删集合，单选直接替换 / 清空
+  const toggleSingle = (v: T) => onChange(selected.includes(v) ? [] : [v]);
+  const toggleMulti = (v: T) =>
+    onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+  const toggle = multiple ? toggleMulti : toggleSingle;
 
   return (
     <div className={`filter-row${size === 'lg' ? ' filter-row--loose' : ''}`}>

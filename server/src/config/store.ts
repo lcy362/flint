@@ -81,7 +81,7 @@ function stripLegacyConfigFields(parsed: Partial<HubConfig>): Partial<HubConfig>
 export class ConfigStore {
   private cfg: HubConfig;
 
-  constructor(private filePath: string = CONFIG_PATH) {
+  constructor(private readonly filePath: string = CONFIG_PATH) {
     this.cfg = this.load();
   }
 
@@ -90,7 +90,7 @@ export class ConfigStore {
     const renames = Object.entries(AGENT_KEY_RENAMES).filter(([old]) => old in cfg.agents);
     if (renames.length === 0 && !cfg.activeAgents.some((k) => k in AGENT_KEY_RENAMES)) return;
     for (const [old, next] of renames) {
-      const merged = { ...(cfg.agents[next] ?? {}), ...cfg.agents[old] };
+      const merged = { ...cfg.agents[next], ...cfg.agents[old] };
       delete cfg.agents[old];
       cfg.agents[next] = merged;
     }

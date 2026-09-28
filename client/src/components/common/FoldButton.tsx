@@ -4,7 +4,7 @@ import { useI18n } from '../../i18n';
  * 面板折叠按钮：箭头随展开态旋转，折叠后头部仍保留计数供快速判读。
  * 预设详情与智能体详情等「可写面板」共用，保证交互一致。
  */
-export default function FoldButton({ expanded, label, onClick }: { expanded: boolean; label: string; onClick: () => void }) {
+export default function FoldButton({ expanded, label, onClick }: Readonly<{ expanded: boolean; label: string; onClick: () => void }>) {
   const { t } = useI18n();
   return (
     <button

@@ -9,7 +9,7 @@ interface SegmentProps<T extends string = string> {
   onChange: (v: T) => void;
 }
 
-export default function Segment<T extends string = string>({ options, value, onChange }: SegmentProps<T>) {
+export default function Segment<T extends string = string>({ options, value, onChange }: Readonly<SegmentProps<T>>) {
   return (
     <div className="seg" role="tablist">
       {options.map((o) => (

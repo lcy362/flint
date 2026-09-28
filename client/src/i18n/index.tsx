@@ -53,7 +53,7 @@ export function translate(lang: Lang, key: string, params?: MsgParams): string {
 
 /** 把 `**加粗**` 标记渲染成 <strong>，用于需要强调的整句文案 */
 export function rich(text: string): ReactNode[] {
-  return text.split('**').map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : part));
+  return text.split('**').map((part, i) => (i % 2 === 1 ? <strong key={part}>{part}</strong> : part));
 }
 
 /** 名称列表连接符：中文用「、」，英文用「, 」 */
@@ -89,8 +89,8 @@ function applyLang(l: Lang): void {
   emitReload();
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(current);
+export function I18nProvider({ children }: Readonly<{ children: ReactNode }>) {
+  const [langState, setLangState] = useState<Lang>(current);
 
   useEffect(() => {
     const fn = (l: Lang) => setLangState(l);
@@ -102,14 +102,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   // 同步 <html lang>，利于无障碍与浏览器排版
   useEffect(() => {
-    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
-  }, [lang]);
+    document.documentElement.lang = langState === 'zh' ? 'zh-CN' : 'en';
+  }, [langState]);
 
   const setLang = useCallback((l: Lang) => applyLang(l), []);
 
   const value = useMemo<I18nValue>(
-    () => ({ lang, setLang, t: (key, params) => translate(lang, key, params) }),
-    [lang, setLang],
+    () => ({ lang: langState, setLang, t: (key, params) => translate(langState, key, params) }),
+    [langState, setLang],
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

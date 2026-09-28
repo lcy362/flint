@@ -96,11 +96,17 @@ export function isToolManaged(item: SkillCardView): boolean {
   return item.reason !== 'own' && item.reason !== 'external' && item.reason !== 'shared';
 }
 
+/** 少数需要强调的来源 → 徽标色调；其余（本工具部署）走默认 accent */
+const REASON_TONE: Partial<Record<string, 'warn' | 'info'>> = {
+  external: 'warn',
+  shared: 'info',
+};
+
 export function reasonBadge(t: TFunc, item: SkillCardView) {
   const label = item.reasonLabel ?? reasonLabel(t, item.reason);
   if (!label) return null; // manual 不再作为明显的来源标志展示
   // 外部软链不是本工具的产物（警示色）；共享目录读取只读且非本 Agent 分发（信息色）
-  const tone = item.reason === 'external' ? 'warn' : item.reason === 'shared' ? 'info' : 'accent';
+  const tone = REASON_TONE[item.reason] ?? 'accent';
   return <Badge tone={tone} title={item.reasonTitle ?? reasonTitle(t, item.reason)}>{label}</Badge>;
 }
 

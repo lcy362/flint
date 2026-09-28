@@ -65,12 +65,21 @@ function clickProps(item: EntityItem) {
   };
 }
 
+/** 实体卡 / 行的类名：基础类 + 变体 + 置灰 / 可点击态 */
+function cardClass(base: string, item: EntityItem): string {
+  const parts = [base];
+  if (item.variant) parts.push(`${base}--${item.variant}`);
+  if (item.muted) parts.push('is-off');
+  if (item.onClick) parts.push('is-clickable');
+  return parts.join(' ');
+}
+
 /** 卡片视图（默认） */
-export function EntityCard({ item }: { item: EntityItem }) {
+export function EntityCard({ item }: Readonly<{ item: EntityItem }>) {
   const tags = item.tags ?? [];
   return (
     <article
-      className={`entity-card ${item.variant ? `entity-card--${item.variant}` : ''} ${item.muted ? 'is-off' : ''} ${item.onClick ? 'is-clickable' : ''}`}
+      className={cardClass('entity-card', item)}
       {...clickProps(item)}
     >
       <div className="entity-card__head">
@@ -101,11 +110,11 @@ export function EntityCard({ item }: { item: EntityItem }) {
 }
 
 /** 列表行视图 */
-export function EntityRow({ item }: { item: EntityItem }) {
+export function EntityRow({ item }: Readonly<{ item: EntityItem }>) {
   const tags = item.tags ?? [];
   return (
     <div
-      className={`entity-row ${item.variant ? `entity-row--${item.variant}` : ''} ${item.muted ? 'is-off' : ''} ${item.onClick ? 'is-clickable' : ''}`}
+      className={cardClass('entity-row', item)}
       {...clickProps(item)}
     >
       {item.toggle}
@@ -170,7 +179,7 @@ export default function EntityList({
   collapsible = false,
   storageKey,
   defaultCollapsed = false,
-}: EntityListProps) {
+}: Readonly<EntityListProps>) {
   const [globalMode, setGlobalMode] = useViewMode();
   const { t } = useI18n();
   const viewModeOptions = useViewModeOptions();
@@ -239,12 +248,12 @@ function EntityToolbar({
   toolbar,
   toggle,
   collapse,
-}: {
+}: Readonly<{
   title?: ReactNode;
   toolbar?: ReactNode;
   toggle?: ReactNode;
   collapse?: ReactNode;
-}) {
+}>) {
   return (
     <div className="entity-toolbar">
       {collapse}

@@ -25,7 +25,7 @@ export default function BadgeLegend({
   intro,
   items,
   triggerLabel,
-}: {
+}: Readonly<{
   /** 弹窗标题 */
   title: string;
   /** 弹窗顶部的总说明 */
@@ -33,7 +33,7 @@ export default function BadgeLegend({
   items: BadgeLegendItem[];
   /** 入口按钮文字（缺省用通用「标签说明」） */
   triggerLabel?: string;
-}) {
+}>) {
   const [open, setOpen] = useState(false);
   const { t } = useI18n();
   return (

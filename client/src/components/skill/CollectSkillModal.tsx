@@ -14,7 +14,32 @@ import { FieldSelect } from '../ui/Field';
 import SwitchLabel from '../ui/SwitchLabel';
 import { useToast } from '../ui/Toast';
 import { useAsync } from '../../state/useAsync';
-import { joinList, rich, useI18n } from '../../i18n';
+import { joinList, rich, useI18n, type TFunc } from '../../i18n';
+
+/**
+ * 接管说明文案：按「软链 / 副本」形态与预览状态决定要提示哪几条。
+ * 抽成纯函数，让弹窗组件本身只负责状态流转。
+ */
+function buildTakeoverNotes(
+  t: TFunc,
+  opts: { symlinkMode: boolean; reason?: string; previewExists: boolean; overwrite: boolean }
+): ReactNode[] {
+  const notes: ReactNode[] = [<span key="order">{t('collectModal.note.order')}</span>];
+  if (opts.reason === 'external') {
+    notes.push(
+      <span key="ext">{rich(opts.symlinkMode ? t('collectModal.note.externalSymlinkToLink') : t('collectModal.note.externalSymlinkToCopy'))}</span>
+    );
+  } else if (opts.previewExists && !opts.overwrite) {
+    notes.push(<span key="keep">{rich(t('collectModal.note.keepRepo'))}</span>);
+  } else {
+    notes.push(<span key="replace">{rich(t('collectModal.note.replaceByRepo'))}</span>);
+  }
+  notes.push(
+    <span key="form">{rich(opts.symlinkMode ? t('collectModal.note.formSymlink') : t('collectModal.note.formCopy'))}</span>,
+    <span key="reg">{rich(t('collectModal.note.register'))}</span>,
+  );
+  return notes;
+}
 
 /**
  * 归集来源适配器：把「某目录里的技能 → 仓库」这条链路的接口差异收敛到一处，
@@ -99,14 +124,14 @@ export default function CollectSkillModal({
   source,
   onClose,
   onDone,
-}: {
+}: Readonly<{
   /** 待归集的技能；null 表示关闭 */
   item: SkillCardView | null;
   /** 归集来源适配器（页面用 useMemo 保持引用稳定，避免预览重复请求） */
   source: CollectSourceApi;
   onClose: () => void;
   onDone: () => void;
-}) {
+}>) {
   const toast = useToast();
   const { t } = useI18n();
   const { data: state } = useAsync<StateView>(() => api('/state'));
@@ -173,23 +198,9 @@ export default function CollectSkillModal({
   const takeoverLabel = symlinkMode
     ? t('collectModal.takeover.symlink')
     : t('collectModal.takeover.copy');
-  const takeoverNotes: ReactNode[] = [];
-  if (takeoverOn) {
-    takeoverNotes.push(<span key="order">{t('collectModal.note.order')}</span>);
-    if (item?.reason === 'external') {
-      takeoverNotes.push(
-        <span key="ext">{rich(symlinkMode ? t('collectModal.note.externalSymlinkToLink') : t('collectModal.note.externalSymlinkToCopy'))}</span>
-      );
-    } else if (previewExists && !overwrite) {
-      takeoverNotes.push(<span key="keep">{rich(t('collectModal.note.keepRepo'))}</span>);
-    } else {
-      takeoverNotes.push(<span key="replace">{rich(t('collectModal.note.replaceByRepo'))}</span>);
-    }
-    takeoverNotes.push(
-      <span key="form">{rich(symlinkMode ? t('collectModal.note.formSymlink') : t('collectModal.note.formCopy'))}</span>
-    );
-    takeoverNotes.push(<span key="reg">{rich(t('collectModal.note.register'))}</span>);
-  }
+  const takeoverNotes = takeoverOn
+    ? buildTakeoverNotes(t, { symlinkMode, reason: item?.reason, previewExists, overwrite })
+    : [];
 
   return (
     <Modal

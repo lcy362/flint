@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillAction, type SkillSearchResp, type SkillCardView, type RepoStatus } from '../api/types';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
 import { skillBadgeLegend } from '../components/skill/SkillBadges';
@@ -23,12 +23,70 @@ import { useToast } from '../components/ui/Toast';
 import { useAsync } from '../state/useAsync';
 import { useViewMode } from '../state/viewMode';
 import { navigate, useQueryFlag, useQueryList, useQueryParam, useRoute } from '../state/router';
-import { joinList, rich, useI18n } from '../i18n';
+import { joinList, rich, useI18n, type TFunc } from '../i18n';
+
+/** 技能库的筛选条件 */
+interface CardFilters {
+  facets: string[];
+  srcs: string[];
+  untaggedOnly: boolean;
+  kw: string;
+  bodyHits: Record<string, string> | null;
+}
+
+/**
+ * 关键词命中结果：
+ * null = 没命中（应排除）；undefined = 未启用关键词；字符串 = 仅正文命中时的上下文。
+ */
+function keywordBodyHit(c: SkillCardView, f: CardFilters): string | undefined | null {
+  if (!f.kw) return undefined;
+  const hay = `${c.name} ${c.title ?? ''} ${c.description ?? ''}`.toLowerCase();
+  const bodyCtx = f.bodyHits ? f.bodyHits[c.id] : undefined;
+  // 元数据命中 → 常规展示；仅正文命中 → 附上下文；都没命中 → 排除
+  if (hay.includes(f.kw)) return bodyCtx;
+  return bodyCtx === undefined ? null : bodyCtx;
+}
+
+/** 标签 / 来源 / 未打标签三项条件是否都通过（关键词另算） */
+function matchesFacetFilters(c: SkillCardView, f: CardFilters): boolean {
+  if (f.facets.length > 0 && !f.facets.some((tag) => c.tags.includes(tag))) return false;
+  if (f.srcs.length > 0 && !f.srcs.includes(c.source)) return false;
+  if (f.untaggedOnly && c.tags.length > 0) return false;
+  return true;
+}
+
+/** 技能库筛选：标签 / 来源 / 未打标签 / 关键词 */
+function filterCards(cards: SkillCardView[], f: CardFilters): SkillCardView[] {
+  const out: SkillCardView[] = [];
+  for (const c of cards) {
+    if (!matchesFacetFilters(c, f)) continue;
+    const bodyCtx = keywordBodyHit(c, f);
+    if (bodyCtx === null) continue;
+    out.push(c.bodyHit ? c : { ...c, bodyHit: bodyCtx });
+  }
+  return out;
+}
+
+/** 归集确认行的状态徽标：保留仓库版 > 覆盖既有副本 > 新建 */
+function collectStatusBadge(t: TFunc, adoptingRepo: boolean, exists: boolean, dest: string): ReactNode {
+  if (adoptingRepo) return <Badge tone="info" title={t('collect.badge.keep.title')}>{t('collect.badge.keep')}</Badge>;
+  if (exists) return <Badge tone="warn" title={t('collect.badge.overwrite.title', { dest })}>{t('collect.badge.overwrite')}</Badge>;
+  return <Badge tone="good">{t('collect.badge.new')}</Badge>;
+}
+
+/** 「从 Agent 归集」预览行的状态徽标：仓库版 > 已存在 > 软链 > 无 */
+function collectItemBadge(t: TFunc, it: AgentCollectItem): ReactNode {
+  if (it.symlink && it.inRepo) {
+    return <Badge tone="info" title={t('collect.repoVersionBadge.title', { target: it.linkTarget ?? '' })}>{t('badge.takenOver')}</Badge>;
+  }
+  if (it.exists) return <Badge tone="neutral" title={t('collect.existsBadge.title')}>{t('collect.existsBadge')}</Badge>;
+  if (it.symlink) return <Badge tone="accent">{t('collect.sub.symlink')}</Badge>;
+  return undefined;
+}
 
 export default function Library() {
   const { data, loading, error, reload } = useAsync<StateView>(() => api('/state'));
   const { t } = useI18n();
-  const toast = useToast();
   const route = useRoute();
 
   // 详情弹层与筛选条件都写进地址，刷新后可完整复原当前页面
@@ -46,13 +104,13 @@ export default function Library() {
   const allTags = useMemo(() => {
     const set = new Set<string>();
     data?.skills.forEach((s) => s.tags?.forEach((tag) => set.add(tag)));
-    return [...set].sort();
+    return [...set].sort((a, b) => a.localeCompare(b));
   }, [data]);
 
   const allSources = useMemo(() => {
     const set = new Set<string>();
     data?.skills.forEach((s) => set.add(s.source));
-    return [...set].sort();
+    return [...set].sort((a, b) => a.localeCompare(b));
   }, [data]);
 
   /** 每个标签 / 来源下的技能数，供筛选器展示 */
@@ -89,26 +147,10 @@ export default function Library() {
     return () => { alive = false; clearTimeout(handle); };
   }, [qTrim]);
 
-  const shown = useMemo(() => {
-    const kw = qTrim;
-    const out: SkillCardView[] = [];
-    for (const c of cards) {
-      if (facets.length > 0 && !facets.some((tag) => c.tags.includes(tag))) continue;
-      if (srcs.length > 0 && !srcs.includes(c.source)) continue;
-      if (untaggedOnly && c.tags.length > 0) continue;
-      if (kw) {
-        const hay = `${c.name} ${c.title ?? ''} ${c.description ?? ''}`.toLowerCase();
-        const metaHit = hay.includes(kw);
-        const bodyCtx = bodyHits ? bodyHits[c.id] : undefined;
-        // 元数据命中 → 常规展示；仅正文命中 → 附上下文；都没命中 → 排除
-        if (!metaHit && bodyCtx === undefined) continue;
-        out.push(c.bodyHit ? c : { ...c, bodyHit: bodyCtx !== undefined ? bodyCtx : undefined });
-        continue;
-      }
-      out.push(c);
-    }
-    return out;
-  }, [cards, facets, qTrim, srcs, untaggedOnly, bodyHits]);
+  const shown = useMemo(
+    () => filterCards(cards, { facets, srcs, untaggedOnly, kw: qTrim, bodyHits }),
+    [cards, facets, qTrim, srcs, untaggedOnly, bodyHits],
+  );
 
   // 来源默认值（自有仓库）不算筛选；仅当用户在地址栏显式筛过来源时，重置才出现
   const srcInUrl = route.query.get('src');
@@ -168,7 +210,7 @@ export default function Library() {
         >
           {() => (
             <SkillList
-              title={`${hasFilter ? t('list.filtered') : t('list.allSkills')} · ${shown.length}${hasFilter ? ` / ${cards.length}` : ''}`}
+              title={`${hasFilter ? t('list.filtered') : t('list.allSkills')} · ${shown.length}${hasFilter ? ' / ' + cards.length : ''}`}
               items={shown}
               onAction={(item) => openDetail(item.id)}
               onTag={(item) => openDetail(item.id)}
@@ -203,7 +245,7 @@ type WarehouseTarget = (RepoView & { kind: 'repo' }) | (SourceView & { kind: 'so
 
 /* 仓库管理。技能入库动作（归集 / 导入）挂在自有仓库上：第三方仓库作为独立仓库维护，
  * 但当其技能被自有仓库导入时，它只是数据源目录，无需任何登记。 */
-function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; sources: SourceView[]; reload: () => void }) {
+function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[]; sources: SourceView[]; reload: () => void }>) {
   const { t } = useI18n();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -371,7 +413,7 @@ function ReposAndSources({ repos, sources, reload }: { repos: RepoView[]; source
 }
 
 /** 添加技能到自有仓库：归集（Agent 目录）与导入（外部数据源目录）的合并入口，进入后再选方式 */
-function AddSkillsModal({ repo, onClose, onDone }: { repo: RepoView | null; onClose: () => void; onDone: () => void }) {
+function AddSkillsModal({ repo, onClose, onDone }: Readonly<{ repo: RepoView | null; onClose: () => void; onDone: () => void }>) {
   const { t } = useI18n();
   const [mode, setMode] = useState<'collect' | 'import'>('collect');
   const [wasOpen, setWasOpen] = useState(false);
@@ -411,7 +453,7 @@ const REPO_KEY = '__repo__';
  * 第二步确认页按名字分组，仓库内版本与各 agent 版本一起作为候选（仓库已有同名时）：
  * 选仓库版本保持现状，选 agent 版本则覆盖仓库副本；逐项展示写入路径后由用户确认。
  */
-function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () => void; onDone: () => void }) {
+function CollectPanel({ repo, onClose, onDone }: Readonly<{ repo: RepoView; onClose: () => void; onDone: () => void }>) {
   const { t } = useI18n();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -505,7 +547,9 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
         ];
     let chosen = choices[name];
     if (noop || !chosen || !options.some((o) => o.value === chosen)) {
-      chosen = !noop && agentCands.length > 0 ? (exists ? REPO_KEY : agentCands[0].agent.agentKey) : REPO_KEY;
+      // 有 Agent 候选时默认取第一个（已存在则默认保留仓库版），否则一律写回仓库
+      if (!noop && agentCands.length > 0) chosen = exists ? REPO_KEY : agentCands[0].agent.agentKey;
+      else chosen = REPO_KEY;
     }
     return { name, cands: agentCands, allCands: cands, exists, options, chosen, noop };
   });
@@ -520,7 +564,8 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
       const replaceNames: string[] = [];
       for (const p of plan) {
         if (p.chosen === REPO_KEY) continue;
-        (byAgent[p.chosen] ??= []).push(p.name);
+        byAgent[p.chosen] ??= [];
+        byAgent[p.chosen].push(p.name);
         if (p.exists) replaceNames.push(p.name);
       }
       const sels = Object.entries(byAgent).map(([agentKey, names]) => ({ agentKey, names }));
@@ -607,13 +652,7 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
                   )}
                 </div>
               ),
-              status: adoptingRepo ? (
-                <Badge tone="info" title={t('collect.badge.keep.title')}>{t('collect.badge.keep')}</Badge>
-              ) : p.exists ? (
-                <Badge tone="warn" title={t('collect.badge.overwrite.title', { dest })}>{t('collect.badge.overwrite')}</Badge>
-              ) : (
-                <Badge tone="good">{t('collect.badge.new')}</Badge>
-              ),
+              status: collectStatusBadge(t, adoptingRepo, p.exists, dest),
             };
           })}
         />
@@ -738,13 +777,7 @@ function CollectPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () =
               title: it.name,
               sub: <span className="mono">{it.symlink ? t('collect.sub.symlinkTo', { target: it.linkTarget ?? t('collect.dangling') }) : t('collect.sub.realDir')}</span>,
               desc: it.description,
-              status: it.symlink && it.inRepo ? (
-                <Badge tone="info" title={t('collect.repoVersionBadge.title', { target: it.linkTarget ?? '' })}>{t('badge.takenOver')}</Badge>
-              ) : it.exists ? (
-                <Badge tone="neutral" title={t('collect.existsBadge.title')}>{t('collect.existsBadge')}</Badge>
-              ) : it.symlink ? (
-                <Badge tone="accent">{t('collect.sub.symlink')}</Badge>
-              ) : undefined,
+              status: collectItemBadge(t, it),
               toggle: (
                 <Switch
                   aria-label={t('collect.toggleAria', { name: it.name })}
@@ -788,8 +821,12 @@ const EMPTY_DRAFT: WarehouseDraft = { kind: 'repo', id: '', name: '', path: '', 
 
 /** 自有仓库缺省扫描 <路径>/skills */
 function skillsRootOf(p: string): string {
-  const t = p.trim();
-  return t ? `${t.replace(/\/+$/, '')}/skills` : '';
+  const trimmed = p.trim();
+  if (!trimmed) return '';
+  // 去掉结尾斜杠，避免出现 `//skills`；不用正则是为了避免回溯开销
+  let end = trimmed.length;
+  while (end > 0 && trimmed[end - 1] === '/') end -= 1;
+  return `${trimmed.slice(0, end)}/skills`;
 }
 
 function draftFrom(target: WarehouseTarget | null | undefined): WarehouseDraft {
@@ -815,12 +852,12 @@ function WarehouseModal({
   target,
   onClose,
   onDone,
-}: {
+}: Readonly<{
   open: boolean;
   target?: WarehouseTarget | null;
   onClose: () => void;
   onDone: () => void;
-}) {
+}>) {
   const { t } = useI18n();
   const toast = useToast();
   const editing = !!target;
@@ -876,7 +913,9 @@ function WarehouseModal({
           await api('/sources', { method: 'POST', body: JSON.stringify({ id, name, path, layout: d.layout }) });
         }
       }
-      toast.push(editing ? t('repo.updated') : t(d.kind === 'repo' ? 'repo.registered.own' : 'repo.registered.third', { id }), 'good');
+      const registeredKey = d.kind === 'repo' ? 'repo.registered.own' : 'repo.registered.third';
+      const doneMsg = editing ? t('repo.updated') : t(registeredKey, { id });
+      toast.push(doneMsg, 'good');
       onDone();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
@@ -975,13 +1014,13 @@ function SkillDetailModal({
   allTags,
   onClose,
   onSaved,
-}: {
+}: Readonly<{
   id: string | null;
   skill?: StateView['skills'][number];
   allTags: string[];
   onClose: () => void;
   onSaved: () => void;
-}) {
+}>) {
   const { t } = useI18n();
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
@@ -1065,7 +1104,7 @@ function SkillDetailModal({
               </>
             )}
           </div>
-          {content?.provenance && content.provenance.takenAt && (
+          {content?.provenance?.takenAt && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
               <span className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{content.provenance.sourceRef}</span>
               <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
@@ -1129,7 +1168,7 @@ function SkillDetailModal({
  * 目录仅作为本次导入的数据源（如第三方库的 skills 目录），不会登记进系统；
  * 同名 skill 已在目标仓库则去重跳过，导入的技能带来源追溯（origin=源目录）。
  */
-function ImportPanel({ repo, onClose, onDone }: { repo: RepoView; onClose: () => void; onDone: () => void }) {
+function ImportPanel({ repo, onClose, onDone }: Readonly<{ repo: RepoView; onClose: () => void; onDone: () => void }>) {
   const { t } = useI18n();
   const toast = useToast();
   const [text, setText] = useState('');

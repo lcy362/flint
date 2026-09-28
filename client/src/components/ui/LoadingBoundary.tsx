@@ -9,7 +9,7 @@ interface LoadingBoundaryProps<T> {
   children: (data: T) => ReactNode;
 }
 
-export default function LoadingBoundary<T>({ state, empty, children }: LoadingBoundaryProps<T>) {
+export default function LoadingBoundary<T>({ state, empty, children }: Readonly<LoadingBoundaryProps<T>>) {
   const { t } = useI18n();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {

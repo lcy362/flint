@@ -38,11 +38,15 @@ async function runPicker(title: string, kind: Kind): Promise<string | null> {
 
 /** 目录去掉结尾斜杠，保持一致的路径写法 */
 function normalize(p: string): string {
-  return p.trim().replace(/[\\/]+$/, '');
+  const trimmed = p.trim();
+  let end = trimmed.length;
+  while (end > 0 && (trimmed[end - 1] === '/' || trimmed[end - 1] === '\\')) end -= 1;
+  return trimmed.slice(0, end);
 }
 
+/** AppleScript 字符串转义：反斜杠与双引号都需要转义 */
 function escapeForAppleScript(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return s.replace(/["\\]/g, (ch) => (ch === '"' ? String.raw`\"` : String.raw`\\`));
 }
 
 /** child_process 抛出的错误可能带数字 code（退出码）或字符串 code（ENOENT） */
@@ -80,7 +84,7 @@ async function runDarwin(title: string, kind: Kind): Promise<string | null> {
 }
 
 function windowsScript(title: string, kind: Kind): string {
-  const escaped = title.replace(/'/g, "''");
+  const escaped = title.replaceAll("'", "''");
   if (kind === 'dir') {
     return [
       'Add-Type -AssemblyName System.Windows.Forms;',
@@ -142,7 +146,7 @@ async function runLinux(title: string, kind: Kind): Promise<string | null> {
       if (err.code !== 'ENOENT') break;
     }
   }
-  throw last
-    ? new Error(t(kind === 'dir' ? 'picker.unavailableDir' : 'picker.unavailableFile', { msg: last.message }))
-    : new Error(t('picker.notFound'));
+  if (!last) throw new Error(t('picker.notFound'));
+  const key = kind === 'dir' ? 'picker.unavailableDir' : 'picker.unavailableFile';
+  throw new Error(t(key, { msg: last.message }));
 }

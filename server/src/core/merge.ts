@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ConfigStore } from '../config/store.js';
 import type { Skill } from './skill.js';
-import { expandTilde, repoSkillRoot } from './agents.js';
+import { repoSkillRoot } from './agents.js';
 import { t } from '../i18n/index.js';
 
 /**

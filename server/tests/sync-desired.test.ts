@@ -109,7 +109,7 @@ describe('deployOne（单技能「添加」部署）', () => {
     const target = path.join(tmpDir('flint-deployone-target-'), 'agent');
     const store = makeStore({ agents: { cursor: { globalDir: target, sync: 'symlink' } } });
     const res = deployOne(store, 'cursor', 'ghost@default', [skill('alpha')]);
-    expect(res.failed.length).toBe(1);
+    expect(res.failed).toHaveLength(1);
     expect(res.failed[0].skill).toBe('ghost@default');
   });
 });

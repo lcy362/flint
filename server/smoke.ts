@@ -35,7 +35,7 @@ cfg.agents['trae_cn'] = { globalDir: targetDir, sync: 'symlink', preset: 'demo' 
 store.save();
 
 const lib = scanAll(cfg.repos, cfg.foreignSources);
-console.log('Discovered skills =', lib.skills.map((s) => s.id).sort());
+console.log('Discovered skills =', lib.skills.map((s) => s.id).sort((a, b) => a.localeCompare(b)));
 
 // 自有仓库恒扁平：skills/devops/beta 位于分类子目录，不应被识别（只收根下直接子目录）
 console.log(
@@ -111,8 +111,10 @@ let projBase = '';
   store.save();
   const lib5 = scanAll(store.data.repos, store.data.foreignSources);
   const { presetSkillSet } = await import('./src/core/sync.js');
-  const names = [...presetSkillSet(store, lib5.skills, 'trae_cn').values()].map((s) => s.name);
-  console.log('\n[preset-tags] desired set =', names.sort());
+  const names = [...presetSkillSet(store, lib5.skills, 'trae_cn').values()]
+    .map((s) => s.name)
+    .sort((a, b) => a.localeCompare(b));
+  console.log('\n[preset-tags] desired set =', names);
   console.log(names.includes('echarts') ? 'PASS: preset tag matching' : 'FAIL: preset tag not effective');
 }
 

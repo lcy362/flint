@@ -9,7 +9,7 @@ import { useToast } from '../ui/Toast';
 import { useI18n } from '../../i18n';
 
 /** 新增自定义 Agent（AG-03）：内置清单之外由用户新增的任意工具 */
-export function AddAgentModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+export function AddAgentModal({ open, onClose, onDone }: Readonly<{ open: boolean; onClose: () => void; onDone: () => void }>) {
   const toast = useToast();
   const { t } = useI18n();
   const [key, setKey] = useState('');

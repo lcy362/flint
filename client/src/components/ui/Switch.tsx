@@ -5,7 +5,7 @@ interface SwitchProps {
   'aria-label'?: string;
 }
 
-export default function Switch({ checked, onChange, disabled, ...rest }: SwitchProps) {
+export default function Switch({ checked, onChange, disabled, ...rest }: Readonly<SwitchProps>) {
   return (
     <label className="switch">
       <input

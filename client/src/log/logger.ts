@@ -37,7 +37,8 @@ function push(entry: Entry): void {
 }
 
 function format(e: Entry): string {
-  return `${e.ts} [${e.level}] [${e.mod}] ${e.msg}${e.meta ? ` ${JSON.stringify(e.meta)}` : ''}`;
+  const meta = e.meta ? ' ' + JSON.stringify(e.meta) : '';
+  return `${e.ts} [${e.level}] [${e.mod}] ${e.msg}${meta}`;
 }
 
 function write(level: Level, mod: string, msg: string, meta?: Record<string, unknown>): void {

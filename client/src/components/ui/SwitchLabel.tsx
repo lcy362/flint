@@ -9,7 +9,7 @@ export default function SwitchLabel({
   disabled,
   title,
   label,
-}: {
+}: Readonly<{
   checked: boolean;
   onChange: (v: boolean) => void;
   children: ReactNode;
@@ -17,7 +17,7 @@ export default function SwitchLabel({
   title?: string;
   /** 自定义无障碍名称（children 非纯文本时使用） */
   label?: string;
-}) {
+}>) {
   return (
     <label className="switch-label" title={title}>
       <Switch

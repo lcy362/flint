@@ -57,7 +57,8 @@ export function parseHash(hash: string): Route {
 export function toHash(route: Route): string {
   const segs = [route.tab, ...(route.sub ? [encodeURIComponent(route.sub)] : [])];
   const qs = route.query.toString();
-  return `#/${segs.join('/')}${qs ? `?${qs}` : ''}`;
+  const suffix = qs ? '?' + qs : '';
+  return `#/${segs.join('/')}${suffix}`;
 }
 
 let current: Route = parseHash(typeof window === 'undefined' ? '' : window.location.hash);

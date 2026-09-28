@@ -27,7 +27,7 @@ export default function Button({
   className = '',
   children,
   ...rest
-}: ButtonProps) {
+}: Readonly<ButtonProps>) {
   const classes = ['btn', cls[variant], size === 'sm' ? 'btn--sm' : '', block ? 'btn--block' : '', className]
     .filter(Boolean)
     .join(' ');

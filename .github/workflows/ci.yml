@@ -37,7 +37,8 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        # --ignore-scripts：依赖的安装脚本一律不执行，避免供应链投毒（本项目无原生模块）
+        run: npm ci --no-audit --no-fund --ignore-scripts
 
       # 类型检查 + 构建：tsc 报错与 vite 构建失败都在这里拦住
       - name: Type-check + build (server + client)
@@ -60,7 +61,8 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        # --ignore-scripts：依赖的安装脚本一律不执行，避免供应链投毒（本项目无原生模块）
+        run: npm ci --no-audit --no-fund --ignore-scripts
 
       # smoke.ts 全程在临时目录里跑，不碰本机真实目录。
       # 脚本只打印 PASS/FAIL、自身不设退出码，所以这里显式断言：

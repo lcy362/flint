@@ -8,7 +8,7 @@
  * 原生 title 在卡片里要停留约一秒才出来、样式也不受控，实测容易被当成「没反应」。
  * 按钮本身不是操作入口，只负责停止冒泡，避免点它时顺带把卡片当成「进入详情」。
  */
-export default function OpenStandardTitle({ label, tip }: { label: string; tip: string }) {
+export default function OpenStandardTitle({ label, tip }: Readonly<{ label: string; tip: string }>) {
   return (
     <span className="std-title">
       {label}

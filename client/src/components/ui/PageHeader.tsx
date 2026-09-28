@@ -4,11 +4,11 @@ export default function PageHeader({
   title,
   sub,
   actions,
-}: {
+}: Readonly<{
   title: ReactNode;
   sub?: ReactNode;
   actions?: ReactNode;
-}) {
+}>) {
   return (
     <div className="page-head">
       <div>

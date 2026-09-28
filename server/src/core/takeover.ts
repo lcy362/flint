@@ -41,6 +41,30 @@ export interface TakeoverSource {
  *
  * 只动来源目录这一侧，不触碰仓库里的副本；需显式 confirm（确认前返回 needConfirm）。
  */
+/**
+ * 接管前的判定：这次是否根本不需要动手。
+ * - 已是「指向该副本的软链」→ 幂等成功（linked=true）
+ * - 来源侧是真实目录且它本身就是仓库本体 → 停手（继续会把唯一本体删掉）
+ * 返回 undefined 表示需要真的执行接管。
+ */
+function takeoverPrecheck(src: string, targetReal: string, ref: string, name: string): TakeoverResult | undefined {
+  const srcStat = fs.lstatSync(src, { throwIfNoEntry: false });
+  if (!srcStat) return { ref, name, linked: false, reason: t('takeover.srcMissing', { name }) };
+  if (srcStat.isSymbolicLink()) {
+    // 已指向该副本 → 幂等成功；指向别处（含失效软链）也只是换掉这条链接，不会丢内容
+    let real: string | undefined;
+    try { real = fs.realpathSync(src); } catch { /* 失效软链：没有内容可丢，直接换掉 */ }
+    return real === targetReal ? { ref, name, linked: true, needConfirm: false } : undefined;
+  }
+  // 真实目录：它本身就是仓库本体时不做任何事，否则删的正是唯一本体
+  try {
+    if (fs.realpathSync(src) === targetReal) {
+      return { ref, name, linked: false, reason: t('takeover.isRepoBody', { name }) };
+    }
+  } catch { /* 取不到真实路径就按普通目录处理，走正常接管 */ }
+  return undefined;
+}
+
 export function takeoverInSource(
   cfg: ConfigStore,
   source: TakeoverSource,
@@ -57,24 +81,8 @@ export function takeoverInSource(
 
   if (!fs.existsSync(target)) return { ref: source.ref, name, linked: false, reason: t('takeover.copyMissing', { name }) };
 
-  const srcStat = fs.lstatSync(src, { throwIfNoEntry: false });
-  if (!srcStat) return { ref: source.ref, name, linked: false, reason: t('takeover.srcMissing', { name }) };
-
-  const targetReal = fs.realpathSync(target);
-
-  if (srcStat.isSymbolicLink()) {
-    // 已指向该副本 → 幂等成功；指向别处（含失效软链）也只是换掉这条链接，不会丢内容
-    let real: string | undefined;
-    try { real = fs.realpathSync(src); } catch { /* 失效软链：没有内容可丢，直接换掉 */ }
-    if (real === targetReal) return { ref: source.ref, name, linked: true, needConfirm: false };
-  } else {
-    // 真实目录：它本身就是仓库本体时不做任何事，否则删的正是唯一本体
-    try {
-      if (fs.realpathSync(src) === targetReal) {
-        return { ref: source.ref, name, linked: false, reason: t('takeover.isRepoBody', { name }) };
-      }
-    } catch { /* ignore */ }
-  }
+  const precheck = takeoverPrecheck(src, fs.realpathSync(target), source.ref, name);
+  if (precheck) return precheck;
 
   if (!confirm) {
     return { ref: source.ref, name, linked: false, needConfirm: true, reason: t('takeover.needConfirm') };

@@ -10,11 +10,11 @@ import type { AgentView } from '../../api/types';
 export default function AgentNamesTitle({
   agents,
   quiet,
-}: {
+}: Readonly<{
   agents: AgentView[];
   /** 弱化展示：用作开源生态推荐目录卡片的副标题（名字退居次要，主标题让给推荐目录） */
   quiet?: boolean;
-}) {
+}>) {
   const cls = quiet ? 'std-agents' : undefined;
   if (agents.length === 1) return <span className={cls}>{agents[0].name}</span>;
   return (

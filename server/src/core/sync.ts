@@ -112,24 +112,122 @@ function readDir(dir: string): fs.Dirent[] {
 export function dirsEqual(a: string, b: string): boolean {
   const ae = readDir(a);
   const be = readDir(b);
-  if (ae.length === 0 && be.length === 0) return false;
-  if (ae.length !== be.length) return false;
+  if (ae.length === 0 || ae.length !== be.length) return false;
   const names = new Set(be.map((e) => e.name));
   for (const e of ae) {
     if (!names.has(e.name)) return false;
-    const pa = path.join(a, e.name);
-    const pb = path.join(b, e.name);
-    let la: fs.Stats;
-    let lb: fs.Stats;
-    try { la = fs.lstatSync(pa); lb = fs.lstatSync(pb); } catch { return false; }
-    const isDirA = la.isDirectory() && !la.isSymbolicLink();
-    const isDirB = lb.isDirectory() && !lb.isSymbolicLink();
-    if (isDirA !== isDirB) return false;
-    if (isDirA) { if (!dirsEqual(pa, pb)) return false; continue; }
-    if (la.isSymbolicLink() || lb.isSymbolicLink()) return false;
-    try { if (!fs.readFileSync(pa).equals(fs.readFileSync(pb))) return false; } catch { return false; }
+    if (!sameEntry(path.join(a, e.name), path.join(b, e.name))) return false;
   }
   return true;
+}
+
+/** 单个条目是否一致：软链一律视为不一致，目录递归比较，其余比内容 */
+function sameEntry(pa: string, pb: string): boolean {
+  let la: fs.Stats;
+  let lb: fs.Stats;
+  try { la = fs.lstatSync(pa); lb = fs.lstatSync(pb); } catch { return false; }
+  if (la.isSymbolicLink() || lb.isSymbolicLink()) return false;
+  const isDir = la.isDirectory();
+  if (isDir !== lb.isDirectory()) return false;
+  if (isDir) return dirsEqual(pa, pb);
+  try { return fs.readFileSync(pa).equals(fs.readFileSync(pb)); } catch { return false; }
+}
+
+/** 落点检查结论：ok=可部署，skip=已就位无需动，blocked=不是本工具的东西，不能碰 */
+type DeployGate = { kind: 'ok' } | { kind: 'skip' } | { kind: 'blocked'; reason: string };
+
+/**
+ * 落盘位置已有东西时：只有「本工具自己部署的」才允许覆盖，用户自己的内容绝不删除。
+ * 本工具自己部署过的软链一律视为可覆盖并重建，用户自有软链 / 真实目录 / 普通文件一律拦下。
+ */
+function gateSymlinkEntry(cfg: ConfigStore, linkDir: string, target: string, agentsDir: string): DeployGate {
+  // 已软链且指向正确则跳过
+  try { if (fs.realpathSync(linkDir) === fs.realpathSync(target)) return { kind: 'skip' }; } catch { /* 目标失效，继续重建 */ }
+  let linkTarget: string | undefined;
+  try { linkTarget = fs.readlinkSync(linkDir); } catch { /* 读不到就按外部处理 */ }
+  if (isManagedLinkTarget(cfg.data, linkTarget, agentsDir)) return { kind: 'ok' };
+  // 外部工具 / 手工创建的软链，不归本工具管，误删会破坏用户环境
+  return { kind: 'blocked', reason: t('sync.externalLink', { dir: linkDir }) };
+}
+
+function gateExistingEntry(cfg: ConfigStore, linkDir: string, target: string, agentsDir: string): DeployGate {
+  let existing: fs.Stats | undefined;
+  try { existing = fs.lstatSync(linkDir); } catch { /* 不存在，正常新建 */ }
+  if (!existing) return { kind: 'ok' };
+  if (existing.isSymbolicLink()) return gateSymlinkEntry(cfg, linkDir, target, agentsDir);
+  if (existing.isDirectory()) {
+    // 实体目录：内容与目标技能一致才视为本工具部署的副本（可安全重建）；否则是用户自有内容
+    return dirsEqual(linkDir, target)
+      ? { kind: 'ok' }
+      : { kind: 'blocked', reason: t('sync.realDirMismatch', { dir: linkDir }) };
+  }
+  return { kind: 'blocked', reason: t('sync.fileExists', { dir: linkDir }) };
+}
+
+/** 建软链；平台不支持（Windows 权限等，NFR-02）时降级为复制并记一条 warning */
+function placeSymlink(linkDir: string, target: string, name: string, result: SyncResult): void {
+  try {
+    symlinkSkill(linkDir, target);
+  } catch (e) {
+    copySkill(linkDir, target);
+    result.warnings ??= [];
+    result.warnings.push(t('sync.symlinkFallback', { name, msg: (e as Error).message }));
+  }
+}
+
+/** 确保 agent 目录存在；创建失败时把原因写进结果并返回 false */
+function ensureAgentsDir(agentsDir: string, result: SyncResult): boolean {
+  if (fs.existsSync(agentsDir)) return true;
+  try {
+    fs.mkdirSync(agentsDir, { recursive: true });
+    return true;
+  } catch (e) {
+    result.failed.push({ skill: '*', reason: t('sync.mkdirFailed', { dir: agentsDir, msg: (e as Error).message }) });
+    return false;
+  }
+}
+
+/** 部署单个技能：落点检查过关后，按该关系的同步策略建软链或复制 */
+function deployOneSkill(
+  cfg: ConfigStore,
+  agentKey: string,
+  agentsDir: string,
+  sk: Skill,
+  result: SyncResult,
+): void {
+  const linkDir = path.join(agentsDir, sk.name);
+  const gate = gateExistingEntry(cfg, linkDir, sk.dir, agentsDir);
+  if (gate.kind === 'skip') return;
+  if (gate.kind === 'blocked') {
+    result.failed.push({ skill: sk.id, reason: gate.reason });
+    return;
+  }
+  try {
+    if (resolveSyncMode(cfg, agentKey, sk.name) === 'copy') copySkill(linkDir, sk.dir);
+    else placeSymlink(linkDir, sk.dir, sk.name, result);
+    result.created.push(sk.id);
+  } catch (e) {
+    log.warn('sync', `Deploy failed for ${sk.id}`, { agent: agentKey, reason: (e as Error).message });
+    result.failed.push({ skill: sk.id, reason: (e as Error).message });
+  }
+}
+
+/**
+ * 回收不再需要的项：只在显式同步（prune）时进行，且只回收「本工具自己部署的」软链。
+ * 真实目录（agent 自带 skill / 副本）与外部工具创建的软链都不归本工具管，误删会直接破坏用户环境。
+ */
+function pruneSyncLinks(cfg: ConfigStore, agentsDir: string, keep: Set<string>, result: SyncResult): void {
+  for (const entry of fs.readdirSync(agentsDir)) {
+    if (keep.has(entry)) continue;
+    const p = path.join(agentsDir, entry);
+    try {
+      const st = fs.lstatSync(p);
+      if (!st.isSymbolicLink()) continue;
+      if (!isManagedLinkTarget(cfg.data, fs.readlinkSync(p), agentsDir)) continue;
+      fs.unlinkSync(p);
+      result.removed.push(entry);
+    } catch { /* 读不到状态就跳过，宁可不删 */ }
+  }
 }
 
 /**
@@ -149,7 +247,6 @@ export function deployAgent(
   allSkills: Skill[],
   opts: { prune?: boolean } = {},
 ): SyncResult {
-  const prune = opts.prune === true;
   const def = findAgentDef(cfg.data, agentKey);
   const result: SyncResult = { agent: agentKey, created: [], removed: [], failed: [] };
   if (!def) {
@@ -158,82 +255,19 @@ export function deployAgent(
   }
   // 共享目录的 agent（cline/warp 等）与其它 agent 共用 ~/.agents/skills，采用“只清理本 agent 曾部署项”逻辑
   const agentsDir = resolveGlobalDir(def, cfg.data.agents[agentKey]?.globalDir);
-  if (!fs.existsSync(agentsDir)) {
-    try { fs.mkdirSync(agentsDir, { recursive: true }); }
-    catch (e) { result.failed.push({ skill: '*', reason: t('sync.mkdirFailed', { dir: agentsDir, msg: (e as Error).message }) }); return result; }
-  }
+  if (!ensureAgentsDir(agentsDir, result)) return result;
 
   const seen = new Set<string>();
-
   for (const sk of desired.values()) {
-    const target = sk.dir;
-    const linkDir = path.join(agentsDir, sk.name);
     seen.add(sk.name);
-
-    // 落盘位置已有东西时：只有「本工具自己部署的」才允许覆盖，用户自己的内容绝不删除。
-    let existing: fs.Stats | undefined;
-    try { existing = fs.lstatSync(linkDir); } catch { /* 不存在，正常新建 */ }
-    if (existing) {
-      if (existing.isSymbolicLink()) {
-        // 已软链且指向正确则跳过
-        try { if (fs.realpathSync(linkDir) === fs.realpathSync(target)) continue; } catch { /* 目标失效，继续重建 */ }
-        let linkTarget: string | undefined;
-        try { linkTarget = fs.readlinkSync(linkDir); } catch { /* 读不到就按外部处理 */ }
-        if (!isManagedLinkTarget(cfg.data, linkTarget, agentsDir)) {
-          // 外部工具 / 手工创建的软链，不归本工具管，误删会破坏用户环境
-          result.failed.push({ skill: sk.id, reason: t('sync.externalLink', { dir: linkDir }) });
-          continue;
-        }
-      } else if (existing.isDirectory()) {
-        // 实体目录：内容与目标技能一致才视为本工具部署的副本（可安全重建）；否则是用户自有内容
-        if (!dirsEqual(linkDir, target)) {
-          result.failed.push({ skill: sk.id, reason: t('sync.realDirMismatch', { dir: linkDir }) });
-          continue;
-        }
-      } else {
-        result.failed.push({ skill: sk.id, reason: t('sync.fileExists', { dir: linkDir }) });
-        continue;
-      }
-    }
-
-    try {
-      if (resolveSyncMode(cfg, agentKey, sk.name) === 'copy') {
-        copySkill(linkDir, target);
-      } else {
-        try {
-          symlinkSkill(linkDir, target);
-        } catch (e) {
-          // NFR-02：软链不可用（Windows 权限等）自动降级为复制
-          copySkill(linkDir, target);
-          (result.warnings ??= []).push(t('sync.symlinkFallback', { name: sk.name, msg: (e as Error).message }));
-        }
-      }
-      result.created.push(sk.id);
-    } catch (e) {
-      log.warn('sync', `Deploy failed for ${sk.id}`, { agent: agentKey, reason: (e as Error).message });
-      result.failed.push({ skill: sk.id, reason: (e as Error).message });
-    }
+    deployOneSkill(cfg, agentKey, agentsDir, sk, result);
   }
+  if (opts.prune === true) pruneSyncLinks(cfg, agentsDir, seen, result);
 
-  // 回收不再需要的项：只在显式同步（prune）时进行，且只回收「本工具自己部署的」软链。
-  // 真实目录（agent 自带 skill / 副本）与外部工具创建的软链都不归本工具管，误删会直接破坏用户环境。
-  if (prune) {
-    for (const entry of fs.readdirSync(agentsDir)) {
-      if (seen.has(entry)) continue;
-      const p = path.join(agentsDir, entry);
-      try {
-        const st = fs.lstatSync(p);
-        if (!st.isSymbolicLink()) continue;
-        if (!isManagedLinkTarget(cfg.data, fs.readlinkSync(p), agentsDir)) continue;
-        fs.unlinkSync(p);
-        result.removed.push(entry);
-      } catch { /* skip */ }
-    }
-  }
   if (result.created.length || result.removed.length || result.failed.length) {
     log.info('sync', 'Agent sync finished', {
       agent: agentKey,
-      prune,
+      prune: opts.prune === true,
       created: result.created.length,
       removed: result.removed.length,
       failed: result.failed.length,
@@ -314,23 +348,27 @@ export function diffSync(cfg: ConfigStore, _allSkills: Skill[]): SyncDiff[] {
     const def = findAgentDef(cfg.data, key);
     if (!def) continue;
     const dir = resolveGlobalDir(def, cfg.data.agents[key]?.globalDir);
+    const { actual, brokenLink } = scanAgentDir(dir);
+    // 期望集已停用：desiredNames 恒为空，故 actual 里每一项都算 extra（供显式清理判定）
     const desiredNames: string[] = [];
-    const actual = new Set<string>();
-    const brokenLink: string[] = [];
-    if (fs.existsSync(dir)) {
-      for (const ent of fs.readdirSync(dir)) {
-        const p = path.join(dir, ent);
-        let ls;
-        try { ls = fs.lstatSync(p); } catch { continue; }
-        if (ls.isSymbolicLink() && !fs.existsSync(p)) { brokenLink.push(ent); continue; }
-        if (ls.isSymbolicLink() || ls.isDirectory()) actual.add(ent);
-      }
-    }
-    const missing = desiredNames.filter((n) => !actual.has(n));
-    const extra = [...actual].filter((n) => !desiredNames.includes(n));
-    out.push({ agent: key, desiredNames, missing, extra, brokenLink });
+    out.push({ agent: key, desiredNames, missing: [], extra: [...actual], brokenLink });
   }
   return out;
+}
+
+/** 扫一遍某 agent 的实际目录：软链 / 真实目录计入 actual，失效软链单独记出 */
+function scanAgentDir(dir: string): { actual: Set<string>; brokenLink: string[] } {
+  const actual = new Set<string>();
+  const brokenLink: string[] = [];
+  if (!fs.existsSync(dir)) return { actual, brokenLink };
+  for (const ent of fs.readdirSync(dir)) {
+    const p = path.join(dir, ent);
+    let ls: fs.Stats;
+    try { ls = fs.lstatSync(p); } catch { continue; }
+    if (ls.isSymbolicLink() && !fs.existsSync(p)) { brokenLink.push(ent); continue; }
+    if (ls.isSymbolicLink() || ls.isDirectory()) actual.add(ent);
+  }
+  return { actual, brokenLink };
 }
 
 export const _internal = { deployAgent, diffSync, expandTilde };

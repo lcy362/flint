@@ -33,7 +33,7 @@ export default function MultiSelect<T extends string = string>({
   onChange,
   searchThreshold = 8,
   emptyHint,
-}: MultiSelectProps<T>) {
+}: Readonly<MultiSelectProps<T>>) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -77,12 +77,13 @@ export default function MultiSelect<T extends string = string>({
   const toggleValue = (v: T) =>
     onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
 
-  const summary =
-    selected.length === 0
-      ? label
-      : selected.length === 1
-        ? `${label} · ${options.find((o) => o.value === selected[0])?.label ?? selected[0]}`
-        : `${label} · ${selected.length}`;
+  // 触发器上的摘要：0 项只显示标题，1 项带上名字，多项只给数量
+  let summary = label;
+  if (selected.length === 1) {
+    summary = `${label} · ${options.find((o) => o.value === selected[0])?.label ?? selected[0]}`;
+  } else if (selected.length > 1) {
+    summary = `${label} · ${selected.length}`;
+  }
 
   return (
     <div className="multiselect" ref={rootRef}>
@@ -150,7 +151,7 @@ export default function MultiSelect<T extends string = string>({
   );
 }
 
-function Chevron({ open }: { open: boolean }) {
+function Chevron({ open }: Readonly<{ open: boolean }>) {
   return (
     <svg
       viewBox="0 0 24 24"

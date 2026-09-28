@@ -326,7 +326,7 @@ export function effectiveAgentKey(cfg: HubConfig, key: string): string {
 export function setPrimary(cfg: HubConfig, key: string, on: boolean): void {
   for (const m of dirMembers(cfg, key)) {
     if (on && m.key === key) {
-      cfg.agents[m.key] = { ...(cfg.agents[m.key] ?? {}), primary: true };
+      cfg.agents[m.key] = { ...cfg.agents[m.key], primary: true };
       continue;
     }
     const ov = cfg.agents[m.key];
@@ -366,9 +366,8 @@ export function listAgents(cfg: HubConfig): AgentView[] {
     const sync = ov?.sync ?? cfg.defaultSync;
     const active = cfg.activeAgents.includes(def.key);
     // shared 指向的共享标准目录绝对路径，以及它是否就是自己的全局目录（原生成员 vs 兼容读取）
-    const sharedAbs = def.shared
-      ? path.join(os.homedir(), def.shared === 'config-agents' ? '.config/agents/skills' : '.agents/skills')
-      : undefined;
+    const sharedRel = def.shared === 'config-agents' ? '.config/agents/skills' : '.agents/skills';
+    const sharedAbs = def.shared ? path.join(os.homedir(), sharedRel) : undefined;
     return {
       ...def,
       globalDir,
@@ -481,104 +480,109 @@ function sharedReadDirs(def: AgentDef, ownDir: string): string[] {
  * 不再有「待装 / wanted」行——列表只反映物理现状；来源按软链目标实际落在哪个库判定，
  * 自带、外部软链、共享目录读取会一并列出，并用 fromDir/readVia 标注「来自哪个目录」。
  */
+/**
+ * 读软链目标并归一为**绝对路径**：readlink 可能给出相对路径（如 `../../.agents/skills/x`），
+ * 列表要展示、归属要判定的是「实际指向哪里」，相对路径两者都说不清。
+ */
+function linkTargetAbs(p: string): string | undefined {
+  try {
+    const raw = fs.readlinkSync(p);
+    return path.isAbsolute(raw) ? raw : path.resolve(path.dirname(p), raw);
+  } catch { return undefined; }
+}
+
+/** 自身目录里的一条软链技能行（区分「本工具部署」与「外部工具创建」） */
+function symlinkSkillRow(cfg: HubConfig, ownDir: string, name: string): AgentSkillRow {
+  const p = path.join(ownDir, name);
+  const target = linkTargetAbs(p);
+  const externalLink = !isManagedLinkTarget(cfg, target, ownDir);
+  // 展示口径：来源 = 这条软链**实际指向**的已登记库；目标不在任何已登记库内就不给来源，
+  // 由展示层直接呈现真实路径（绝不拿同名技能去回填来源，那样会把「同名」说成「来自」）。
+  const owner = libraryOfLinkTarget(cfg, target, ownDir);
+  // 已有归属＝目标就落在某个已登记库内（自有仓库 / 第三方来源 / 共享标准目录）：
+  // 这条技能本体已经在库里了，行内「归集」只会复制出一份重复本体，故不提供该入口。
+  // 只按【路径】判定：目标在库外（哪怕是别处一个同名的技能库）就仍可归集——
+  // 「仓库里恰好有同名副本」不是同一条事实，不该拿来冒充归属。
+  const alreadyInLibrary = isLinkInRegisteredLibrary(cfg, target, ownDir);
+  return {
+    name, title: name,
+    description: readSkill(p)?.description, // readSkill 顺着软链读到目标
+    source: 'managed', wanted: true, present: true, store: 'symlink',
+    linkTarget: target,
+    // 来源：指向仓库内 = 本工具部署（managed）；指向仓库外 = 外部软链
+    reason: externalLink ? 'external' : 'manual',
+    externalLink, alreadyInLibrary,
+    skillId: owner ? `${name}@${owner.id}` : undefined, repo: owner?.id,
+    dir: p, link: true, fromDir: ownDir, readVia: 'own',
+    takenOver: !externalLink,
+  };
+}
+
+/** 自身目录里的一条自带（真实目录）技能行 */
+function ownedSkillRow(ownDir: string, name: string): AgentSkillRow {
+  const p = path.join(ownDir, name);
+  const meta = readSkill(p);
+  return {
+    name, title: meta?.name ?? name, description: meta?.description,
+    source: 'owned', wanted: false, present: true, store: 'own', reason: 'own',
+    dir: p, link: false, fromDir: ownDir, readVia: 'own',
+  };
+}
+
+/** 自身目录里实际存在的行（物理为准）：软链与自带真实目录各一条 */
+function ownDirSkillRows(cfg: HubConfig, ownDir: string): AgentSkillRow[] {
+  const rows: AgentSkillRow[] = [];
+  if (!fs.existsSync(ownDir)) return rows;
+  for (const ent of fs.readdirSync(ownDir, { withFileTypes: true })) {
+    if (ent.name.startsWith('.')) continue; // 隐藏项不算技能
+    if (ent.isSymbolicLink()) { rows.push(symlinkSkillRow(cfg, ownDir, ent.name)); continue; }
+    if (!isSkillDir(path.join(ownDir, ent.name))) continue; // 只把真正的技能目录视作自带
+    rows.push(ownedSkillRow(ownDir, ent.name));
+  }
+  return rows;
+}
+
+/** 共享标准目录里补出来的行：只做展示，同名以自身目录为准 */
+function sharedDirSkillRows(cfg: HubConfig, sharedDir: string, seen: Set<string>): AgentSkillRow[] {
+  const rows: AgentSkillRow[] = [];
+  if (!fs.existsSync(sharedDir)) return rows;
+  for (const ent of fs.readdirSync(sharedDir, { withFileTypes: true })) {
+    const name = ent.name;
+    if (name.startsWith('.') || seen.has(name)) continue;
+    const p = path.join(sharedDir, name);
+    const isLink = ent.isSymbolicLink();
+    // 共享目录里同样只认「软链」或「真正的技能目录」，避免把无关文件当技能
+    if (!isLink && !isSkillDir(p)) continue;
+    seen.add(name);
+    const target = isLink ? linkTargetAbs(p) : undefined;
+    // 与自身目录同一口径：来源只按目标实际落在哪个已登记库判定，猜不到就不给来源
+    const owner = libraryOfLinkTarget(cfg, target, sharedDir);
+    rows.push({
+      name, title: isLink ? name : (readSkill(p)?.name ?? name),
+      description: readSkill(p)?.description,
+      source: 'owned', wanted: false, present: true,
+      store: isLink ? 'symlink' : 'own',
+      linkTarget: target,
+      reason: 'shared',
+      skillId: owner ? `${name}@${owner.id}` : undefined, repo: owner?.id,
+      dir: p, link: isLink, fromDir: sharedDir, readVia: 'shared',
+    });
+  }
+  return rows;
+}
+
 export function agentSkillRows(agentKey: string, cfg: HubConfig, allSkills: Skill[]): AgentSkillRow[] {
   const def = findAgentDef(cfg, agentKey);
   if (!def) return [];
   const ownDir = resolveGlobalDir(def, cfg.agents[agentKey]?.globalDir);
-  const rows: AgentSkillRow[] = [];
-  const presentNames = new Set<string>();
-  const presentLstat = new Map<string, fs.Dirent>();
+  const rows = ownDirSkillRows(cfg, ownDir);
 
-  /**
-   * 读软链目标并归一为**绝对路径**：readlink 可能给出相对路径（如 `../../.agents/skills/x`），
-   * 列表要展示、归属要判定的是「实际指向哪里」，相对路径两者都说不清。
-   */
-  const linkTo = (p: string) => {
-    try {
-      const raw = fs.readlinkSync(p);
-      return path.isAbsolute(raw) ? raw : path.resolve(path.dirname(p), raw);
-    } catch { return undefined; }
-  };
-
-  // 1) 扫描自身目录，记录是否存在及各目录项类型（隐藏项不算技能）
-  if (fs.existsSync(ownDir)) {
-    for (const ent of fs.readdirSync(ownDir, { withFileTypes: true })) {
-      if (ent.name.startsWith('.')) continue;
-      presentNames.add(ent.name);
-      presentLstat.set(ent.name, ent); // isSymbolicLink() 可用
-    }
-  }
-
-  // 2) 目录中实际存在的行（只有这里——物理为准）
-  for (const name of presentNames) {
-    const ent = presentLstat.get(name);
-    if (!ent) continue;
-    const isLink = ent.isSymbolicLink();
-    if (isLink) {
-      // 软链：区分「本工具部署（指向自有仓库）」与「外部工具创建（不归本工具管）」
-      const p = path.join(ownDir, name);
-      const target = linkTo(p);
-      const externalLink = !isManagedLinkTarget(cfg, target, ownDir);
-      // 展示口径：来源 = 这条软链**实际指向**的已登记库；目标不在任何已登记库内就不给来源，
-      // 由展示层直接呈现真实路径（绝不拿同名技能去回填来源，那样会把「同名」说成「来自」）。
-      const owner = libraryOfLinkTarget(cfg, target, ownDir);
-      // 已有归属＝目标就落在某个已登记库内（自有仓库 / 第三方来源 / 共享标准目录）：
-      // 这条技能本体已经在库里了，行内「归集」只会复制出一份重复本体，故不提供该入口。
-      // 只按【路径】判定：目标在库外（哪怕是别处一个同名的技能库）就仍可归集——
-      // 「仓库里恰好有同名副本」不是同一条事实，不该拿来冒充归属。
-      const alreadyInLibrary = isLinkInRegisteredLibrary(cfg, target, ownDir);
-      rows.push({
-        name, title: name,
-        description: readSkill(p)?.description, // readSkill 顺着软链读到目标
-        source: 'managed', wanted: true, present: true, store: 'symlink',
-        linkTarget: target,
-        // 来源：指向仓库内 = 本工具部署（managed）；指向仓库外 = 外部软链
-        reason: externalLink ? 'external' : 'manual',
-        externalLink, alreadyInLibrary,
-        skillId: owner ? `${name}@${owner.id}` : undefined, repo: owner?.id,
-        dir: p, link: true, fromDir: ownDir, readVia: 'own',
-        takenOver: !externalLink,
-      });
-    } else {
-      const p = path.join(ownDir, name);
-      if (!isSkillDir(p)) continue; // 只把真正的技能目录视作自带
-      const meta = readSkill(p);
-      rows.push({
-        name, title: meta?.name ?? name, description: meta?.description,
-        source: 'owned', wanted: false, present: true, store: 'own', reason: 'own',
-        dir: p, link: false, fromDir: ownDir, readVia: 'own',
-      });
-    }
-  }
-
-  // 3) 额外读取的共享标准目录：**只做展示**，既不分发、也不参与归集 / 接管
-  //    （归集预览只扫自身 globalDir，所以这些条目不会出现在可归集清单里；这里也不给任何操作）。
-  //    同名技能以自身目录为准（前面已收录），共享目录只补自身目录没有的。
+  // 额外读取的共享标准目录：**只做展示**，既不分发、也不参与归集 / 接管
+  // （归集预览只扫自身 globalDir，所以这些条目不会出现在可归集清单里；这里也不给任何操作）。
+  // 同名技能以自身目录为准（前面已收录），共享目录只补自身目录没有的。
   const seen = new Set(rows.map((r) => r.name));
   for (const sharedDir of sharedReadDirs(def, ownDir)) {
-    if (!fs.existsSync(sharedDir)) continue;
-    for (const ent of fs.readdirSync(sharedDir, { withFileTypes: true })) {
-      const name = ent.name;
-      if (name.startsWith('.') || seen.has(name)) continue;
-      const p = path.join(sharedDir, name);
-      const isLink = ent.isSymbolicLink();
-      // 共享目录里同样只认「软链」或「真正的技能目录」，避免把无关文件当技能
-      if (!isLink && !isSkillDir(p)) continue;
-      seen.add(name);
-      const target = isLink ? linkTo(p) : undefined;
-      // 与自身目录同一口径：来源只按目标实际落在哪个已登记库判定，猜不到就不给来源
-      const owner = libraryOfLinkTarget(cfg, target, sharedDir);
-      rows.push({
-        name, title: isLink ? name : (readSkill(p)?.name ?? name),
-        description: readSkill(p)?.description,
-        source: 'owned', wanted: false, present: true,
-        store: isLink ? 'symlink' : 'own',
-        linkTarget: target,
-        reason: 'shared',
-        skillId: owner ? `${name}@${owner.id}` : undefined, repo: owner?.id,
-        dir: p, link: isLink, fromDir: sharedDir, readVia: 'shared',
-      });
-    }
+    rows.push(...sharedDirSkillRows(cfg, sharedDir, seen));
   }
 
   return rows.sort((a, b) => Number(b.wanted) - Number(a.wanted) || a.name.localeCompare(b.name));

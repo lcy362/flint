@@ -58,7 +58,7 @@ describe('detectLayoutAbs（布局判定）', () => {
   it('布局判定与计数口径一致（count 等于实际能扫到的技能数）', () => {
     const { skillsRoot } = repoFixture();
     const det = detectLayoutAbs(skillsRoot);
-    expect(scanDir(skillsRoot, 'probe', det.layout).length).toBe(det.count);
+    expect(scanDir(skillsRoot, 'probe', det.layout)).toHaveLength(det.count);
   });
 });
 

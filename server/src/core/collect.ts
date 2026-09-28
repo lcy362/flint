@@ -120,6 +120,26 @@ export function previewCollect(cfg: ConfigStore, repo: Repo): AgentCollectPrevie
  * 除非名字出现在 replaceNames（用户在确认页明确选择用来源版本覆盖仓库副本）。
  * names 为空表示收集该目录下全部未存在的 skill。
  */
+/**
+ * 目标已存在时决定能否覆盖：同一本体（防自毁）或未获授权都返回一条跳过原因，
+ * 返回 undefined 表示可以继续（必要时旧副本已删除）。
+ */
+function prepareOverwrite(dest: string, srcReal: string, name: string, allowed: boolean): string | undefined {
+  if (!fs.existsSync(dest)) return undefined;
+  if (!allowed) return t('collect.existsSkip', { name });
+  // 防自毁：源本体与仓库副本是同一文件（如目录内软链指向仓库）时禁止覆盖，
+  // 否则 rm 掉的正是软链指向的内容，来源与仓库一起损坏
+  try {
+    if (srcReal === fs.realpathSync(dest)) return t('collect.sameBody', { name });
+  } catch { /* 取不到真实路径就按普通副本处理 */ }
+  try {
+    fs.rmSync(dest, { recursive: true, force: true });
+    return undefined;
+  } catch (e) {
+    return t('collect.overwriteFailed', { name, msg: (e as Error).message });
+  }
+}
+
 export function collectFromSource(
   cfg: ConfigStore,
   repo: Repo,
@@ -132,24 +152,15 @@ export function collectFromSource(
   const skillsRoot = repoSkillRoot(repo);
   fs.mkdirSync(skillsRoot, { recursive: true });
   const found = scanDir(source.dir, source.ref, source.layout);
-  const want = names && names.length ? found.filter((s) => names.includes(s.name)) : found;
+  const want = names?.length ? found.filter((s) => names.includes(s.name)) : found;
   for (const s of want) {
     // 解引用源软链：归集的是真实位置的内容，而非把链接本身复制进仓库
     let srcReal: string;
     try { srcReal = fs.realpathSync(s.dir); }
     catch (e) { res.skipped.push(t('collect.srcUnreachable', { name: s.name, msg: (e as Error).message })); continue; }
     const dest = path.join(skillsRoot, s.name);
-    if (fs.existsSync(dest)) {
-      if (replaceNames?.includes(s.name)) {
-        // 防自毁：源本体与仓库副本是同一文件（如目录内软链指向仓库）时禁止覆盖，
-        // 否则 rm 掉的正是软链指向的内容，来源与仓库一起损坏
-        let same = false;
-        try { same = srcReal === fs.realpathSync(dest); } catch { /* ignore */ }
-        if (same) { res.skipped.push(t('collect.sameBody', { name: s.name })); continue; }
-        try { fs.rmSync(dest, { recursive: true, force: true }); }
-        catch (e) { res.skipped.push(t('collect.overwriteFailed', { name: s.name, msg: (e as Error).message })); continue; }
-      } else { res.skipped.push(t('collect.existsSkip', { name: s.name })); continue; }
-    }
+    const blocked = prepareOverwrite(dest, srcReal, s.name, replaceNames?.includes(s.name) ?? false);
+    if (blocked) { res.skipped.push(blocked); continue; }
     try {
       fs.cpSync(srcReal, dest, { recursive: true });
       // 可追踪来源（F4）：记录来源（git/dir）与时间

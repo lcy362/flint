@@ -79,39 +79,44 @@ EOF
 
 # 查询监听指定端口的进程 PID（无则输出为空）
 port_pids() {
-  lsof -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true
+  local port="$1"
+  lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
 }
 
 # 取进程工作目录（macOS/Linux lsof 均支持；取不到时为 空）
 proc_cwd() {
-  lsof -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1
+  local pid="$1"
+  lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1
 }
 
 # 判断进程是否属于本项目（用于区分“本项目已在运行”与“端口被其他程序占用”）。
 # 命中条件：命令行含项目路径 / 项目名，或 进程工作目录落在项目根内——
 # 后者让 `npm start`（node dist/index.js，命令行不含项目名）也能被正确识别。
 is_project_proc() {
-  local cmd cwd
-  cmd="$(ps -o command= -p "$1" 2>/dev/null || true)"
+  local pid="$1" cmd cwd
+  cmd="$(ps -o command= -p "$pid" 2>/dev/null || true)"
   case "$cmd" in
     *"$ROOT_DIR"*) return 0 ;;
     *"$PROJECT_NAME"*) return 0 ;;
+    *) ;;
   esac
-  cwd="$(proc_cwd "$1")"
+  cwd="$(proc_cwd "$pid")"
   case "$cwd" in
     "$ROOT_DIR"*) return 0 ;;
+    *) ;;
   esac
   return 1
 }
 
 # 用系统默认浏览器打开链接
 open_url() {
+  local url="$1"
   if command -v open >/dev/null 2>&1; then
-    open "$1"
+    open "$url"
     return 0
   fi
   if command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$1" >/dev/null 2>&1
+    xdg-open "$url" >/dev/null 2>&1
     return 0
   fi
   return 1
@@ -119,11 +124,12 @@ open_url() {
 
 # 探测某个地址是否已可用
 probe_ready() {
-  local code
+  local url="$1" code
   if command -v curl >/dev/null 2>&1; then
-    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$1" 2>/dev/null || true)"
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$url" 2>/dev/null || true)"
     case "$code" in
       2??|3??) return 0 ;;
+      *) ;;
     esac
     return 1
   fi
@@ -132,7 +138,7 @@ probe_ready() {
     const req = http.get(process.argv[1], (res) => process.exit(res.statusCode < 400 ? 0 : 1));
     req.on("error", () => process.exit(1));
     req.setTimeout(2000, () => { req.destroy(); process.exit(1); });
-  ' "$1" >/dev/null 2>&1
+  ' "$url" >/dev/null 2>&1
 }
 
 # 停止指定端口上的项目进程（-y 强制重启用）
@@ -150,7 +156,7 @@ kill_project() {
     for port in "$CLIENT_PORT" "$SERVER_PORT"; do
       remain="${remain}$(port_pids "$port")"
     done
-    [ -z "$remain" ] && break
+    [[ -z "$remain" ]] && break
     sleep 0.5
   done
 }
@@ -169,7 +175,7 @@ if ! command -v node >/dev/null 2>&1; then
   exit 1
 fi
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-if [ "$NODE_MAJOR" -lt 20 ]; then
+if [[ "$NODE_MAJOR" -lt 20 ]]; then
   error "Node.js version too old (current $(node -v)). Please upgrade to >= 20"
   exit 1
 fi
@@ -198,14 +204,14 @@ for port in "$CLIENT_PORT" "$SERVER_PORT"; do
   done
 done
 
-if [ -n "$CONFLICT_PIDS" ]; then
+if [[ -n "$CONFLICT_PIDS" ]]; then
   error "Port(s) are occupied by other, non-Flint processes — Flint will NOT kill them."
   error "Please free port ${CLIENT_PORT} / ${SERVER_PORT} yourself, then re-run ./start.sh."
   exit 1
 fi
 
-if [ -n "$PROJECT_PIDS" ]; then
-  if [ "$AUTO_YES" -eq 1 ]; then
+if [[ -n "$PROJECT_PIDS" ]]; then
+  if [[ "$AUTO_YES" -eq 1 ]]; then
     warn "Flint appears to be running; restarting because -y was given."
     kill_project
   else
@@ -230,9 +236,10 @@ if [ -n "$PROJECT_PIDS" ]; then
 fi
 
 # ---------- 3. 依赖检查 ----------
-if [ ! -x node_modules/.bin/concurrently ]; then
+if [[ ! -x node_modules/.bin/concurrently ]]; then
   info "Dependencies missing or incomplete; running npm install ..."
-  npm install
+  # --ignore-scripts：不执行依赖的安装脚本，避免供应链投毒（本项目无必须编译的原生模块）
+  npm install --no-audit --no-fund --ignore-scripts
 fi
 
 # ---------- 4. 后台启动 ----------
@@ -259,7 +266,7 @@ for _ in $(seq 1 60); do
 done
 
 # ---------- 6. 打印启动信息并退出 ----------
-if [ "$READY" -eq 1 ]; then
+if [[ "$READY" -eq 1 ]]; then
   info "Frontend is ready: $CLIENT_URL"
   open_url "$CLIENT_URL" >/dev/null 2>&1 || warn "Failed to open the browser. Please visit $CLIENT_URL manually."
 else

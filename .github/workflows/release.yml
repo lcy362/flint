@@ -62,7 +62,8 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        # --ignore-scripts：依赖的安装脚本一律不执行，避免供应链投毒（本项目无原生模块）
+        run: npm ci --no-audit --no-fund --ignore-scripts
 
       - name: Type-check + build
         run: npm run build
@@ -98,14 +99,16 @@ jobs:
           # npm 遇到无法替换的变量会直接报错；OIDC 发布本身也不需要 .npmrc 里的 token。
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        # --ignore-scripts：依赖的安装脚本一律不执行，避免供应链投毒（本项目无原生模块）
+        run: npm ci --no-audit --no-fund --ignore-scripts
 
       - name: Build publishable artifacts
         run: npm run build
 
-      # Trusted Publishing 要求 npm >= 11.5.1；Node 22 自带的是 10.x
+      # Trusted Publishing 要求 npm >= 11.5.1；Node 22 自带的是 10.x。
+      # 固定版本而非 @latest：发布链路必须可复现，也避免供应链漂移（npm 12 要求 Node >= 22.22.2）。
       - name: Upgrade npm (required for OIDC trusted publishing)
-        run: npm install -g npm@latest && npm --version
+        run: npm install -g --ignore-scripts npm@11.20.0 && npm --version
 
       # 版本解析：三种入口统一在这里收敛，并决定本次要不要发布（skip）。
       # 统一用 registry API（带 no-cache）判断「是否已发布」，不用 npm view —— 它读本地缓存。
@@ -325,7 +328,8 @@ jobs:
 
       - name: Create GitHub Release
         if: ${{ steps.version.outputs.skip != 'true' && inputs.dry-run != true }}
-        uses: softprops/action-gh-release@v2
+        # 固定到 v2 的完整 commit SHA，避免 tag 被移动导致的供应链风险（S7637）
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}

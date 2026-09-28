@@ -59,27 +59,36 @@ const DIMS: DiagDimension[] = ['sync', 'dup', 'durability', 'config', 'repo', 'p
 function misplacedSkillsInRepo(skillsRoot: string): string[] {
   if (!fs.existsSync(skillsRoot)) return [];
   const found: string[] = [];
-  const walk = (dir: string, depth: number): void => {
-    let entries: fs.Dirent[];
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
-    for (const e of entries) {
-      if (e.name.startsWith('.')) continue;
-      const child = path.join(dir, e.name);
-      let isDir: boolean;
-      try {
-        if (e.isSymbolicLink() && !fs.existsSync(child)) continue; // 失效软链
-        isDir = fs.statSync(child).isDirectory();
-      } catch { continue; }
-      if (!isDir) continue;
-      if (hasSkill(child)) {
-        if (depth > 0) found.push(e.name); // 第 1 层之上才算「放错位置」
-        continue;                          // 技能目录本身不再向下探
-      }
-      if (depth < 3) walk(child, depth + 1);
-    }
-  };
-  walk(skillsRoot, 0);
+  walkSkills(skillsRoot, 0, found);
   return found;
+}
+
+/** 深度优先走一遍目录树，把「落在分类子目录」的技能名收集起来（技能目录本身不再下探） */
+function walkSkills(dir: string, depth: number, found: string[]): void {
+  for (const name of readSubDirNames(dir)) {
+    const child = path.join(dir, name);
+    if (hasSkill(child)) {
+      if (depth > 0) found.push(name); // 第 1 层之上才算「放错位置」
+      continue;
+    }
+    if (depth < 3) walkSkills(child, depth + 1, found);
+  }
+}
+
+/** 列出目录下的真实子目录名（跳过隐藏项、失效软链与非目录） */
+function readSubDirNames(dir: string): string[] {
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+  const out: string[] = [];
+  for (const e of entries) {
+    if (e.name.startsWith('.')) continue;
+    const child = path.join(dir, e.name);
+    try {
+      if (e.isSymbolicLink() && !fs.existsSync(child)) continue; // 失效软链
+      if (fs.statSync(child).isDirectory()) out.push(e.name);
+    } catch { continue; }
+  }
+  return out;
 }
 
 /**
@@ -94,13 +103,46 @@ function misplacedSkillsInRepo(skillsRoot: string): string[] {
  */
 export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
   const groups: DiagGroups = { sync: [], dup: [], durability: [], config: [], repo: [], project: [] };
-  const items: DiagItem[] = [];
 
-  // ---- config 配置解析 ----
+  checkConfig(groups);
+  checkRepos(cfg, groups);
+  checkProjects(cfg, groups);
+  checkSync(cfg, deps, groups);
+  checkDurability(cfg, groups);
+  checkDup(deps, groups);
+
+  // ---- 扁平化 ----
+  const items: DiagItem[] = [];
+  for (const d of DIMS) for (const it of groups[d]) items.push(it);
+
+  const summary = summarize(groups);
+  log.info('diagnose', 'Diagnostics finished', summary);
+  return { config: CONFIG_PATH, summary, groups, items };
+}
+
+/** 各维度的 ok / warn / error 计数 */
+function summarize(groups: DiagGroups): Record<DiagDimension, DiagSummary> {
+  const summary = {} as Record<DiagDimension, DiagSummary>;
+  for (const d of DIMS) {
+    const arr = groups[d];
+    summary[d] = {
+      total: arr.length,
+      ok: arr.filter((x) => x.status === 'ok').length,
+      warn: arr.filter((x) => x.status === 'warn').length,
+      error: arr.filter((x) => x.status === 'error').length,
+    };
+  }
+  return summary;
+}
+
+/** config 维度：配置文件是否存在 */
+function checkConfig(groups: DiagGroups): void {
   if (fs.existsSync(CONFIG_PATH)) groups.config.push({ key: 'config', status: 'ok', message: t('diag.configOk', { path: CONFIG_PATH }) });
   else groups.config.push({ key: 'config', status: 'warn', message: t('diag.configMissing') });
+}
 
-  // ---- repo 仓库与外部源存在性 ----
+/** repo 维度：仓库与第三方来源的存在性，以及自有仓库里「放错层级」的技能 */
+function checkRepos(cfg: ConfigStore, groups: DiagGroups): void {
   if (cfg.data.repos.length === 0) groups.repo.push({ key: 'repos', status: 'warn', message: t('diag.noRepos') });
   for (const r of cfg.data.repos) {
     const home = expandTilde(r.path);
@@ -131,8 +173,10 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
     const home = expandTilde(f.path);
     groups.repo.push({ key: `fsrc:${f.id}`, status: fs.existsSync(home) ? 'ok' : 'error', message: t('diag.fsrc', { id: f.id, path: home }) });
   }
+}
 
-  // ---- project 项目存在性 ----
+/** project 维度：项目目录与 .agents/skills 是否存在 */
+function checkProjects(cfg: ConfigStore, groups: DiagGroups): void {
   if (cfg.data.projects.length === 0) groups.project.push({ key: 'projects', status: 'ok', message: t('diag.noProjects') });
   for (const p of cfg.data.projects) {
     const home = expandTilde(p.path);
@@ -143,13 +187,10 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
     const ag = path.join(home, '.agents', 'skills');
     groups.project.push({ key: `project:${home}`, status: fs.existsSync(ag) ? 'ok' : 'warn', message: t('diag.projectNoAgents', { path: home }) });
   }
+}
 
-  // ---- 活跃集合 ----
-  // 仅作为下面 durability 扫描的作用域依据（失效软链只关心活跃 Agent 的目录），
-  // 不再单独产出诊断项：见函数头注释。
-  const active = new Set(cfg.data.activeAgents);
-
-  // ---- sync 是否已同步（只读比对） ----
+/** sync 维度：只读比对每个目录的实际投放情况 */
+function checkSync(cfg: ConfigStore, deps: Deps, groups: DiagGroups): void {
   const diffs = diffSync(cfg, deps.lib.skills);
   for (const d of diffs) {
     const parts: string[] = [];
@@ -167,18 +208,23 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
     });
   }
   if (diffs.length === 0) groups.sync.push({ key: 'sync:none', status: 'ok', message: t('diag.syncNone') });
+}
 
-  // ---- durability 失效软链 ----
-  // 同目录的 Agent 共用一个目录，按目录去重，避免同一个失效软链报多次
-  let hasBroken = false;
+/**
+ * durability 维度：活跃 Agent 目录里的失效软链。
+ * 同目录的 Agent 共用一个目录，按目录去重，避免同一个失效软链报多次。
+ */
+function checkDurability(cfg: ConfigStore, groups: DiagGroups): void {
+  const active = new Set(cfg.data.activeAgents);
   const scannedDirs = new Set<string>();
+  let hasBroken = false;
   for (const a of listAgents(cfg.data)) {
     if (!a.installed || !active.has(a.key)) continue;
     if (!fs.existsSync(a.globalDir) || scannedDirs.has(a.globalDir)) continue;
     scannedDirs.add(a.globalDir);
     for (const ent of fs.readdirSync(a.globalDir)) {
       const p = path.join(a.globalDir, ent);
-      let lstat;
+      let lstat: fs.Stats;
       try { lstat = fs.lstatSync(p); } catch { continue; }
       if (lstat.isSymbolicLink() && !fs.existsSync(p)) {
         hasBroken = true;
@@ -187,36 +233,18 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
     }
   }
   if (!hasBroken) groups.durability.push({ key: 'broken', status: 'ok', message: t('diag.noBroken') });
+}
 
-  // ---- dup 重复 skill（同名多来源汇总；完整交互交前端收编面板） ----
+/** dup 维度：同名多来源汇总（完整交互交前端收编面板） */
+function checkDup(deps: Deps, groups: DiagGroups): void {
   const byName = new Map<string, Candidate[]>();
   for (const c of deps.candidates) {
     const arr = byName.get(c.name) ?? [];
     arr.push(c);
     byName.set(c.name, arr);
   }
-  let dupCount = 0;
   for (const [name, arr] of byName) {
-    if (arr.length <= 1) continue;
-    dupCount++;
-    groups.dup.push({ key: `dup:${name}`, status: 'warn', message: t('diag.dupFound', { name, n: arr.length }), detail: arr });
+    if (arr.length > 1) groups.dup.push({ key: `dup:${name}`, status: 'warn', message: t('diag.dupFound', { name, n: arr.length }), detail: arr });
   }
-  if (dupCount === 0) groups.dup.push({ key: 'dup', status: 'ok', message: t('diag.noDup') });
-
-  // ---- 扁平化 ----
-  for (const d of DIMS) for (const it of groups[d]) items.push(it);
-
-  const summary = {} as Record<DiagDimension, DiagSummary>;
-  for (const d of DIMS) {
-    const arr = groups[d];
-    summary[d] = {
-      total: arr.length,
-      ok: arr.filter((x) => x.status === 'ok').length,
-      warn: arr.filter((x) => x.status === 'warn').length,
-      error: arr.filter((x) => x.status === 'error').length,
-    };
-  }
-  log.info('diagnose', 'Diagnostics finished', summary);
-
-  return { config: CONFIG_PATH, summary, groups, items };
+  if (groups.dup.length === 0) groups.dup.push({ key: 'dup', status: 'ok', message: t('diag.noDup') });
 }

@@ -15,18 +15,8 @@ export function scanDir(root: string, source: string, layout: Layout): Skill[] {
   const children = fs.existsSync(root) ? fs.readdirSync(root, { withFileTypes: true }).map((d) => d.name) : [];
   const out: Skill[] = [];
   for (const name of children) {
-    // 跳过隐藏目录/文件：`.git`、编辑器临时目录、历史接管备份等都不该被当成技能
-    if (name.startsWith('.')) continue;
-    const child = path.join(root, name);
-    let isDir: boolean;
-    try {
-      const st = fs.lstatSync(child);
-      if (st.isSymbolicLink()) {
-        if (!fs.existsSync(child)) continue; // 失效软链，跳过
-      }
-      isDir = fs.statSync(child).isDirectory();
-    } catch { continue; }
-    if (!isDir) continue;
+    const child = resolveChildDir(root, name);
+    if (!child) continue;
     if (hasSkill(child)) {
       const s = readSkill(child)!!;
       s.source = source;
@@ -38,6 +28,20 @@ export function scanDir(root: string, source: string, layout: Layout): Skill[] {
     }
   }
   return out;
+}
+
+/**
+ * 判断 root 下的某个子项是否是一个可扫描的目录，返回其路径；否则 undefined。
+ * 跳过隐藏目录/文件（`.git`、编辑器临时目录、历史接管备份等都不该被当成技能）、
+ * 失效软链以及非目录项。
+ */
+function resolveChildDir(root: string, name: string): string | undefined {
+  if (name.startsWith('.')) return undefined;
+  const child = path.join(root, name);
+  try {
+    if (fs.lstatSync(child).isSymbolicLink() && !fs.existsSync(child)) return undefined;
+    return fs.statSync(child).isDirectory() ? child : undefined;
+  } catch { return undefined; }
 }
 
 /**
@@ -74,50 +78,76 @@ export function resolveLayout(root: string, layout: Layout): 'flat' | 'nested' {
 
 interface CatalogEntry { name: string; dir?: string }
 
+/** 候选清单文件在库根下的相对位置（按优先级），命中首个可用者即可 */
+const CATALOG_PATHS = [
+  'candidate-catalog.json',
+  'skill-store/candidate-catalog.json',
+  'catalog.json',
+];
+
+/** 取出清单里的条目数组：兼容顶层数组与 { skills } / { candidates } 包装；非数组返回 undefined */
+function catalogList(raw: unknown): unknown[] | undefined {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const obj = raw as Record<string, unknown>;
+  const list = obj.skills ?? obj.candidates;
+  return Array.isArray(list) ? list : undefined;
+}
+
+/** 把一条清单项规整为 { name, dir }；拿不到名字则丢弃 */
+function toCatalogEntry(it: unknown): CatalogEntry | undefined {
+  if (typeof it === 'string') return { name: it };
+  if (typeof it !== 'object' || it === null) return undefined;
+  const o = it as Record<string, unknown>;
+  const nameRaw = typeof o.name === 'string' ? o.name : o.id;
+  const name = typeof nameRaw === 'string' ? nameRaw : '';
+  if (!name) return undefined;
+  const relRaw = typeof o.path === 'string' ? o.path : o.dir;
+  const rel = typeof relRaw === 'string' ? relRaw : '';
+  return { name, dir: rel || undefined };
+}
+
+/** 读出某个清单文件的全部条目；文件缺失 / JSON 非法 / 结构不符时返回 undefined 以便尝试下一个候选 */
+function readCatalogFile(file: string): CatalogEntry[] | undefined {
+  if (!fs.existsSync(file)) return undefined;
+  let raw: unknown;
+  try { raw = JSON.parse(fs.readFileSync(file, 'utf-8')); } catch { return undefined; }
+  const list = catalogList(raw);
+  if (!list) return undefined;
+  const entries: CatalogEntry[] = [];
+  for (const it of list) {
+    const e = toCatalogEntry(it);
+    if (e) entries.push(e);
+  }
+  return entries;
+}
+
+/** 条目本体所在目录：清单里的相对路径（若有）优先，否则按名字落在库根下 */
+function catalogEntryDir(root: string, e: CatalogEntry): string {
+  if (!e.dir) return path.join(root, e.name);
+  return path.isAbsolute(e.dir) ? e.dir : path.join(root, e.dir);
+}
+
 /**
  * 读取「带索引清单」的 skill 库（如 ume-skills 的 skill-store/candidate-catalog.json）。
  * 清单仅用于补充元数据与定位本体；本体仍以 SKILL.md 为准，缺失者不计入。
  */
 export function readCatalog(root: string, source: string): Skill[] {
-  const candidates = [
-    path.join(root, 'candidate-catalog.json'),
-    path.join(root, 'skill-store', 'candidate-catalog.json'),
-    path.join(root, 'catalog.json'),
-  ];
-  const out: Skill[] = [];
-  for (const f of candidates) {
-    if (!fs.existsSync(f)) continue;
-    let raw: unknown;
-    try { raw = JSON.parse(fs.readFileSync(f, 'utf-8')); } catch { continue; }
-    const list: unknown = Array.isArray(raw)
-      ? raw
-      : typeof raw === 'object' && raw !== null
-        ? ((raw as Record<string, unknown>).skills ?? (raw as Record<string, unknown>).candidates ?? [])
-        : [];
-    if (!Array.isArray(list)) continue;
-    const entries: CatalogEntry[] = [];
-    for (const it of list) {
-      if (typeof it === 'string') { entries.push({ name: it }); continue; }
-      if (typeof it !== 'object' || it === null) continue;
-      const o = it as Record<string, unknown>;
-      const name = typeof o.name === 'string' ? o.name : typeof o.id === 'string' ? o.id : '';
-      if (!name) continue;
-      const rel = typeof o.path === 'string' ? o.path : typeof o.dir === 'string' ? o.dir : '';
-      entries.push({ name, dir: rel || undefined });
-    }
+  for (const rel of CATALOG_PATHS) {
+    const entries = readCatalogFile(path.join(root, rel));
+    if (!entries) continue; // 该候选不可用，尝试下一个
+    const out: Skill[] = [];
     for (const e of entries) {
-      const dir = e.dir
-        ? path.isAbsolute(e.dir) ? e.dir : path.join(root, e.dir)
-        : path.join(root, e.name);
+      const dir = catalogEntryDir(root, e);
       if (!hasSkill(dir)) continue;
-      const s = readSkill(dir)!!;
+      const s = readSkill(dir)!;
       s.source = source;
       s.id = `${s.name}@${source}`;
       out.push(s);
     }
-    break; // 命中首个可用清单即可
+    return out; // 命中首个可用清单即可
   }
-  return out;
+  return [];
 }
 
 /** 扫描一个源目录：清单优先（有则补），再按布局扫描本体，按 id 去重 */

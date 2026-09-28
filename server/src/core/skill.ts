@@ -21,8 +21,10 @@ export interface Skill {
 
 /** 归一化 frontmatter 里的 tags 值：兼容数组 [a,b] 与逗号分隔字符串 "a, b" */
 export function normalizeTags(v: unknown): string[] {
-  if (v == null) return [];
-  const arr = Array.isArray(v) ? v : typeof v === 'string' ? v.split(/[,;，]/) : [];
+  let arr: unknown[];
+  if (Array.isArray(v)) arr = v;
+  else if (typeof v === 'string') arr = v.split(/[,;，]/);
+  else return [];
   return [...new Set(arr.map((t) => String(t).trim()).filter(Boolean))];
 }
 

@@ -23,10 +23,10 @@ export function actionVariant(
 export default function SkillActions({
   item,
   onAction,
-}: {
+}: Readonly<{
   item: SkillCardView;
   onAction?: (item: SkillCardView, action: SkillAction) => void;
-}) {
+}>) {
   if (!item.actions || item.actions.length === 0) return null;
   return (
     <span className="entity-row__actions">

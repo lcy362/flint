@@ -54,18 +54,17 @@ export default function Projects() {
         sub={data ? t('projects.subtitle', { n: data.length }) : undefined}
         actions={<Button onClick={() => setCreateOpen(true)}>{t('projects.new')}</Button>}
       />
-      {selectedId ? (
-        selected ? (
-          <ProjectDetail project={selected} onBack={backToList} onChanged={reload} />
-        ) : (
-          <LoadingBoundary
-            state={{ loading, error, data }}
-            empty={{ title: t('projects.notFound.title'), hint: t('projects.notFound.hint', { id: selectedId }), icon: '❐' }}
-          >
-            {() => null}
-          </LoadingBoundary>
-        )
+      {selectedId !== null && (selected ? (
+        <ProjectDetail project={selected} onBack={backToList} onChanged={reload} />
       ) : (
+        <LoadingBoundary
+          state={{ loading, error, data }}
+          empty={{ title: t('projects.notFound.title'), hint: t('projects.notFound.hint', { id: selectedId }), icon: '❐' }}
+        >
+          {() => null}
+        </LoadingBoundary>
+      ))}
+      {selectedId === null && (
         <LoadingBoundary
           state={{ loading, error, data }}
           empty={{ title: t('projects.empty.title'), hint: t('projects.empty.hint'), icon: '❐' }}
@@ -79,7 +78,7 @@ export default function Projects() {
   );
 }
 
-function CreateProjectModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+function CreateProjectModal({ open, onClose, onDone }: Readonly<{ open: boolean; onClose: () => void; onDone: () => void }>) {
   const { t } = useI18n();
   const toast = useToast();
   const [path, setPath] = useState('');
@@ -131,7 +130,7 @@ function CreateProjectModal({ open, onClose, onDone }: { open: boolean; onClose:
   );
 }
 
-function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; onBack: () => void; onChanged: () => void }) {
+function ProjectDetail({ project, onBack, onChanged }: Readonly<{ project: ProjectItem; onBack: () => void; onChanged: () => void }>) {
   const { t } = useI18n();
   const toast = useToast();
   const { data, loading, error, reload } = useAsync<ProjectSkillsResp>(
@@ -318,7 +317,7 @@ function ProjectDetail({ project, onBack, onChanged }: { project: ProjectItem; o
   );
 }
 
-function TagModal({ open, tags, onClose, onSave }: { open: boolean; tags: string[]; onClose: () => void; onSave: (tags: string[]) => void }) {
+function TagModal({ open, tags, onClose, onSave }: Readonly<{ open: boolean; tags: string[]; onClose: () => void; onSave: (tags: string[]) => void }>) {
   const { t } = useI18n();
   const [text, setText] = useState(tags.join(', '));
   return (

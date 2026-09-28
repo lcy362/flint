@@ -33,7 +33,7 @@ export default function FilterBar({
   onReset,
   actions,
   view,
-}: FilterBarProps) {
+}: Readonly<FilterBarProps>) {
   const { t } = useI18n();
   const viewModeOptions = useViewModeOptions();
   return (

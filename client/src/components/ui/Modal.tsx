@@ -11,7 +11,7 @@ interface ModalProps {
   width?: number;
 }
 
-export default function Modal({ open, title, onClose, footer, children, width }: ModalProps) {
+export default function Modal({ open, title, onClose, footer, children, width }: Readonly<ModalProps>) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -23,7 +23,12 @@ export default function Modal({ open, title, onClose, footer, children, width }:
 
   if (!open) return null;
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
+    <div
+      className="modal-backdrop"
+      // 遮罩本身不是可交互控件：标记为 presentation，点击关闭只是「点空白处」的便利
+      role="presentation"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
+    >
       <div className="modal" style={width ? { width: `min(${width}px, 100%)` } : undefined}>
         {title !== undefined && (
           <div className="modal__head">

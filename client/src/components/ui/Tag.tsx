@@ -5,7 +5,7 @@ interface TagProps {
   muted?: boolean;
 }
 
-export default function Tag({ children, selected, onClick, muted }: TagProps) {
+export default function Tag({ children, selected, onClick, muted }: Readonly<TagProps>) {
   if (!onClick) {
     return <span className="tag">{children}</span>;
   }
