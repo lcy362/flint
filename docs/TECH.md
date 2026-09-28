@@ -83,7 +83,7 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 | 模块 | 职责 |
 |------|------|
 | `core/skill.ts` | 读取 / 解析 `SKILL.md` frontmatter（name / description / version / tags，兼容顶层 `tags` 与 `metadata.tags`）。 |
-| `core/scanner.ts` | 扫描仓库 / 外部源：自有仓库**恒按扁平**读取，外部源支持布局识别（flat / nested / auto，深层存在技能即判 nested）、带索引清单（catalog）读取、聚合 `scanAll`。 |
+| `core/scanner.ts` | 扫描仓库 / 外部源：自有仓库**恒按扁平**读取，外部源支持布局识别（flat / nested / auto，深层存在技能即判 nested）、带索引清单（catalog）读取、聚合 `scanAll`；**单 skill 仓库识别**——根自身含 `SKILL.md` 时整目录视为一个 skill，其 `skills/` 子目录属于内部子技能，不再单独识别。 |
 | `core/tags.ts` | `effectiveTags`：`config.skillMeta` 覆盖优先，回落 frontmatter。 |
 | `core/repo-tags.ts` | 把 `skillMeta` 标签写回 `SKILL.md` frontmatter（保留其它字段与正文）。 |
 | `core/agents.ts` | 内置 Agent 清单、路径解析、同目录归并与**主 Agent** 判定、`agentSkillRows`（**只读目录**的某 Agent 完整技能行并集）、`isManagedLinkTarget` / `repoSkillRoots`。 |
@@ -419,7 +419,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 ### 生态兼容类
 
 - **C14 标签落在生态共识位置**：优先 `SKILL.md` frontmatter 顶层 `tags`（社区 40+ 工具原生读取、随 git 版本化）；本工具对暂未回写的标签以 `skillMeta` 暂存并提供迁移。
-- **C15 多布局宽容读取**：外部源支持 flat / nested / 带索引清单；**自有仓库恒为扁平**（只认根下的 `SKILL.md`，分类子目录里的技能由诊断报出、不静默丢弃）。发现一律**以 `SKILL.md` 存在为准**，不以目录深度为准。
+- **C15 多布局宽容读取**：外部源支持 flat / nested / 带索引清单；**自有仓库恒为扁平**（只认根下的 `SKILL.md`，分类子目录里的技能由诊断报出、不静默丢弃）。发现一律**以 `SKILL.md` 存在为准**，不以目录深度为准；单 skill 仓库（根自身含 `SKILL.md`，如 patent-disclosure-skill）整体识别为一个 skill，`skills/` 下的子技能不单独列出。
 
 ### 边界类
 

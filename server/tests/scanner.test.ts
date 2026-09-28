@@ -118,3 +118,50 @@ describe('scanForeign（第三方来源保留嵌套读取）', () => {
     expect(names(scanForeign(foreignFixture('flat')).skills)).toEqual(['alpha']);
   });
 });
+
+/* ---------- 单 skill 仓库（根自身就是技能） ---------- */
+
+/** 根自身落一个 SKILL.md（单 skill 仓库，如 patent-disclosure-skill） */
+function writeRootSkill(root: string, name: string): void {
+  fs.mkdirSync(root, { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'SKILL.md'),
+    `---\nname: ${name}\ndescription: single-skill repo ${name}\n---\nBody\n`,
+    'utf-8',
+  );
+}
+
+/** patent-disclosure-skill 式现场：根是技能，skills/ 下是它的子技能 */
+function singleSkillFixture() {
+  const root = path.join(tmpDir('flint-scan-'), 'patent-disclosure-skill');
+  writeRootSkill(root, 'patent-disclosure-skill');
+  writeSkill(path.join(root, 'skills'), 'patent-reader');
+  writeSkill(path.join(root, 'skills'), 'patent-disclosure');
+  return root;
+}
+
+describe('单 skill 仓库（根自身就是技能）', () => {
+  it('scanDir 只识别根技能，skills/ 里的子技能不再单独列出', () => {
+    const root = singleSkillFixture();
+    expect(names(scanDir(root, 'probe', 'nested'))).toEqual(['patent-disclosure-skill']);
+  });
+
+  it('布局判定为 flat 且计数 1（旧逻辑会误判 nested 并丢掉根技能）', () => {
+    const root = singleSkillFixture();
+    expect(detectLayoutAbs(root)).toEqual({ layout: 'flat', count: 1, root });
+  });
+
+  it('判定与扫描口径一致：按判定布局扫描即得根技能一份', () => {
+    const root = singleSkillFixture();
+    const det = detectLayoutAbs(root);
+    const found = scanDir(root, 'probe', det.layout);
+    expect(found).toHaveLength(det.count);
+    expect(names(found)).toEqual(['patent-disclosure-skill']);
+  });
+
+  it('外部源即使显式 nested 也以根技能为准（不拆子技能）', () => {
+    const root = singleSkillFixture();
+    const src: ForeignSource = { id: 'patent', name: 'patent', path: root, layout: 'nested', linked: true };
+    expect(names(scanForeign(src).skills)).toEqual(['patent-disclosure-skill']);
+  });
+});

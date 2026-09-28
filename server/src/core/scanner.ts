@@ -12,6 +12,14 @@ import { log } from '../infra/logger.js';
  * auto: 自动检测（先按 flat，无结果再递归）
  */
 export function scanDir(root: string, source: string, layout: Layout): Skill[] {
+  // 单 skill 仓库：根自身就是技能（根下有 SKILL.md）时，整个目录视为一个 skill，
+  // 其 skills/ 等子目录属于该技能的内部结构（子技能），不再单独识别。
+  if (hasSkill(root)) {
+    const s = readSkill(root)!;
+    s.source = source;
+    s.id = `${s.name}@${source}`;
+    return [s];
+  }
   const children = fs.existsSync(root) ? fs.readdirSync(root, { withFileTypes: true }).map((d) => d.name) : [];
   const out: Skill[] = [];
   for (const name of children) {
@@ -46,10 +54,12 @@ function resolveChildDir(root: string, name: string): string | undefined {
 
 /**
  * 自动识别一个（已存在的）skill 目录的布局形式。
- * 优先看 <path>/skills 子目录（仓库惯例），其次看 path 本身。
+ * 根自身含 SKILL.md → 单 skill 仓库（flat，计数 1）；
+ * 否则优先看 <path>/skills 子目录（仓库惯例），其次看 path 本身。
  * 直接子目录含 SKILL.md → flat；仅深层含 → nested；无技能 → 默认 flat（标准）。
  */
 export function detectLayoutAbs(absPath: string): { layout: 'flat' | 'nested'; count: number; root: string } {
+  if (hasSkill(absPath)) return { layout: 'flat', count: 1, root: absPath };
   const dirs = fs.existsSync(absPath) && fs.statSync(absPath).isDirectory() ? [absPath] : [];
   const skillsChild = path.join(absPath, 'skills');
   if (dirs.length && fs.existsSync(skillsChild) && fs.statSync(skillsChild).isDirectory()) dirs.push(skillsChild);
