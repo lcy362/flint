@@ -370,6 +370,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - **详情页的目录口径**（`views/Agents.tsx` 的 `AgentDetail`）：`~/.agents/skills` 的详情页以推荐目录为标题主体（`OpenStandardTitle`，info 说明「这几个是当前使用的代表」），成员退到副行 `<目录> · <成员并列>`；其它目录的标题用 `AgentNamesTitle` 罗列整组成员（主 Agent 在前、其余名称序，与卡片同序）。活跃状态与切换都按**整个目录**处理——`dirActive = members.some(m => m.active)`，切换时整组成员一起加入 / 移出 `activeAgents`，与列表卡片同口径，避免「卡片说活跃、页面说非活跃」。
 - **同目录只有一个详情页**：`AgentNamesTitle` 只做并列展示、不再逐名可点（同一目录不存在「某个 Agent 自己的页」）；地址指向别名（如 `#/agents/openhands`）时前端 `replace` 规范到该目录的主 Agent，避免同一目录出现两个详情页各说一套。
 - `components/agent/agentGroups.ts`：按解析后的目录把 Agent 归并成卡片模型（主 Agent 在前）。
+- `components/agent/agentGroupItems.tsx`：把「一个目录一张卡」的口径（`isStandardGroup` + `agentGroupItem`：标题 / 副标题 / 路径 / 活跃态 / 自定义·预设·未安装徽标）收敛到一处，智能体页列表与技能详情的「分发到智能体」弹窗共用；调用方只能补点击、开关与追加徽标，不允许改卡片本身的说法。
 - `domain/cards.ts` ↔ `api/types.ts`：后端领域行 → `SkillCardView`，前端按 `reason / store / state` 决定徽标与可执行操作（`add / delete / collect / detail`，无 on/off 开关）。
 - **状态列只回答「装没装、可不可用」**：`state` 只有 `on`（该技能就在本目录里，本 Agent / 项目可用——本工具分发的、自带目录、外部软链、共享目录读到的都算）；删除后物理产物被移除，不再有 `off` 状态。「本工具管不管它」不占状态列，由 `reason` 徽标表达（自带 / 外部软链 / 只读），前端用 `isToolManaged(item)` 判断是否渲染「添加 / 删除」、是否进「安装方式」清单。
 - **行内「是什么」以事实为准**：`SkillCardView.source` 只表达**软链目标实际落在哪个已登记库**（`libraryOfLinkTarget`，按路径判定；自有仓库 / 第三方来源），判定不出就留空——绝不拿技能名去回填来源。不在本工具分发范围内的行（`own` / `external` / `shared`）再由服务端给出 `pathLabel`（真实位置，软链附带真实目标，home 压成 `~`），列表把它当行的副标题展示；本工具分发的行才用 `name@来源` 表达身份。
@@ -378,8 +379,8 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 - **乐观更新 + 串行提交**：Agent 页「直接添加技能」与预设页「按技能纳入」用本地草稿即时反映，请求进串行队列，避免连点时后发先至。
 - **路径输入统一可调起系统选择器**：`components/ui/PathField.tsx`（`PathField` / `PathListField`）；相对路径（如 `.my-tool/skills`）因选择器无法表达，保留纯文本输入并注明。
-- **技能详情是页面，不是弹窗**：`views/Library.tsx` 的 `SkillDetail`（列表 / 详情按 `route.sub` 互斥渲染，与 Agent / 项目详情同一形态）提供元数据 + 标签编辑 + 来源追溯 + 分发到 Agent + `SKILL.md` 预览。
-- **分发入口可以有多处，逻辑只有一套**：技能详情里的「分发到 Agent」（`components/skill/SkillDistributePanel.tsx`）只是把 Agent 详情页的两个接口搬到技能视角——`POST /agents/:key/skills`（添加）与 `DELETE /agents/:key/skills/:name`（移除），按目录读实际内容反查「已分发到哪些 Agent」（只读共享目录读到的行不计入）。界面按「一个实际目录一行」归并（`groupAgentsByDir`），Agent 自带目录与外部软链的开关置灰（后端不会删）；该面板**默认折叠**（头部保留已分发计数），折叠态用面板内 `useDefaultCollapsed` 持久化——`state/collapse.ts` 的 `useCollapsed` 带 storageKey 时缺省即展开，不适用于这里。
+- **技能详情是页面，不是弹窗**：`views/Library.tsx` 的 `SkillDetail`（列表 / 详情按 `route.sub` 互斥渲染，与 Agent / 项目详情同一形态）提供元数据 + 标签编辑 + 来源追溯 + `SKILL.md` 预览；「分发到智能体」是详情页头部按钮打开的弹窗。
+- **分发入口可以有多处，逻辑与 UI 只有一套**：技能详情里的「分发到智能体」（`components/skill/SkillDistributeModal.tsx`）只是把智能体详情页的两个接口搬到技能视角——`POST /agents/:key/skills`（添加）与 `DELETE /agents/:key/skills/:name`（移除），按目录读实际内容反查「已分发到哪些智能体」（只读共享目录读到的行不计入）。列表按「一个实际目录一行」归并（`groupAgentsByDir`），卡片直接复用 `agentGroupItem`，搜索口径（名称 / key / 目录）与「只看已安装」也与智能体页一致，只是多出一个分发开关；智能体自带目录与外部软链的开关置灰（后端不会删）。视图沿用全站偏好（缺省卡片），切换器在同一筛选栏上。
 
 ---
 

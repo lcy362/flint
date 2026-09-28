@@ -21,15 +21,14 @@ import BadgeLegend from '../components/common/BadgeLegend';
 import AgentNamesTitle from '../components/agent/AgentNamesTitle';
 import OpenStandardTitle from '../components/agent/OpenStandardTitle';
 import { AddAgentModal } from '../components/agent/AddAgentModal';
-import { groupAgentsByDir, type AgentGroup } from '../components/agent/agentGroups';
+import { groupAgentsByDir } from '../components/agent/agentGroups';
+import { agentGroupItem, isStandardGroup } from '../components/agent/agentGroupItems';
 import {
   agentBadgeLegend,
   activeBadge,
   customBadge,
   familyBadge,
-  notInstalledBadge,
   openStandardBadge,
-  presetBadge,
   readsAgentsDir,
 } from '../components/agent/agentBadges';
 import { useToast } from '../components/ui/Toast';
@@ -38,13 +37,6 @@ import { useViewMode } from '../state/viewMode';
 import { useCollapsed } from '../state/collapse';
 import { getRoute, navigate, useQueryFlag, useQueryParam, useRoute } from '../state/router';
 import { joinList, rich, useI18n } from '../i18n';
-
-/**
- * 该卡片是不是开源生态推荐目录（`~/.agents/skills`）：生态里被采纳得最广的共享技能目录。
- * 这类卡片换一套强调色突出，并在「活跃 / 非活跃」各自分组里都排第一；
- * `~/.config/agents/skills` 等其它共用目录与普通目录一样正常展示。
- */
-const isStandardGroup = (g: AgentGroup) => readsAgentsDir(g.primary.shared) && !!g.primary.sharedOwn;
 
 export default function Agents() {
   const { data, loading, error, reload } = useAsync<AgentView[]>(() => api('/agents'));
@@ -95,46 +87,9 @@ export default function Agents() {
 
   const items: EntityItem[] = shown.map((g) => {
     const { primary } = g;
-    // 开源生态推荐目录：换色突出，主标题直接讲清「这是开源生态推荐目录」，
-    // 使用它的 Agent（Codex / Warp / OpenHands…）退到副标题并弱化，活跃状态仍由右上角徽标表达。
-    if (isStandardGroup(g)) {
-      return {
-        id: g.dir,
-        variant: 'standard' as const,
-        title: <OpenStandardTitle label={t('agents.openStandard.title')} tip={t('agents.openStandard.tip')} />,
-        sub: <AgentNamesTitle agents={g.agents} quiet />,
-        desc: <span className="mono">{g.dir}</span>,
-        status: activeBadge(t, { active: g.anyActive }),
-        badges: (
-          <>
-            {customBadge(t, primary)}
-            {presetBadge(t, primary.preset ?? null)}
-            {!g.installed && notInstalledBadge(t)}
-          </>
-        ),
-        onClick: () => openAgent(primary.key),
-        muted: !g.anyActive,
-      };
-    }
-    return {
-      id: g.dir,
-      // 标题罗列使用该目录的全部 Agent —— 它们都是真实的 Agent，不把谁叫「别名」；
-      // 整张卡一个入口：同一目录不存在「各自的详情页」，点谁都是同一份内容
-      title: <AgentNamesTitle agents={g.agents} />,
-      sub: <span className="mono">{g.keys.join(' / ')}</span>,
-      desc: <span className="mono">{g.dir}</span>,
-      status: activeBadge(t, { active: g.anyActive }),
-      // 一个目录只有一套策略，同目录的 Agent 共用它（系统内存于主 Agent 名下）
-      badges: (
-        <>
-          {customBadge(t, primary)}
-          {presetBadge(t, primary.preset ?? null)}
-          {!g.installed && notInstalledBadge(t)}
-        </>
-      ),
-      onClick: () => openAgent(primary.key),
-      muted: !g.anyActive,
-    };
+    // 卡片口径集中在 agentGroupItem（技能详情的「分发到智能体」弹窗复用同一份映射）。
+    // 整张卡一个入口：同一目录不存在「各自的详情页」，点谁都是同一份内容。
+    return agentGroupItem(g, t, { onClick: () => openAgent(primary.key) });
   });
 
   return (

@@ -107,7 +107,8 @@ export const zh: Record<MsgKey, string> = {
   'skillDetail.refreshed': '已从来源更新',
   'skillDetail.saved': '标签已保存',
   'skillDetail.files': '附带文件：{files}',
-  'skillDetail.distribute': '分发到 Agent',
+  'skillDetail.distribute': '分发到智能体',
+  'skillDetail.distribute.title': '分发到智能体 · {name}',
   'skillDetail.distribute.count': '{n} / {total} 个目录',
   'skillDetail.distribute.count.title': '该技能当前落在多少个 Agent 技能目录里',
   'skillDetail.distribute.hint':
@@ -121,7 +122,8 @@ export const zh: Record<MsgKey, string> = {
   'skillDetail.distribute.locked.own.title': '该目录里是 Agent 自带的真实目录，本工具不会删除',
   'skillDetail.distribute.locked.external': '外部软链',
   'skillDetail.distribute.locked.external.title': '该软链由其它工具创建，本工具不会删除',
-  'skillDetail.distribute.empty': '没有可用的 Agent 技能目录',
+  'skillDetail.distribute.empty': '没有可用的智能体技能目录',
+  'skillDetail.distribute.empty.match': '没有匹配的技能目录',
 
   /* ---------- repositories ---------- */
   'repo.kind.own': '自有仓库',

@@ -113,6 +113,7 @@ export const en = {
   'skillDetail.saved': 'Tags saved',
   'skillDetail.files': 'Extra files: {files}',
   'skillDetail.distribute': 'Distribute to agents',
+  'skillDetail.distribute.title': 'Distribute to agents · {name}',
   'skillDetail.distribute.count': '{n} / {total} directories',
   'skillDetail.distribute.count.title': 'How many agent skill directories currently contain this skill',
   'skillDetail.distribute.hint':
@@ -127,6 +128,7 @@ export const en = {
   'skillDetail.distribute.locked.external': 'External symlink',
   'skillDetail.distribute.locked.external.title': 'This symlink was created by another tool; this tool never deletes it',
   'skillDetail.distribute.empty': 'No agent skill directory available',
+  'skillDetail.distribute.empty.match': 'No matching skill directory',
 
   /* ---------- repositories ---------- */
   'repo.kind.own': 'Own repo',

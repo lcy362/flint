@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
-import SkillDistributePanel from '../components/skill/SkillDistributePanel';
+import SkillDistributeModal from '../components/skill/SkillDistributeModal';
 import { skillBadgeLegend } from '../components/skill/SkillBadges';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
 import BadgeLegend from '../components/common/BadgeLegend';
@@ -175,7 +175,6 @@ export default function Library() {
             key={detailTarget.id}
             skill={detailTarget}
             allTags={allTags}
-            home={data?.home}
             onBack={closeDetail}
             onChanged={reload}
           />
@@ -1031,16 +1030,13 @@ function WarehouseModal({
 function SkillDetail({
   skill,
   allTags,
-  home,
   onBack,
   onChanged,
 }: Readonly<{
   skill: StateView['skills'][number];
   allTags: string[];
-  /** 用户主目录：分发面板把绝对路径压成 ~ 展示 */
-  home?: string;
   onBack: () => void;
-  /** 标签保存 / 分发变更后同步技能库（分发面板内部自行重读） */
+  /** 标签保存 / 分发变更后同步技能库（分发弹窗内部自行重读） */
   onChanged: () => void;
 }>) {
   const { t } = useI18n();
@@ -1049,6 +1045,7 @@ function SkillDetail({
   const [newTag, setNewTag] = useState('');
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [distributeOpen, setDistributeOpen] = useState(false);
 
   const { data: content, loading, reload: reloadContent } = useAsync<SkillContent>(
     () => api(`/skills/${encodeURIComponent(skill.id)}/content`),
@@ -1114,6 +1111,9 @@ function SkillDetail({
           </Badge>
         )}
         <div className="detail-actions">
+          <Button size="sm" onClick={() => setDistributeOpen(true)} title={t('skillDetail.distribute.title', { name: skill.name })}>
+            {t('skillDetail.distribute')}
+          </Button>
           {provenance?.takenAt && (
             <Button size="sm" loading={refreshing} onClick={refreshFromSource} title={t('skillDetail.refreshHint')}>
               {t('skillDetail.refresh')}
@@ -1158,9 +1158,6 @@ function SkillDetail({
           </div>
         </div>
 
-        {/* 分发到 Agent：把 Agent 详情页的「直接添加 / 删除」搬到技能视角，顺便回答「装到了哪些 Agent」 */}
-        <SkillDistributePanel skill={skill} home={home} onChanged={onChanged} />
-
         <div className="panel">
           <div className="panel__head">
             <span className="panel__title">SKILL.md</span>
@@ -1184,6 +1181,14 @@ function SkillDetail({
           )}
         </div>
       </section>
+
+      {/* 分发到智能体：与智能体详情页同一套接口与卡片口径，只换了视角（技能 → 目录） */}
+      <SkillDistributeModal
+        open={distributeOpen}
+        skill={skill}
+        onClose={() => setDistributeOpen(false)}
+        onChanged={onChanged}
+      />
     </>
   );
 }
