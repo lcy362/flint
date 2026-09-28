@@ -260,7 +260,7 @@ describe('技能详情', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
     await waitFor(() => expect(screen.getByText('# alpha')).toBeTruthy());
 
-    // 新增标签后由底部「保存」提交
+    // 新增标签后由页面右上角「保存」提交
     await userEvent.type(screen.getByPlaceholderText('New tag'), 'y');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
     await userEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]);
@@ -272,11 +272,11 @@ describe('技能详情', () => {
     expect(screen.queryByRole('button', { name: /Refresh from source/ })).toBeNull();
   });
 
-  it('内容取不到时详情弹窗仍可用（只缺正文）', async () => {
+  it('内容取不到时详情页仍可用（只缺正文）', async () => {
     openDetail({ '/skills/alpha%40default/content': () => { throw new Error('gone'); } });
     await waitFor(() => expect(screen.getByText('2 skills in total')).toBeTruthy());
     await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
-    await waitFor(() => expect(screen.getByText('Detail · alpha')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'alpha' })).toBeTruthy());
     expect(screen.queryByText('# alpha')).toBeNull();
   });
 
@@ -295,7 +295,7 @@ describe('技能详情', () => {
     expect(JSON.parse(patch?.[1]?.body as string)).toEqual({ tags: [] });
   });
 
-  it('详情里可分发到 Agent，并显示该技能已落在哪些目录', async () => {
+  it('分发面板默认折叠，展开后显示该技能落在哪些目录', async () => {
     // 目录内容随分发 / 移除变化，面板据此重读「已分发到哪些 Agent」
     let installed = false;
     const deployedRow = {
@@ -311,12 +311,17 @@ describe('技能详情', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
     await waitFor(() => expect(screen.getByText('# alpha')).toBeTruthy());
 
-    const modal = screen.getByText('# alpha').closest('.modal') as HTMLElement;
-    const toggle = await within(modal).findByRole('switch', { name: 'Distribute alpha to Codex' });
+    // 默认折叠：头部保留计数，但不渲染具体目录行
+    const expand = await screen.findByRole('button', { name: 'Expand Distribute to agents' });
+    await waitFor(() => expect(screen.getByText('0 / 1 directories')).toBeTruthy());
+    expect(screen.queryByText('Not distributed')).toBeNull();
+
+    await userEvent.click(expand);
+    const toggle = await screen.findByRole('switch', { name: 'Distribute alpha to Codex' });
     expect(toggle).not.toBeChecked();
-    expect(within(modal).getByText('Not distributed')).toBeTruthy();
+    expect(screen.getByText('Not distributed')).toBeTruthy();
     // 目录路径按 home 压成 ~ 展示
-    expect(within(modal).getByText('~/agents/skills')).toBeTruthy();
+    expect(screen.getByText('~/agents/skills')).toBeTruthy();
 
     await userEvent.click(toggle);
     await waitFor(() => expect(screen.getByText('Distributed to Codex')).toBeTruthy());
@@ -324,10 +329,8 @@ describe('技能详情', () => {
     expect(JSON.parse(post?.[1]?.body as string)).toEqual({ id: 'alpha@default' });
 
     // 重读后该目录显示「已分发」，再关闭开关走删除接口
-    const on = await within(modal).findByRole('switch', { name: 'Distribute alpha to Codex' });
-    expect(on).toBeChecked();
-    await waitFor(() => expect(within(modal).getByText('Distributed')).toBeTruthy());
-    await userEvent.click(on);
+    await waitFor(() => expect(screen.getByText('Distributed')).toBeTruthy());
+    await userEvent.click(screen.getByRole('switch', { name: 'Distribute alpha to Codex' }));
     await waitFor(() => expect(screen.getByText('Removed from Codex')).toBeTruthy());
     expect(apiMock.mock.calls.some((c) => c[0] === '/agents/codex/skills/alpha' && c[1]?.method === 'DELETE')).toBe(true);
   });
@@ -346,20 +349,23 @@ describe('技能详情', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
     await waitFor(() => expect(screen.getByText('# alpha')).toBeTruthy());
 
-    const modal = screen.getByText('# alpha').closest('.modal') as HTMLElement;
-    await waitFor(() => expect(within(modal).getByText('Distributed')).toBeTruthy());
-    expect(within(modal).getByRole('switch', { name: 'Distribute alpha to Codex' })).toBeDisabled();
-    expect(within(modal).getByText('Agent-owned directory')).toBeTruthy();
+    await userEvent.click(await screen.findByRole('button', { name: 'Expand Distribute to agents' }));
+    await waitFor(() => expect(screen.getByText('Distributed')).toBeTruthy());
+    expect(screen.getByRole('switch', { name: 'Distribute alpha to Codex' })).toBeDisabled();
+    expect(screen.getByText('Agent-owned directory')).toBeTruthy();
   });
 
-  it('详情弹窗可关闭', async () => {
+  it('返回按钮回到技能列表', async () => {
     openDetail();
     await waitFor(() => expect(screen.getByText('2 skills in total')).toBeTruthy());
     await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
     await waitFor(() => expect(screen.getByText('# alpha')).toBeTruthy());
-    const modal = screen.getByText('# alpha').closest('.modal') as HTMLElement;
-    await userEvent.click(within(modal).getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByText('# alpha')).toBeNull());
+    // 详情是页面而非弹窗：列表此时不在页面上
+    expect(screen.queryByText(/All skills/)).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: '← Back' }));
+    await waitFor(() => expect(screen.getByText(/All skills · 1/)).toBeTruthy());
+    expect(screen.queryByText('# alpha')).toBeNull();
   });
 });
 

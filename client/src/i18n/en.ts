@@ -92,6 +92,8 @@ export const en = {
   'library.empty.title': 'Library is empty',
   'library.empty.hint':
     'No skills imported yet. Register an own repository below, then add skills through "Collect" / "Import".',
+  'library.notFound.title': 'Skill not found',
+  'library.notFound.hint': 'No skill with id "{id}".',
   'library.detail': 'Detail',
 
   /* ---------- skill detail dialog ---------- */
@@ -108,6 +110,7 @@ export const en = {
   'skillDetail.refresh': 'Refresh from source',
   'skillDetail.refreshHint': 'Overwrite the repo copy with the source content (source is read-only and never modified)',
   'skillDetail.refreshed': 'Refreshed from source',
+  'skillDetail.saved': 'Tags saved',
   'skillDetail.files': 'Extra files: {files}',
   'skillDetail.distribute': 'Distribute to agents',
   'skillDetail.distribute.count': '{n} / {total} directories',

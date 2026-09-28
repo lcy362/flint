@@ -169,76 +169,88 @@ export default function Library() {
         sub={data ? t('library.subtitle', { n: data.skills.length }) : undefined}
       />
 
-      <div className="panel">
-        <FilterBar
-          search={{ value: q, onChange: setQ, placeholder: t('filter.searchSkills') }}
-          controls={
-            <>
-              <MultiSelect
-                label={t('filter.source')}
-                options={allSources.map((s) => ({ label: s, value: s, count: sourceCounts[s] }))}
-                selected={srcs}
-                onChange={setSrcs}
-                emptyHint={t('library.sourceEmpty')}
-              />
-              <MultiSelect
-                label={t('filter.tags')}
-                options={allTags.map((tag) => ({ label: tag, value: tag, count: tagCounts[tag] }))}
-                selected={facets}
-                onChange={setFacets}
-                emptyHint={t('library.tagsEmpty', { n: data?.skills.length ?? 0 })}
-              />
-              <SwitchLabel checked={untaggedOnly} onChange={setUntaggedOnly}>{t('library.untaggedOnly')}</SwitchLabel>
-            </>
-          }
-          hasFilters={hasFilter}
-          onReset={clearFilters}
-          actions={
-            <BadgeLegend
-              title={t('library.legend.title')}
-              items={skillBadgeLegend(t)}
-              intro={rich(t('library.legend.intro'))}
+      {detailId !== null ? (
+        detailTarget ? (
+          <SkillDetail
+            key={detailTarget.id}
+            skill={detailTarget}
+            allTags={allTags}
+            home={data?.home}
+            onBack={closeDetail}
+            onChanged={reload}
+          />
+        ) : (
+          <LoadingBoundary
+            state={{ loading, error, data }}
+            empty={{ title: t('library.notFound.title'), hint: t('library.notFound.hint', { id: detailId }), icon: '◈' }}
+          >
+            {() => null}
+          </LoadingBoundary>
+        )
+      ) : (
+        <>
+          <div className="panel">
+            <FilterBar
+              search={{ value: q, onChange: setQ, placeholder: t('filter.searchSkills') }}
+              controls={
+                <>
+                  <MultiSelect
+                    label={t('filter.source')}
+                    options={allSources.map((s) => ({ label: s, value: s, count: sourceCounts[s] }))}
+                    selected={srcs}
+                    onChange={setSrcs}
+                    emptyHint={t('library.sourceEmpty')}
+                  />
+                  <MultiSelect
+                    label={t('filter.tags')}
+                    options={allTags.map((tag) => ({ label: tag, value: tag, count: tagCounts[tag] }))}
+                    selected={facets}
+                    onChange={setFacets}
+                    emptyHint={t('library.tagsEmpty', { n: data?.skills.length ?? 0 })}
+                  />
+                  <SwitchLabel checked={untaggedOnly} onChange={setUntaggedOnly}>{t('library.untaggedOnly')}</SwitchLabel>
+                </>
+              }
+              hasFilters={hasFilter}
+              onReset={clearFilters}
+              actions={
+                <BadgeLegend
+                  title={t('library.legend.title')}
+                  items={skillBadgeLegend(t)}
+                  intro={rich(t('library.legend.intro'))}
+                />
+              }
+              view={{ value: viewMode, onChange: setViewMode }}
             />
-          }
-          view={{ value: viewMode, onChange: setViewMode }}
-        />
-      </div>
+          </div>
 
-      <div className="panel">
-        <LoadingBoundary
-          state={{ loading, error, data }}
-          empty={{ title: t('library.empty.title'), hint: t('library.empty.hint'), icon: '◈' }}
-        >
-          {() => (
-            <SkillList
-              title={`${hasFilter ? t('list.filtered') : t('list.allSkills')} · ${shown.length}${hasFilter ? ' / ' + cards.length : ''}`}
-              items={shown}
-              onAction={(item) => openDetail(item.id)}
-              onTag={(item) => openDetail(item.id)}
-              onOpen={(item) => openDetail(item.id)}
-              hideToggle
-              collapsible
-              storageKey="lsh.collapsed.library.skills"
-            />
+          <div className="panel">
+            <LoadingBoundary
+              state={{ loading, error, data }}
+              empty={{ title: t('library.empty.title'), hint: t('library.empty.hint'), icon: '◈' }}
+            >
+              {() => (
+                <SkillList
+                  title={`${hasFilter ? t('list.filtered') : t('list.allSkills')} · ${shown.length}${hasFilter ? ' / ' + cards.length : ''}`}
+                  items={shown}
+                  onAction={(item) => openDetail(item.id)}
+                  onTag={(item) => openDetail(item.id)}
+                  onOpen={(item) => openDetail(item.id)}
+                  hideToggle
+                  collapsible
+                  storageKey="lsh.collapsed.library.skills"
+                />
+              )}
+            </LoadingBoundary>
+          </div>
+
+          {data && (
+            <div className="panel">
+              <ReposAndSources repos={data.repos} sources={data.sources} reload={reload} />
+            </div>
           )}
-        </LoadingBoundary>
-      </div>
-
-      {data && (
-        <div className="panel">
-          <ReposAndSources repos={data.repos} sources={data.sources} reload={reload} />
-        </div>
+        </>
       )}
-
-      <SkillDetailModal
-        id={detailTarget ? detailId : null}
-        skill={detailTarget}
-        allTags={allTags}
-        home={data?.home}
-        onClose={closeDetail}
-        onSaved={() => { closeDetail(); reload(); }}
-        onChanged={reload}
-      />
     </>
   );
 }
@@ -1010,44 +1022,37 @@ function WarehouseModal({
   );
 }
 
-/** 技能详情：SKILL.md 预览 + 标签编辑 + 来源追溯（UI-03 / TG-01 / IM-04） */
-function SkillDetailModal({
-  id,
+/**
+ * 技能详情页（UI-03 / TG-01 / IM-04）：元数据 + 标签编辑 + 来源追溯 + 分发到 Agent + SKILL.md 预览。
+ *
+ * 与 Agent / 项目详情同一形态：详情也是地址的一部分（route.sub），刷新后仍停留在同一个技能；
+ * 组件以 skill.id 作 key 挂载，切换技能时标签草稿自然重置。
+ */
+function SkillDetail({
   skill,
   allTags,
   home,
-  onClose,
-  onSaved,
+  onBack,
   onChanged,
 }: Readonly<{
-  id: string | null;
-  skill?: StateView['skills'][number];
+  skill: StateView['skills'][number];
   allTags: string[];
   /** 用户主目录：分发面板把绝对路径压成 ~ 展示 */
   home?: string;
-  onClose: () => void;
-  onSaved: () => void;
-  /** 分发 / 移除后刷新技能库（面板内部自行重读，这里只同步外层状态） */
+  onBack: () => void;
+  /** 标签保存 / 分发变更后同步技能库（分发面板内部自行重读） */
   onChanged: () => void;
 }>) {
   const { t } = useI18n();
-  const [tags, setTags] = useState<string[]>([]);
+  const toast = useToast();
+  const [tags, setTags] = useState<string[]>(skill.tags ?? []);
   const [newTag, setNewTag] = useState('');
   const [saving, setSaving] = useState(false);
-  const [syncedId, setSyncedId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const toast = useToast();
-
-  if (id && skill && syncedId !== id) {
-    setSyncedId(id);
-    setTags(skill.tags ?? []);
-    setNewTag('');
-  }
-  if (!id && syncedId !== null) setSyncedId(null);
 
   const { data: content, loading, reload: reloadContent } = useAsync<SkillContent>(
-    () => (id ? api(`/skills/${encodeURIComponent(id)}/content`) : Promise.resolve(null as unknown as SkillContent)),
-    [id]
+    () => api(`/skills/${encodeURIComponent(skill.id)}/content`),
+    [skill.id]
   );
 
   /** 标签输入归一化：按换行拆分、trim、去空、去重（兼容粘贴多行/未确认直接保存） */
@@ -1066,19 +1071,23 @@ function SkillDetailModal({
   };
 
   const save = async () => {
-    if (!skill) return;
     // 输入框中未点「添加」/未回车确认的文本，保存时一并纳入，避免「输入了却打不上」
     const finalTags = newTag.trim() ? addTagInput(newTag, tags) : tags;
     setSaving(true);
     try {
       await api(`/skills/${encodeURIComponent(skill.id)}`, { method: 'PATCH', body: JSON.stringify({ tags: finalTags }) });
-      onSaved();
+      setTags(finalTags);
+      setNewTag('');
+      toast.push(t('skillDetail.saved'), 'good');
+      onChanged();
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : String(e), 'bad');
     } finally { setSaving(false); }
   };
 
-  /** F4：从已登记来源刷新仓库副本（用户显式动作）。成功后在当前弹窗内重拉内容。 */
+  /** F4：从已登记来源刷新仓库副本（用户显式动作）。成功后在本页重拉内容。 */
   const refreshFromSource = async () => {
-    if (!skill || !content?.provenance) return;
+    if (!content?.provenance) return;
     setRefreshing(true);
     try {
       await api(`/skills/${encodeURIComponent(skill.id)}/refresh`, { method: 'POST' });
@@ -1089,89 +1098,93 @@ function SkillDetailModal({
     } finally { setRefreshing(false); }
   };
 
+  const provenance = content?.provenance;
+
   return (
-    <Modal
-      open={!!id}
-      title={skill ? `${t('library.detail')} · ${skill.name}` : ''}
-      width={720}
-      onClose={onClose}
-      footer={<><Button variant="ghost" onClick={onClose}>{t('common.close')}</Button><Button variant="primary" loading={saving} onClick={save}>{t('common.save')}</Button></>}
-    >
-      {skill && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
-            <Badge tone="info">{skill.source}</Badge>
-            {skill.version && <Badge tone="neutral">v{skill.version}</Badge>}
-            {skill.origin && <Badge tone="accent" title={t('badge.reason.own.title')}>{t('skillDetail.origin', { origin: skill.origin })}</Badge>}
-            {content?.provenance && (
-              <>
-                {content.provenance.takenAt && (
-                  <Badge tone="neutral" title={content.provenance.sourceType === 'git' ? t('skillDetail.sourceGit') : t('skillDetail.sourceDir')}>
-                    {t('skillDetail.sourceKind', { kind: content.provenance.sourceType === 'git' ? t('skillDetail.kind.git') : t('skillDetail.kind.dir') })}
-                  </Badge>
-                )}
-              </>
-            )}
-          </div>
-          {content?.provenance?.takenAt && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-              <span className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{content.provenance.sourceRef}</span>
+    <>
+      <div className="detail-head">
+        <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
+        <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{skill.name}</h2>
+        <Badge tone="info">{skill.source}</Badge>
+        {skill.version && <Badge tone="neutral">v{skill.version}</Badge>}
+        {skill.origin && <Badge tone="accent" title={t('badge.reason.own.title')}>{t('skillDetail.origin', { origin: skill.origin })}</Badge>}
+        {provenance?.takenAt && (
+          <Badge tone="neutral" title={provenance.sourceType === 'git' ? t('skillDetail.sourceGit') : t('skillDetail.sourceDir')}>
+            {t('skillDetail.sourceKind', { kind: provenance.sourceType === 'git' ? t('skillDetail.kind.git') : t('skillDetail.kind.dir') })}
+          </Badge>
+        )}
+        <div className="detail-actions">
+          {provenance?.takenAt && (
+            <Button size="sm" loading={refreshing} onClick={refreshFromSource} title={t('skillDetail.refreshHint')}>
+              {t('skillDetail.refresh')}
+            </Button>
+          )}
+          <Button size="sm" variant="primary" loading={saving} onClick={save}>{t('common.save')}</Button>
+        </div>
+      </div>
+
+      <section className="detail-section">
+        <div className="panel panel--quiet">
+          <div className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{skill.dir}</div>
+          {skill.description && <p style={{ color: 'var(--c-ink-2)', marginTop: 'var(--sp-2)' }}>{skill.description}</p>}
+          {provenance?.takenAt && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--sp-2)', marginTop: 'var(--sp-2)' }}>
+              <span className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{provenance.sourceRef}</span>
               <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
-                {t('skillDetail.takenAt', { date: new Date(content.provenance.takenAt).toLocaleString() })}
+                {t('skillDetail.takenAt', { date: new Date(provenance.takenAt).toLocaleString() })}
               </span>
-              <Button size="sm" variant="primary" loading={refreshing} onClick={refreshFromSource} title={t('skillDetail.refreshHint')}>
-                {t('skillDetail.refresh')}
-              </Button>
             </div>
           )}
-          <div className="mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{skill.dir}</div>
-          {skill.description && <p style={{ color: 'var(--c-ink-2)' }}>{skill.description}</p>}
+        </div>
 
-          <div>
-            <span className="field-label">{t('filter.tags')}</span>
-            <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-              <div style={{ flex: 1 }}>
-                <FieldInput placeholder={t('skillDetail.newTag')} value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addNew()} />
-              </div>
-              <Button onClick={addNew}>{t('common.add')}</Button>
-            </div>
-            <div style={{ marginTop: 'var(--sp-2)' }}>
-              {/* 库内已有标签 + 本次新增的标签，一并作为可多选的候选项 */}
-              <Chip
-                options={[...allTags, ...tags.filter((tag) => !allTags.includes(tag))].map((tag) => ({ label: tag, value: tag }))}
-                selected={tags}
-                multiple
-                onChange={setTags}
-              />
-            </div>
+        <div className="panel">
+          <div className="panel__head">
+            <span className="panel__title">{t('filter.tags')}</span>
           </div>
-
-          {/* 分发到 Agent：把 Agent 详情页的「直接添加 / 删除」搬到技能视角，顺便回答「装到了哪些 Agent」 */}
-          <SkillDistributePanel skill={skill} home={home} onChanged={onChanged} />
-
-          <div>
-            <span className="field-label">SKILL.md</span>
-            {loading && <span style={{ color: 'var(--c-ink-3)' }}>{t('common.loading')}</span>}
-            {content && (
-              <>
-                <pre className="mono" style={{
-                  maxHeight: 320, overflow: 'auto', padding: 'var(--sp-3)',
-                  background: 'var(--c-bg-2)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)',
-                  fontSize: 'var(--fs-12)', whiteSpace: 'pre-wrap',
-                }}>
-                  {content.content}
-                </pre>
-                {content.files.length > 0 && (
-                  <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 'var(--sp-2)' }}>
-                    {t('skillDetail.files', { files: joinList(content.files) })}
-                  </div>
-                )}
-              </>
-            )}
+          <div style={{ display: 'flex', gap: 'var(--sp-2)', maxWidth: 480 }}>
+            <div style={{ flex: 1 }}>
+              <FieldInput placeholder={t('skillDetail.newTag')} value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addNew()} />
+            </div>
+            <Button onClick={addNew}>{t('common.add')}</Button>
+          </div>
+          <div style={{ marginTop: 'var(--sp-3)' }}>
+            {/* 库内已有标签 + 本次新增的标签，一并作为可多选的候选项 */}
+            <Chip
+              options={[...allTags, ...tags.filter((tag) => !allTags.includes(tag))].map((tag) => ({ label: tag, value: tag }))}
+              selected={tags}
+              multiple
+              onChange={setTags}
+            />
           </div>
         </div>
-      )}
-    </Modal>
+
+        {/* 分发到 Agent：把 Agent 详情页的「直接添加 / 删除」搬到技能视角，顺便回答「装到了哪些 Agent」 */}
+        <SkillDistributePanel skill={skill} home={home} onChanged={onChanged} />
+
+        <div className="panel">
+          <div className="panel__head">
+            <span className="panel__title">SKILL.md</span>
+          </div>
+          {loading && <span style={{ color: 'var(--c-ink-3)' }}>{t('common.loading')}</span>}
+          {content && (
+            <>
+              <pre className="mono" style={{
+                maxHeight: 480, overflow: 'auto', padding: 'var(--sp-3)',
+                background: 'var(--c-bg-2)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)',
+                fontSize: 'var(--fs-12)', whiteSpace: 'pre-wrap',
+              }}>
+                {content.content}
+              </pre>
+              {content.files.length > 0 && (
+                <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', marginTop: 'var(--sp-2)' }}>
+                  {t('skillDetail.files', { files: joinList(content.files) })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </section>
+    </>
   );
 }
 

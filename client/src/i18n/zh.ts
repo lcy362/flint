@@ -87,6 +87,8 @@ export const zh: Record<MsgKey, string> = {
     '技能卡片上的徽标只说明**本工具对它做了什么**：它的来源，以及在技能目录里的装入形态（软链 / 复制 / 自带目录）。',
   'library.empty.title': '技能库为空',
   'library.empty.hint': '尚未导入任何技能。先在下方登记自有仓库，再通过其「归集 / 导入」添加技能。',
+  'library.notFound.title': '未找到该技能',
+  'library.notFound.hint': '技能库里没有 id 为「{id}」的技能。',
   'library.detail': '详情',
 
   /* ---------- skill detail dialog ---------- */
@@ -103,6 +105,7 @@ export const zh: Record<MsgKey, string> = {
   'skillDetail.refresh': '从来源更新',
   'skillDetail.refreshHint': '把仓库副本覆盖为来源当前内容（来源只读，不会改动来源）',
   'skillDetail.refreshed': '已从来源更新',
+  'skillDetail.saved': '标签已保存',
   'skillDetail.files': '附带文件：{files}',
   'skillDetail.distribute': '分发到 Agent',
   'skillDetail.distribute.count': '{n} / {total} 个目录',

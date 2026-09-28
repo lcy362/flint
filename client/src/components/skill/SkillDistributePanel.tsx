@@ -3,12 +3,43 @@ import { api, type AgentSkillsResp, type AgentView } from '../../api/types';
 import { groupAgentsByDir } from '../agent/agentGroups';
 import { notInstalledBadge } from '../agent/agentBadges';
 import EntityList, { type EntityItem } from '../common/EntityList';
+import FoldButton from '../common/FoldButton';
 import Badge from '../ui/Badge';
 import LoadingBoundary from '../ui/LoadingBoundary';
 import Switch from '../ui/Switch';
 import { useToast } from '../ui/Toast';
 import { useAsync } from '../../state/useAsync';
 import { rich, useI18n } from '../../i18n';
+
+/** 折叠状态持久化 key（存 '1' 折叠 / '0' 展开） */
+const COLLAPSE_KEY = 'lsh.collapsed.skill.distribute';
+
+/**
+ * 折叠状态：**默认折叠**，用户的展开 / 收起选择持久化。
+ *
+ * 不复用 `state/collapse.ts` 的 `useCollapsed`：它带 storageKey 时缺省即展开（initial 只在无 key 时生效），
+ * 而这一区是次要信息——首次打开技能详情时应当收起来，只在需要时展开。
+ */
+function useDefaultCollapsed(key: string): [boolean, () => void] {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(key) !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const toggle = () =>
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(key, next ? '1' : '0');
+      } catch {
+        /* 存储不可用时退化为内存态 */
+      }
+      return next;
+    });
+  return [collapsed, toggle];
+}
 
 /** 目录里这条技能为何不可移除：后端只允许移除本工具部署的软链 / 副本 */
 type LockedReason = 'own' | 'external';
@@ -50,6 +81,8 @@ export default function SkillDistributePanel({
   const { t } = useI18n();
   const toast = useToast();
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  // 默认折叠（头部保留已分发计数，不展开也能一眼看到「装到了几个目录」）
+  const [collapsed, toggleCollapsed] = useDefaultCollapsed(COLLAPSE_KEY);
 
   // 已分发清单：按目录读实际内容，命中同名技能即已分发。
   // 只读共享目录读到的行不算「分发到本目录」——那边由标准目录自己的策略管理。
@@ -140,22 +173,27 @@ export default function SkillDistributePanel({
     }));
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-        <span className="field-label" style={{ marginBottom: 0 }}>{t('skillDetail.distribute')}</span>
+    <div className="panel">
+      <div className="panel__head">
+        <span className="panel__title">{t('skillDetail.distribute')}</span>
         {data && (
           <Badge tone={deployed > 0 ? 'accent' : 'neutral'} title={t('skillDetail.distribute.count.title')}>
             {t('skillDetail.distribute.count', { n: deployed, total: rows.length })}
           </Badge>
         )}
+        <FoldButton expanded={!collapsed} label={t('skillDetail.distribute')} onClick={toggleCollapsed} />
       </div>
-      <p className="panel__hint" style={{ marginTop: 'var(--sp-1)' }}>{rich(t('skillDetail.distribute.hint'))}</p>
-      <LoadingBoundary
-        state={{ loading, error, data }}
-        empty={{ title: t('skillDetail.distribute.empty'), icon: '◉' }}
-      >
-        {() => <EntityList mode="list" toggle={false} items={items} hideToggle />}
-      </LoadingBoundary>
+      {!collapsed && (
+        <>
+          <p className="panel__hint">{rich(t('skillDetail.distribute.hint'))}</p>
+          <LoadingBoundary
+            state={{ loading, error, data }}
+            empty={{ title: t('skillDetail.distribute.empty'), icon: '◉' }}
+          >
+            {() => <EntityList mode="list" toggle={false} items={items} hideToggle />}
+          </LoadingBoundary>
+        </>
+      )}
     </div>
   );
 }
