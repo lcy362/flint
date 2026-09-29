@@ -53,7 +53,7 @@ schema.org structured data for SEO/GEO indexing. GitHub does not execute this sc
 > **Flint** · `local-skills-hub`
 > Obsidian collects knowledge; flint sparks skills.
 
-**Make skills a personal asset — and keep the sovereignty.**
+**Make skills a personal asset — keep the sovereignty in your own hands.**
 
 Flint is a local-first personal AI skills asset manager — it centralizes the skills used by all of your agents, with unified tagging, filtering, deduplication, and deployment into agent and project directories.
 
