@@ -11,7 +11,7 @@
 > **Flint** · `local-skills-hub`
 > 黑曜石收藏知识，燧石点燃技能。
 
-**让 skill 成为个人资产，把主权握在自己手里。**
+**Your skills are yours.**
 
 *技能即资产，主权不旁落。*
 
