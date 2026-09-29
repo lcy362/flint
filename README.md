@@ -13,7 +13,7 @@ schema.org structured data for SEO/GEO indexing. GitHub does not execute this sc
   "alternateName": "local-skills-hub",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "macOS, Linux, Windows",
-  "description": "Flint is a local-first personal AI skills asset manager. Collect, tag, deduplicate and distribute your AI skills across agents (Claude Code, Cursor, Codex) and projects. Skills live as plain SKILL.md directories on disk — no cloud, no account, never locked in.",
+  "description": "Flint is a local-first personal AI skills asset manager built around data sovereignty. Collect, tag, deduplicate and distribute your AI skills across agents (Claude Code, Cursor, Codex) and projects. Skills live as plain SKILL.md directories on disk — no cloud, no account, no telemetry, never locked in.",
   "url": "https://github.com/lcy362/flint",
   "installUrl": "https://www.npmjs.com/package/flint-skills-hub",
   "downloadUrl": "https://github.com/lcy362/flint",
@@ -53,13 +53,35 @@ schema.org structured data for SEO/GEO indexing. GitHub does not execute this sc
 > **Flint** · `local-skills-hub`
 > Obsidian collects knowledge; flint sparks skills.
 
-**Make skills a personal asset.**
+**Make skills a personal asset — and keep the sovereignty.**
 
-Flint is a local-first personal AI skills asset manager — it centralizes the skills used by all of your agents, with unified tagging, filtering, deduplication, and deployment into agent and project directories. Skills exist only as plain files on your local disk, versionable with git or whatever you prefer; if you move to another tool or ecosystem, the asset comes with you and keeps working — you are never locked in by Flint.
+Flint is a local-first personal AI skills asset manager — it centralizes the skills used by all of your agents, with unified tagging, filtering, deduplication, and deployment into agent and project directories.
+
+The point is **data sovereignty**: skills exist only as plain files on your local disk, following open formats and path conventions — no cloud, no account, no telemetry. Whether or not you keep using Flint, the asset is yours; move to another tool or ecosystem and it comes with you, at zero migration cost.
 
 ![Flint UI — Library: a local-first AI skills manager](images/home.png)
 
 *Manage, tag and distribute your AI skills across agents and projects — all local, all yours.*
+
+## Why data sovereignty is the whole point
+
+Next to the last generation of knowledge tools — Evernote, OneNote, Notion, and the generations before them — what sets Obsidian apart is not a feature list: it is **local-first, with data sovereignty**. The content belongs entirely to you, and it follows you for the long term whether or not you keep using Obsidian.
+
+That is also exactly where the old pain lived. Moving from Evernote to OneNote, then from OneNote to Notion — every time a better tool turned up, or I needed one feature only the new tool had, the tedious migration cost left me wondering: *is this data actually mine?* Add to that the open formats and open ecosystem, which are what finally decoupled knowledge from whatever tool happened to be holding it.
+
+Personal skill libraries are heading into the same situation. There is no shortage of skill managers on the market, and nearly all of them share one conspicuous problem: **they bind your skills tightly to themselves** — a shared registry, an account, a proprietary format, a directory layout only that one tool understands.
+
+So Flint borrows Obsidian's answer and applies it to skills:
+
+- **Skills exist only as plain files on your disk** — no cloud, no account, no telemetry.
+- **Formats and path conventions follow open ecosystem standards** — a skill body is a `SKILL.md` directory; metadata lives where the ecosystem already agrees on, not in a private database.
+- **Data sovereignty is 100% yours** — switch tools or switch ecosystems and your assets come with you, at zero migration cost, and keep working.
+
+Not owning your skills has costs you pay every single day:
+
+- **Switching agents.** Free tokens keep appearing everywhere — agent A today, agent B tomorrow — and the daily-report skill you wrote in A simply is not there in B. Installer-style tools such as `npx` can push skills into every agent you already have, but a *new* agent means doing it all over again, and your own skills never enter their inventory in the first place.
+- **A fixed bill on every conversation.** A company skill set easily runs to a hundred or two skills — frontend, backend, design, ops — of which you use a handful. Without fine-grained management you install all of them, and agents inject the name and description of every installed skill into the system prompt. At roughly 50–100 tokens each, 200 skills is a 10k–20k token fixed cost *per conversation*, multiplied by the dozens of turns in a single task. The token bill is the smaller half: the longer the candidate list, the greater the chance the model picks the wrong skill or misses it altogether — like hunting for your own wrench in a toolbox stuffed with other people's tools.
+- **Rework you cannot carry over.** Skills written inside one tool's private store are skills you rewrite from scratch the day you move; the more you invest, the more expensive leaving becomes.
 
 ## Why "Flint"
 
@@ -104,9 +126,9 @@ In one sentence: **Obsidian lets you own and sharpen your knowledge; Flint lets 
 
 ## Core ideas
 
-### Make skills a personal asset
+### Make skills a personal asset — sovereignty included
 
-Your skill repository is your own personal asset, **not tied to any single system**. It lives only on your local filesystem; manage and version it with git or anything you like. If you later move to another tool or ecosystem, the asset comes with you and keeps working — never locked in by this tool.
+Your skill repository is your own personal asset, **not tied to any single system**. It lives only on your local filesystem; manage and version it with git or anything you like. If you later move to another tool or ecosystem, the asset comes with you and keeps working — never locked in by this tool. **Data sovereignty stays with you**: the repository is a plain directory on disk, so Flint being uninstalled, replaced, or simply not running changes nothing about your skills.
 
 ### Your skills are your files
 
