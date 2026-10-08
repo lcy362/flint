@@ -397,9 +397,10 @@ describe('技能详情', () => {
     expect(within(modal).getByRole('switch', { name: 'Distribute alpha to Codex' })).toBeEnabled();
   });
 
-  it('目录里是智能体自带技能时开关禁用并说明原因', async () => {
+  it('目录里是智能体自带技能时开关也可用：关闭＝移除该目录里的落点', async () => {
     openDetail({
       '/skills/alpha/agents': () => ({ agents: [{ key: 'codex', present: true, reason: 'own' }] }),
+      'DELETE /agents/codex/skills/alpha': () => ({ ok: true, removed: 'alpha' }),
     });
     await waitFor(() => expect(screen.getByText('2 skills in total')).toBeTruthy());
     await userEvent.click(screen.getAllByRole('button', { name: 'Detail' })[0]);
@@ -408,8 +409,12 @@ describe('技能详情', () => {
 
     const modal = (await screen.findByText('Distribute to agents · alpha')).closest('.modal') as HTMLElement;
     await waitFor(() => expect(within(modal).getByText('Distributed')).toBeTruthy());
-    expect(within(modal).getByRole('switch', { name: 'Distribute alpha to Codex' })).toBeDisabled();
-    expect(within(modal).getByText('Agent-owned directory')).toBeTruthy();
+    // 后端不再拦截「自带目录 / 外部软链」：开关不再置灰，关闭即移除落点（软链只解除链接）
+    const toggle = within(modal).getByRole('switch', { name: 'Distribute alpha to Codex' });
+    expect(toggle).toBeEnabled();
+    await userEvent.click(toggle);
+    await waitFor(() => expect(screen.getByText('Removed from Codex')).toBeTruthy());
+    expect(apiMock.mock.calls.some((c) => c[0] === '/agents/codex/skills/alpha' && c[1]?.method === 'DELETE')).toBe(true);
   });
 
   it('返回按钮回到技能列表', async () => {

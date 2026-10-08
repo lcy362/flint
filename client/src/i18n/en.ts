@@ -118,16 +118,14 @@ export const en = {
   'skillDetail.distribute.list': 'All agents',
   'skillDetail.distribute.count.title': 'How many agent skill directories currently contain this skill',
   'skillDetail.distribute.hint':
-    'Listed per real skill directory (agents sharing one directory share a single copy). Turning it on deploys this skill into that directory; turning it off removes **the link / copy deployed by this tool** — an agent-owned directory or an external symlink is never deleted.',
+    'Listed per real skill directory (agents sharing one directory share a single copy). Turning it on deploys this skill into that directory; turning it off removes the entry from that directory — **a symlink is only unlinked, its target stays untouched**; a real directory / copy is deleted.',
   'skillDetail.distribute.installed': 'Distributed',
   'skillDetail.distribute.missing': 'Not distributed',
   'skillDetail.distribute.toggleAria': 'Distribute {name} to {agent}',
   'skillDetail.distribute.added': 'Distributed to {agent}',
   'skillDetail.distribute.removed': 'Removed from {agent}',
-  'skillDetail.distribute.locked.own': 'Agent-owned directory',
-  'skillDetail.distribute.locked.own.title': 'This is a real directory owned by the agent; this tool never deletes it',
-  'skillDetail.distribute.locked.external': 'External symlink',
-  'skillDetail.distribute.locked.external.title': 'This symlink was created by another tool; this tool never deletes it',
+  'skillDetail.distribute.removeConfirm':
+    'Remove "{name}" from the {agent} directory? A symlink there is unlinked (its target stays untouched); a real directory / copy is deleted. This cannot be undone.',
   'skillDetail.distribute.empty': 'No agent skill directory available',
   'skillDetail.distribute.empty.match': 'No matching skill directory',
 
@@ -386,6 +384,8 @@ export const en = {
   'agents.sync.failed': 'Sync finished with {n} failures',
   'agents.sync.done': 'Synced: {created} added / {removed} removed',
   'agents.deleteConfirm': 'Delete custom agent "{name}"? This cannot be undone.',
+  'agents.skillDeleteConfirm':
+    'Remove "{name}" from this directory? A symlink is unlinked (its target stays untouched); a real directory is deleted. This cannot be undone.',
   'agents.deletedCustom': 'Custom agent deleted',
   'agents.failed': 'Failed',
   'agents.presetReason.title':
@@ -552,6 +552,8 @@ export const en = {
   'projects.sync': 'Sync',
   'projects.sync.title': 'Reconcile once: fill in missing skills (add-only) and link them into each agent\u2019s project directory',
   'projects.noSkills': 'This project has no skills',
+  'projects.skillDeleteConfirm':
+    'Remove "{name}" from this project\u2019s skill directory? A symlink is unlinked (its target stays untouched); a real directory / copy is deleted. This cannot be undone.',
   'projects.skillsCount': 'Project skills ({n})',
   'projects.deploy.section': 'Deploy to agents',
   'projects.deploy.badge.title': 'Agents this project\u2019s skill directory has been deployed to',

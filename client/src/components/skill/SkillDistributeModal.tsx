@@ -15,16 +15,11 @@ import { useToast } from '../ui/Toast';
 import { useViewMode } from '../../state/viewMode';
 import { rich, useI18n } from '../../i18n';
 
-/** 目录里这条技能为何不可移除：后端只允许移除本工具部署的软链 / 副本 */
-type LockedReason = 'own' | 'external';
-
 /** 一行 = 一个实际技能目录（同目录的多个智能体共用同一份实体，与智能体页同一口径） */
 interface DirDeployRow {
   group: AgentGroup;
   /** 该技能已分发到这个目录（目录里实际有这条同名的自身技能） */
   distributed: boolean;
-  /** 已存在但不可移除的原因（智能体自带真实目录 / 外部软链） */
-  locked?: LockedReason;
 }
 
 /**
@@ -32,7 +27,7 @@ interface DirDeployRow {
  *
  * 只是把已有的两个入口搬到技能视角（接口与智能体详情页「从技能库添加 / 删除」完全一致）：
  * - 打开开关 → `POST /agents/:key/skills { id }`（一次性部署，软链 / 复制遵循该目录策略）
- * - 关闭开关 → `DELETE /agents/:key/skills/:name`（只删本工具部署的软链 / 副本）
+ * - 关闭开关 → `DELETE /agents/:key/skills/:name`（软链只解除链接，真实目录 / 副本删掉）
  *
  * 已分发清单走一次聚合只读查询 `GET /skills/:name/agents`（各目录只看自己那一条），
  * 不再逐个目录调 `/agents/:key/skills`——那样每个请求都会整体重扫一遍技能库，目录一多就明显卡。
@@ -73,9 +68,7 @@ export default function SkillDistributeModal({
       const byKey = new Map(presence.agents.map((a) => [a.key, a]));
       const next: DirDeployRow[] = groupAgentsByDir(agents).map((g) => {
         const hit = byKey.get(g.primary.key);
-        const locked: LockedReason | undefined =
-          hit?.reason === 'own' ? 'own' : hit?.reason === 'external' ? 'external' : undefined;
-        return { group: g, distributed: !!hit?.present, locked };
+        return { group: g, distributed: !!hit?.present };
       });
       setRows(next);
       setLoaded(true);
@@ -112,11 +105,6 @@ export default function SkillDistributeModal({
     [rows, kw, onlyInstalled]
   );
 
-  const lockedLabel = (reason: LockedReason) =>
-    reason === 'own' ? t('skillDetail.distribute.locked.own') : t('skillDetail.distribute.locked.external');
-  const lockedTitle = (reason: LockedReason) =>
-    reason === 'own' ? t('skillDetail.distribute.locked.own.title') : t('skillDetail.distribute.locked.external.title');
-
   /**
    * 分发 / 移除：沿用智能体详情页的两个接口。
    * 成功后就地改这一行的状态（乐观更新，与预设页的高频开关同一约定）——不重新拉取整份清单，
@@ -125,6 +113,8 @@ export default function SkillDistributeModal({
   const toggle = async (row: DirDeployRow, on: boolean) => {
     const key = row.group.primary.key;
     const agent = row.group.names.join(' / ');
+    // 关闭开关会移除物理落点（真实目录 / 副本会被删掉），先确认
+    if (!on && row.distributed && !window.confirm(t('skillDetail.distribute.removeConfirm', { agent, name: skill.name }))) return;
     setBusyKey(key);
     try {
       if (on) {
@@ -138,7 +128,7 @@ export default function SkillDistributeModal({
       } else {
         await api(`/agents/${encodeURIComponent(key)}/skills/${encodeURIComponent(skill.name)}`, { method: 'DELETE' });
       }
-      setRows((prev) => prev.map((r) => (r.group.primary.key === key ? { ...r, distributed: on, locked: undefined } : r)));
+      setRows((prev) => prev.map((r) => (r.group.primary.key === key ? { ...r, distributed: on } : r)));
       toast.push(t(on ? 'skillDetail.distribute.added' : 'skillDetail.distribute.removed', { agent }), 'good');
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
@@ -151,18 +141,15 @@ export default function SkillDistributeModal({
     agentGroupItem(row.group, t, {
       // 这个技能与目录的关系是本弹窗的主信息，排在智能体自身徽标之前
       extraBadges: (
-        <>
-          {row.distributed
-            ? <Badge tone="good">{t('skillDetail.distribute.installed')}</Badge>
-            : <Badge tone="neutral">{t('skillDetail.distribute.missing')}</Badge>}
-          {row.locked && <Badge tone="neutral" title={lockedTitle(row.locked)}>{lockedLabel(row.locked)}</Badge>}
-        </>
+        row.distributed
+          ? <Badge tone="good">{t('skillDetail.distribute.installed')}</Badge>
+          : <Badge tone="neutral">{t('skillDetail.distribute.missing')}</Badge>
       ),
       toggle: (
         <Switch
           aria-label={t('skillDetail.distribute.toggleAria', { name: skill.name, agent: row.group.names.join(' / ') })}
           checked={row.distributed}
-          disabled={busyKey === row.group.primary.key || (row.distributed && !!row.locked)}
+          disabled={busyKey === row.group.primary.key}
           onChange={(on) => void toggle(row, on)}
         />
       ),

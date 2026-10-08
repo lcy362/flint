@@ -38,6 +38,10 @@ describe('Agent 技能行的操作推导（acts）', () => {
   it('共享标准目录读取不给任何操作', () => {
     expect(kinds({ reason: 'shared', store: 'own', alreadyInLibrary: true })).toEqual([]);
   });
+
+  it('尚未落盘的行（present=false）目录里没有东西可删：不给任何操作', () => {
+    expect(kinds({ present: false, store: 'pending', reason: 'manual', wanted: true })).toEqual([]);
+  });
 });
 
 describe('Agent 技能行的状态（state）', () => {

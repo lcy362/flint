@@ -28,6 +28,11 @@ if (!globalThis.ResizeObserver) {
 // jsdom 没有实现滚动，路由跳转时会调用
 window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
 
+// jsdom 未实现 window.confirm（返回 undefined，等价于用户点了「取消」）：默认放行，
+// 否则「删除 / 分发」这类先确认的操作在用例里会静默什么都不做。
+// 需要断言「取消」分支的用例自己 spy 成 false（restoreMocks 会在用例结束后恢复这里）。
+window.confirm = (() => true) as typeof window.confirm;
+
 // 界面语言取自 localStorage，且 i18n 在模块加载时就读走：这里在测试文件 import 之前钉死英文，
 // 否则前一个用例切到中文后，后续文件的断言会跟着漂移
 try {

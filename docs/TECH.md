@@ -168,12 +168,13 @@ Agent 技能目录 ──归集(复制)──▶ 仓库 skills/ ──scanAll─
         ▼
 落盘到 Agent 目录：按 name 建软链或副本
    ├─ 已存在同名校验 → 软链指向正确则跳过；实体目录内容一致才允许重建，否则报 failed（用户自有内容不删）
-   └─ 删除（DELETE /agents/:key/skills/:skillName）→ 仅回收 isManagedLinkTarget 判定的本工具部署软链 / 副本
+   └─ 删除（DELETE /agents/:key/skills/:skillName）→ 移除该目录里的落点：软链只 unlink，真实目录 / 文件直接删
 ```
 
 - **应用预设（一次性）**：在某目录「应用预设」= 把该预设展开成员逐个 `deployOne` 部署一次（`prune:false`），**此后不再自动补回**——被删技能不会因预设仍在而自动回来。
 - **无自动同步**：`activeAgents` 不再作为部署触发作用域；`onChanged/onConfigChanged` 不再自动 resync / 部署。手动 `POST /sync` 显式保留。
-- **幂等**：重复执行 diff 为空即无操作；安全边界决定不覆盖真实目录、不删外部软链。
+- **幂等**：重复执行 diff 为空即无操作；**自动投放**的安全边界决定不覆盖真实目录、不替换外部软链（手动删除不受此限）。
+- **删除 vs 自动回收**：手动删除是用户的显式意图，不设归属门槛（目录里真有东西就能删）；`isManagedLinkTarget` 只约束**自动**路径（投放不替换、`prune` 只回收本工具产物）。两者都只作用在落点上：软链 `unlink`、目标本体永不动。
 
 ### 6.3 项目级链路
 
@@ -210,7 +211,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 **`deployAgent` 的安全边界**（决定"绝不误删"）：
 1. 落点已有软链：指向正确则跳过；指向本工具部署的仓库则重建；指向**外部**（不在任何自有仓库内）则报 `failed`，不替换。
 2. 落点已有实体目录：内容与目标副本一致才视为"本工具部署的副本"可重建，否则报 `failed`（用户自有内容不删）。
-3. 删除 / `prune` 只回收 `isManagedLinkTarget` 判定为本工具部署的软链 / 副本——目标落在**自有仓库或第三方来源**注册库内（口径已扩展）；真实目录与外部软链不动。
+3. 自动回收（`prune` / 停用）只回收 `isManagedLinkTarget` 判定为本工具部署的软链 / 副本——目标落在**自有仓库或第三方来源**注册库内（口径已扩展）；真实目录与外部软链不动。**这条只约束自动路径**：用户手动「删除」按显式意图执行（§6.2），软链只解除链接、真实目录 / 文件直接删。
 4. 软链创建失败时降级为复制并记入 `warnings`（Windows 兼容）。
 
 ---
@@ -305,7 +306,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | GET | `/agents/:key/skills` | 该 Agent 技能行（**读目录**）+ 可添加清单 |
 | POST | `/agents/:key/skills` | **添加**单个技能（body `{id: name@source}`，`deployOne` 一次性部署软链 / 副本） |
 | POST | `/agents/:key/sync` | 手动同步（`prune:true`，回收本工具部署物） |
-| DELETE | `/agents/:key/skills/:skillName` | **删除**该技能物理产物（仅本工具部署的软链 / 副本；真实目录与外部软链一律不动） |
+| DELETE | `/agents/:key/skills/:skillName` | **删除**该技能在本目录的落点（软链只解除链接、目标本体不动；真实目录 / 文件直接删） |
 | GET / POST | `/agents/custom` | 列出 / 新增自定义 Agent |
 | DELETE | `/agents/custom/:key` | 删除自定义 Agent |
 | GET / PUT | `/activeAgents` | 活跃集合（仅作展示 / 排序 / `primaryOf` 判定 / 诊断扫描的辅助，不再触发投放） |
@@ -321,7 +322,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | PUT | `/projects/:id/agents` | 调整投放 Agent（以目录结构为事实） |
 | GET | `/projects/:id/skills` | 项目技能行（**读目录**）+ 可添加清单 |
 | POST | `/projects/:id/skills` | **添加**单个技能（复制本体到 `.agents` 并登记 `INDEX.md`，对齐 takeover 的 copy 语义） |
-| DELETE | `/projects/:id/skills/:name` | **删除**本工具登记投放的副本（真实目录与外部内容不动） |
+| DELETE | `/projects/:id/skills/:name` | **删除**该技能在 `.agents/skills` 的落点（软链只解除链接、仓库本体不动；真实副本直接删） |
 | GET | `/projects/:id/collect/preview` | 项目技能归集预览 |
 | POST | `/projects/:id/collect` | 项目技能归集 |
 | POST | `/projects/:id/takeover` | 项目技能接管（副本） |
@@ -374,7 +375,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - `components/agent/agentGroups.ts`：按解析后的目录把 Agent 归并成卡片模型（主 Agent 在前）。
 - `components/agent/agentGroupItems.tsx`：把「一个目录一张卡」的口径（`isStandardGroup` + `agentGroupItem`：标题 / 副标题 / 路径 / 活跃态 / 自定义·预设·未安装徽标）收敛到一处，智能体页列表与技能详情的「分发到智能体」弹窗共用；调用方只能补点击、开关与追加徽标，不允许改卡片本身的说法。
 - `domain/cards.ts` ↔ `api/types.ts`：后端领域行 → `SkillCardView`，前端按 `reason / store / state` 决定徽标与可执行操作（`add / delete / collect / detail`，无 on/off 开关）。
-- **状态列只回答「装没装、可不可用」**：`state` 只有 `on`（该技能就在本目录里，本 Agent / 项目可用——本工具分发的、自带目录、外部软链、共享目录读到的都算）；删除后物理产物被移除，不再有 `off` 状态。「本工具管不管它」不占状态列，由 `reason` 徽标表达（自带 / 外部软链 / 只读），前端用 `isToolManaged(item)` 判断是否渲染「添加 / 删除」、是否进「安装方式」清单。
+- **状态列只回答「装没装、可不可用」**：`state` 只有 `on`（该技能就在本目录里，本 Agent / 项目可用——本工具分发的、自带目录、外部软链、共享目录读到的都算）；删除后物理产物被移除，不再有 `off` 状态。「本工具管不管它」不占状态列，由 `reason` 徽标表达（自带 / 外部软链 / 只读），前端用 `isToolManaged(item)` 判断是否渲染分发开关、是否进「安装方式」清单。行内「删除」按目录实际内容给：落盘的行（软链或真实目录 / 副本）都能删，未落盘的行不给（`domain/cards.ts` 的 `acts`）。
 - **行内「是什么」以事实为准**：`SkillCardView.source` 只表达**软链目标实际落在哪个已登记库**（`libraryOfLinkTarget`，按路径判定；自有仓库 / 第三方来源），判定不出就留空——绝不拿技能名去回填来源。不在本工具分发范围内的行（`own` / `external` / `shared`）再由服务端给出 `pathLabel`（真实位置，软链附带真实目标，home 压成 `~`），列表把它当行的副标题展示；本工具分发的行才用 `name@来源` 表达身份。
 
 ### 12.4 关键交互约定
@@ -382,7 +383,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - **乐观更新 + 串行提交**：Agent 页「直接添加技能」与预设页「按技能纳入」用本地草稿即时反映，请求进串行队列，避免连点时后发先至。
 - **路径输入统一可调起系统选择器**：`components/ui/PathField.tsx`（`PathField` / `PathListField`）；相对路径（如 `.my-tool/skills`）因选择器无法表达，保留纯文本输入并注明。
 - **技能详情是页面，不是弹窗**：`views/Library.tsx` 的 `SkillDetail`（列表 / 详情按 `route.sub` 互斥渲染，与 Agent / 项目详情同一形态）提供元数据 + 标签编辑 + 来源追溯 + `SKILL.md` 预览；「分发到智能体」是详情页头部按钮打开的弹窗。
-- **分发入口可以有多处，逻辑与 UI 只有一套**：技能详情里的「分发到智能体」（`components/skill/SkillDistributeModal.tsx`）只是把智能体详情页的两个接口搬到技能视角——`POST /agents/:key/skills`（添加）与 `DELETE /agents/:key/skills/:name`（移除）；已分发清单走一次聚合只读查询 `GET /skills/:name/agents`（只读共享目录读到的行不计入）。列表按「一个实际目录一行」归并（`groupAgentsByDir`），卡片直接复用 `agentGroupItem`，搜索口径（名称 / key / 目录）与「只看已安装」也与智能体页一致，只是多出一个分发开关；智能体自带目录与外部软链的开关置灰（后端不会删）。视图沿用全站偏好（缺省卡片），切换器在同一筛选栏上。开关成功后就地改这一行的状态（乐观更新，与预设页的高频开关同一约定），不整份重拉——失败保持原状并由 toast 说明原因（部署接口 HTTP 200 但 `failed` 非空的「静默失败」也按失败处理）。
+- **分发入口可以有多处，逻辑与 UI 只有一套**：技能详情里的「分发到智能体」（`components/skill/SkillDistributeModal.tsx`）只是把智能体详情页的两个接口搬到技能视角——`POST /agents/:key/skills`（添加）与 `DELETE /agents/:key/skills/:name`（移除）；已分发清单走一次聚合只读查询 `GET /skills/:name/agents`（只读共享目录读到的行不计入）。列表按「一个实际目录一行」归并（`groupAgentsByDir`），卡片直接复用 `agentGroupItem`，搜索口径（名称 / key / 目录）与「只看已安装」也与智能体页一致，只是多出一个分发开关；开关对所有落盘的行都可用（关闭＝把落点从该目录移除：软链只解除链接、真实目录 / 副本删掉），关闭前先弹确认。视图沿用全站偏好（缺省卡片），切换器在同一筛选栏上。开关成功后就地改这一行的状态（乐观更新，与预设页的高频开关同一约定），不整份重拉——失败保持原状并由 toast 说明原因（部署接口 HTTP 200 但 `failed` 非空的「静默失败」也按失败处理）。
 
 ---
 
@@ -414,7 +415,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - **C11 软链优先，复制回退**：默认软链；不跟随软链的场景降级为复制。
 - **C12 `activeAgents` 不作部署作用域**：活跃集合仅作展示 / 排序 / `primaryOf` 判定 / 诊断扫描的辅助集合，不触发、不限定任何自动投放。
 - **C18 一个目录只有一套策略（主 Agent 生效）**：见 §8。
-- **C13 只读尊重，不侵入外部数据**：只读关联的外部源只读不写；Agent 自带技能与外部软链不擅自改动；删除只针对 `isManagedLinkTarget` 判定为本工具部署（自有仓库 ∪ 第三方来源）的软链 / 副本，真实目录与外部软链永不删。
+- **C13 只读尊重，不侵入外部数据**：只读关联的外部源只读不写；**自动**投放 / 回收只针对 `isManagedLinkTarget` 判定为本工具部署（自有仓库 ∪ 第三方来源）的软链 / 副本，不替换外部软链、不动真实目录。手动删除是用户显式意图，不设归属门槛——软链只 `unlink`（目标本体永不动），真实目录 / 文件直接删。
 
 ### 生态兼容类
 

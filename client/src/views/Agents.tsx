@@ -215,6 +215,8 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: Readonly<{
       return;
     }
     if (action.kind === 'delete') {
+      // 删除会移除物理落点（真实目录会被删掉），先确认；软链只解除链接、本体不动
+      if (!window.confirm(t('agents.skillDeleteConfirm', { name: item.name }))) return;
       void busy(() => api(`/agents/${encodeURIComponent(agent.key)}/skills/${encodeURIComponent(item.name)}`, { method: 'DELETE' }));
     }
   };

@@ -90,18 +90,23 @@ function pathLabelOf(row: { dir?: string; linkTarget?: string }, reason: SkillRe
  *   软链已有归属时（目标就落在自有仓库 / 第三方来源 / 共享标准目录内），再归集只会复制出重复本体，
  *   因此不提供该操作（这类技能要覆盖仓库副本请走技能库「添加技能 → 从 Agent 归集」，
  *   那里才有并列候选可比）。
+ * - 「删除」= 把这个落点从本目录移除。目录里只要真有东西就能删：软链只解除链接（目标本体不动），
+ *   真实目录 / 文件按用户意图删掉。是不是本工具部署的不再是删除的前提——那层判定只约束**自动**
+ *   行为（自动投放不替换外部软链、prune 只回收本工具产物），不限制用户手动清理自己目录里的东西。
  * - 不再单出「合并保留」：合并是「同一技能名有多个来源」时的仲裁，只有在技能库的
  *   归集确认页里才有齐全的候选（并列各版本 / 来源）可比，单独一颗按钮既没有可比对象也容易误解。
  */
 function acts(r: CommonRow): SkillAction[] {
+  // 共享标准目录读到的行不在本 Agent 自己的目录里，删它等于删别人的目录，本页不给入口
+  if (r.reason === 'shared') return [];
+  // 尚未落盘的行（项目标签命中但目录里没有）：目录里没有东西可删，删除一律不发
+  if (!r.present) return [];
   if (r.reason === 'own' || r.reason === 'external') {
     return [
       ...(r.alreadyInLibrary ? [] : [action('collect', t('card.collect'), { title: t('card.collect.title') })]),
       action('delete', t('card.delete'), { title: t('card.delete.title') }),
     ];
   }
-  // 共享标准目录里的技能由该目录自己的策略管理，本 Agent 无权开关/删除，这里不给操作
-  if (r.reason === 'shared') return [];
   // 受管行（本工具部署的软链 / 副本，reason=manual/preset）：新模型下没有 on/off 开关，
   // 移除它就等于从该目录删除物理产物，因此只给「删除」。
   return [action('delete', t('card.delete'), { title: t('card.delete.title') })];

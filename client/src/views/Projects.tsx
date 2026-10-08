@@ -176,6 +176,8 @@ function ProjectDetail({ project, onBack, onChanged }: Readonly<{ project: Proje
       return;
     }
     if (action.kind === 'delete') {
+      // 删除会移除物理落点（真实目录 / 副本会被删掉），先确认；软链只解除链接、本体不动
+      if (!window.confirm(t('projects.skillDeleteConfirm', { name: item.name }))) return;
       void busy(() => api(`/projects/${project.id}/skills/${encodeURIComponent(item.name)}`, { method: 'DELETE' }));
     }
   };

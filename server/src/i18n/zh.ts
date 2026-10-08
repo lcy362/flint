@@ -109,6 +109,5 @@ export const zh: Record<MsgKey, string> = {
   'register.idEmpty': '标识 ID 不能为空',
   'register.idInvalid': '标识 {id} 不合法：只允许字母、数字与 . _ -，且以字母或数字开头',
   'api.skillEnabled': '该技能正处于启用状态；请先关闭（移除期望）再删除',
-  'api.onlyRealDir': '只能删除项目目录里的真实技能目录',
   'api.noRepoToCollect': '无仓库可归集',
 };

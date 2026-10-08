@@ -8,7 +8,7 @@ import { log } from '../infra/logger.js';
 import { pickDirectory, pickFile } from '../infra/picker.js';
 import {
   listAgents, agentSkillRows, agentOwnSkillRow, allAgentDefs, findAgentDef, resolveGlobalDir, effectiveAgentKey,
-  setPrimary, pruneAliasStrategies, isManagedLinkTarget,
+  setPrimary, pruneAliasStrategies,
 } from '../core/agents.js';
 import { scanAll, detectLayoutAbs } from '../core/scanner.js';
 import { previewRegister, idIssue, type RegisterPreviewInput } from '../core/register.js';
@@ -50,6 +50,18 @@ const SERVER_VERSION = (() => {
 /** 只接受非空字符串的请求字段：对象 / 数组一律视为「未提供」，避免把 [object Object] 写进配置 */
 function asText(v: unknown): string | undefined {
   return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
+/**
+ * 移除一个技能落点：软链只 unlink（目标本体一律不动），真实目录 / 文件才做删除。
+ *
+ * 手动删除是用户的显式意图，这里不做归属拦截——「是不是本工具部署的」只约束**自动**行为
+ * （自动投放不替换外部软链、prune 只回收本工具产物），不限制用户手动删掉自己目录里的东西。
+ * 技能本体永远在文件系统里，删副本 / 删链接都只影响这个目录的可见性。
+ */
+function removeSkillEntry(p: string, st: fs.Stats): void {
+  if (st.isSymbolicLink()) fs.unlinkSync(p);
+  else fs.rmSync(p, { recursive: true, force: true });
 }
 
 /** 目录覆盖属于 Agent 自身：它决定「这个 Agent 解析到哪个目录」 */
@@ -539,7 +551,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const r_ = syncActive(cfg, library().skills, [key], 'route:agent-sync', { prune: true });
     res.json(r_[0] ?? { agent: key, created: [], removed: [], failed: [] });
   });
-  // 「删除」：移除本工具部署到该 agent 目录的软链/副本，绝不删真实目录或外部软链（物理为准）
+  // 「删除」：把这条技能从该 agent 目录移除。软链只解除链接（目标本体不动），真实目录 / 文件直接删
   r.delete('/agents/:key/skills/:skillName', (req, res) => {
     const key = req.params.key;
     const name = req.params.skillName;
@@ -550,18 +562,8 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     let st;
     try { st = fs.lstatSync(target, { throwIfNoEntry: false }); } catch { st = undefined; }
     if (!st) return res.status(404).json({ error: 'skill not found' });
-    if (st.isDirectory() && !st.isSymbolicLink()) {
-      // 实体目录 = 用户自带技能：即便内容与本工具副本一致也不删，绝不破坏用户内容
-      return res.status(400).json({ error: t('api.onlyRealDir') });
-    }
-    if (!st.isSymbolicLink()) return res.status(400).json({ error: 'not a managed link' });
-    // 只有指向自有仓库（本工具部署）的软链才允许删除；外部软链不归本工具管，绝不删
-    let linkTarget: string | undefined;
-    try { linkTarget = fs.readlinkSync(target); } catch { /* 读不到按外部处理 */ }
-    if (!isManagedLinkTarget(cfg.data, linkTarget, dir)) {
-      return res.status(400).json({ error: t('sync.externalLink', { dir }) });
-    }
-    fs.unlinkSync(target);
+    removeSkillEntry(target, st);
+    log.info('http', 'Agent skill removed', { agent: key, skill: name, kind: st.isSymbolicLink() ? 'link' : 'real' });
     res.json({ ok: true, removed: name });
   });
   // 「这条技能分发到哪些目录了？」——一次问遍所有 Agent 自身目录的只读总览。
@@ -736,8 +738,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     log.info('http', 'Project skill added (copy)', { project: proj.path, name: String(skillId) });
     res.json({ ok: true, copied: skill.name });
   });
-  // 「删除」：移除项目里本工具部署的副本（真实目录）。软链（接管项）与真实目录都属安全边界：
-  // 这里只删「实体目录」，即本工具曾落副本（已登记 INDEX）内容；不删软链、不删用户自有内容。
+  // 「删除」：把这条技能从项目 .agents/skills 移除（软链只解除链接、真实副本直接删）
   r.delete('/projects/:id/skills/:name', (req, res) => {
     const id = Number(req.params.id);
     const proj = cfg.data.projects[id];
@@ -746,12 +747,8 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     const target = path.join(proj.path, '.agents', 'skills', name);
     const st = fs.lstatSync(target, { throwIfNoEntry: false });
     if (!st) return res.status(404).json({ error: 'skill not found' });
-    if (!st.isDirectory() || st.isSymbolicLink()) {
-      // 软链（接管项）或非目录：不删
-      return res.status(400).json({ error: t('api.onlyRealDir') });
-    }
-    fs.rmSync(target, { recursive: true, force: true });
-    log.info('http', 'Project skill removed', { project: id, name });
+    removeSkillEntry(target, st);
+    log.info('http', 'Project skill removed', { project: id, name, kind: st.isSymbolicLink() ? 'link' : 'real' });
     res.json({ ok: true, removed: name });
   });
 

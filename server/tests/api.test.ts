@@ -265,18 +265,23 @@ describe('Agent 接口', () => {
     expect(fs.existsSync(path.join(ctx.agentDir, 'alpha'))).toBe(true);
   });
 
-  it('DELETE /agents/:key/skills/:name 只删本工具部署的软链', async () => {
+  it('DELETE /agents/:key/skills/:name 移除本目录落点：软链只解除链接，真实目录直接删', async () => {
     await call('POST', '/agents/cursor/skills', { id: 'alpha@default' });
     expect((await call('DELETE', '/agents/nope/skills/alpha')).status).toBe(404);
     expect((await call('DELETE', '/agents/cursor/skills/ghost')).status).toBe(404);
 
-    // 用户自带的真实目录：拒绝删除
-    writeSkill(ctx.agentDir, 'owned');
-    expect((await call('DELETE', '/agents/cursor/skills/owned')).status).toBe(400);
+    // 用户自带的真实目录：按用户意图删除，不做归属拦截
+    const owned = writeSkill(ctx.agentDir, 'owned');
+    expect((await call('DELETE', '/agents/cursor/skills/owned')).status).toBe(200);
+    expect(fs.existsSync(owned)).toBe(false);
 
-    // 指向外部的软链：拒绝删除
-    fs.symlinkSync(path.join(ctx.base, 'outside'), path.join(ctx.agentDir, 'external'), 'dir');
-    expect((await call('DELETE', '/agents/cursor/skills/external')).status).toBe(400);
+    // 指向外部库之外的软链：只解除链接，目标本体保持不动
+    const outside = path.join(ctx.base, 'outside');
+    fs.mkdirSync(outside, { recursive: true });
+    fs.symlinkSync(outside, path.join(ctx.agentDir, 'ext-link'), 'dir');
+    expect((await call('DELETE', '/agents/cursor/skills/ext-link')).status).toBe(200);
+    expect(fs.existsSync(path.join(ctx.agentDir, 'ext-link'))).toBe(false);
+    expect(fs.existsSync(outside)).toBe(true);
 
     expect((await call('DELETE', '/agents/cursor/skills/alpha')).status).toBe(200);
     expect(fs.existsSync(path.join(ctx.agentDir, 'alpha'))).toBe(false);
@@ -296,6 +301,9 @@ describe('Agent 接口', () => {
 
     // 用户自带的真实目录 → reason=own；指向外部库之外的软链 → reason=external
     writeSkill(ctx.agentDir, 'owned');
+    const outside = path.join(ctx.base, 'outside');
+    fs.mkdirSync(outside, { recursive: true });
+    fs.symlinkSync(outside, path.join(ctx.agentDir, 'external'), 'dir');
     expect((await call('GET', '/skills/owned/agents')).body.agents.find((a: any) => a.key === 'cursor'))
       .toMatchObject({ present: true, reason: 'own' });
     expect((await call('GET', '/skills/external/agents')).body.agents.find((a: any) => a.key === 'cursor'))
@@ -404,10 +412,12 @@ describe('项目接口', () => {
     expect((await call('POST', '/projects/0/skills', { id: 'alpha@default' })).status).toBe(200);
 
     expect((await call('DELETE', '/projects/0/skills/ghost')).status).toBe(404);
-    // 接管项（软链）：既不重复落副本，也不允许删除
+    // 接管项（软链）：不重复落副本；删除只解除链接，仓库里的本体保持不动
     fs.symlinkSync(path.join(ctx.skillsRoot, 'beta'), path.join(ctx.projectDir, '.agents', 'skills', 'beta'), 'dir');
     expect((await call('POST', '/projects/0/skills', { id: 'beta@default' })).status).toBe(409);
-    expect((await call('DELETE', '/projects/0/skills/beta')).status).toBe(400);
+    expect((await call('DELETE', '/projects/0/skills/beta')).status).toBe(200);
+    expect(fs.existsSync(path.join(ctx.projectDir, '.agents', 'skills', 'beta'))).toBe(false);
+    expect(fs.existsSync(path.join(ctx.skillsRoot, 'beta'))).toBe(true);
     expect((await call('DELETE', '/projects/0/skills/alpha')).status).toBe(200);
 
     const listed = await call('GET', '/projects/0/skills');

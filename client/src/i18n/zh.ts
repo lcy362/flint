@@ -113,16 +113,14 @@ export const zh: Record<MsgKey, string> = {
   'skillDetail.distribute.list': '全部智能体',
   'skillDetail.distribute.count.title': '该技能当前落在多少个 Agent 技能目录里',
   'skillDetail.distribute.hint':
-    '按「实际技能目录」列出（同一个目录的多个 Agent 共用一份实体）。打开开关＝把该技能部署进这个目录；关闭＝只移除**本工具部署的软链 / 副本**，Agent 自带目录与外部软链不会被删。',
+    '按「实际技能目录」列出（同一个目录的多个 Agent 共用一份实体）。打开开关＝把该技能部署进这个目录；关闭＝把落点从该目录移除——**软链只解除链接、本体不动**，真实目录 / 副本会被删掉。',
   'skillDetail.distribute.installed': '已分发',
   'skillDetail.distribute.missing': '未分发',
   'skillDetail.distribute.toggleAria': '把 {name} 分发到 {agent}',
   'skillDetail.distribute.added': '已分发到 {agent}',
   'skillDetail.distribute.removed': '已从 {agent} 移除',
-  'skillDetail.distribute.locked.own': 'Agent 自带目录',
-  'skillDetail.distribute.locked.own.title': '该目录里是 Agent 自带的真实目录，本工具不会删除',
-  'skillDetail.distribute.locked.external': '外部软链',
-  'skillDetail.distribute.locked.external.title': '该软链由其它工具创建，本工具不会删除',
+  'skillDetail.distribute.removeConfirm':
+    '确定把「{name}」从 {agent} 目录移除？该目录里的软链会被解除（本体不动），真实目录 / 副本会被删掉，此操作不可撤销。',
   'skillDetail.distribute.empty': '没有可用的智能体技能目录',
   'skillDetail.distribute.empty.match': '没有匹配的技能目录',
 
@@ -371,6 +369,8 @@ export const zh: Record<MsgKey, string> = {
   'agents.sync.failed': '同步完成，但有 {n} 项失败',
   'agents.sync.done': '已同步：新增 {created} / 移除 {removed}',
   'agents.deleteConfirm': '确定删除自定义 Agent「{name}」？此操作不可撤销。',
+  'agents.skillDeleteConfirm':
+    '确定从该目录移除「{name}」？软链会被解除链接（本体不动），真实目录会被删掉，此操作不可撤销。',
   'agents.deletedCustom': '已删除自定义 Agent',
   'agents.failed': '失败',
   'agents.presetReason.title': '由关联预设「{preset}」部署到此目录；在这里删除可让它只从本目录移除',
@@ -531,6 +531,8 @@ export const zh: Record<MsgKey, string> = {
   'projects.sync': '同步',
   'projects.sync.title': '对账一次：补齐缺失技能（只补不删）并软链到各 Agent 项目目录',
   'projects.noSkills': '该项目暂无技能',
+  'projects.skillDeleteConfirm':
+    '确定从项目技能目录移除「{name}」？软链会被解除链接（本体不动），真实目录 / 副本会被删掉，此操作不可撤销。',
   'projects.skillsCount': '项目技能（{n}）',
   'projects.deploy.section': '部署到 Agent',
   'projects.deploy.badge.title': '已把本项目技能目录投放过去的 Agent 数',
