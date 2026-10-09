@@ -6,6 +6,7 @@ import SkillDistributeModal from '../components/skill/SkillDistributeModal';
 import { skillBadgeLegend } from '../components/skill/SkillBadges';
 import EntityList, { type EntityItem } from '../components/common/EntityList';
 import BadgeLegend from '../components/common/BadgeLegend';
+import FoldButton from '../components/common/FoldButton';
 import FilterBar from '../components/common/FilterBar';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
@@ -22,6 +23,7 @@ import { PathField, PathListField } from '../components/ui/PathField';
 import Switch from '../components/ui/Switch';
 import { useToast } from '../components/ui/Toast';
 import { useAsync } from '../state/useAsync';
+import { useCollapsed } from '../state/collapse';
 import { useViewMode } from '../state/viewMode';
 import { navigate, useQueryFlag, useQueryList, useQueryParam, useRoute } from '../state/router';
 import { joinList, rich, useI18n, type TFunc } from '../i18n';
@@ -1171,6 +1173,14 @@ function SkillDetail({
     [skill.id]
   );
 
+  // 内容风险区块默认折叠：不持久化，保证每次进详情都是收起态（需要时再展开）。
+  const [secCollapsed, toggleSecCollapsed] = useCollapsed(undefined, true);
+  // 折叠态也要能快速判读：把 error / warn 计数提到标题栏（info 级不计入，与列表徽标同口径）
+  const findings = security?.findings ?? [];
+  const errorCount = findings.filter((f) => f.severity === 'error').length;
+  const warnCount = findings.filter((f) => f.severity === 'warn').length + (security?.issues.length ?? 0);
+  const riskCount = errorCount + warnCount;
+
   /** 标签输入归一化：按换行拆分、trim、去空、去重（兼容粘贴多行/未确认直接保存） */
   const addTagInput = (input: string, base: string[]): string[] => {
     const out = [...base];
@@ -1280,42 +1290,56 @@ function SkillDetail({
         <div className="panel">
           <div className="panel__head">
             <span className="panel__title">{t('skillDetail.security.title')}</span>
-            {/* 主动运行 / 重跑：纯只读扫描，不改动任何文件 */}
-            <span style={{ marginLeft: 'auto' }}>
+            {/* 折叠态也能判读：计数 + 主动运行 / 重跑（纯只读，不改动任何文件）+ 折叠开关 */}
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+              {riskCount > 0 && (
+                <Badge tone={errorCount > 0 ? 'bad' : 'warn'} title={t('badge.content.title', { error: errorCount, warn: warnCount })}>
+                  {riskCount}
+                </Badge>
+              )}
               <Button size="sm" loading={secLoading} onClick={reloadSecurity}>
                 {t('skillDetail.security.run')}
               </Button>
+              <FoldButton expanded={!secCollapsed} label={t('skillDetail.security.title')} onClick={toggleSecCollapsed} />
             </span>
           </div>
-          {secLoading && !security && <span style={{ color: 'var(--c-ink-3)' }}>{t('common.loading')}</span>}
-          {security && !security.own && (
-            <span style={{ color: 'var(--c-ink-3)', fontSize: 'var(--fs-13)' }}>{t('skillDetail.security.notOwn')}</span>
+          {!secCollapsed && (
+            <>
+              {secLoading && !security && <span style={{ color: 'var(--c-ink-3)' }}>{t('common.loading')}</span>}
+              {security && !security.own && (
+                <span style={{ color: 'var(--c-ink-3)', fontSize: 'var(--fs-13)' }}>{t('skillDetail.security.notOwn')}</span>
+              )}
+              {security?.own && (riskCount === 0 ? (
+                <Badge tone="good" dot="good">{t('skillDetail.security.clean')}</Badge>
+              ) : (
+                <div className="diag-group" style={{ padding: 0 }}>
+                  {findings.map((f, i) => (
+                    // 每条命中分两行：上行是规则与位置，下行把「命中行的原文」贴出来供人工复核
+                    <div key={`f${i}`} className="diag-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 'var(--sp-1)' }}>
+                      <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                        <Badge tone={f.severity === 'error' ? 'bad' : f.severity === 'warn' ? 'warn' : 'neutral'}>
+                          {f.severity === 'error' ? t('health.status.error') : f.severity === 'warn' ? t('health.status.warn') : 'INFO'}
+                        </Badge>
+                        <span className="diag-row__msg">{f.rule}</span>
+                        <span className="mono" style={{ color: 'var(--c-ink-3)', fontSize: 'var(--fs-12)' }}>
+                          {f.line ? `${f.file}:${f.line}` : f.file}
+                        </span>
+                      </span>
+                      {f.excerpt && (
+                        <pre className="mono" style={{ margin: 0, padding: 'var(--sp-2) var(--sp-3)', background: 'var(--c-bg-2)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)', fontSize: 'var(--fs-12)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--c-ink-2)' }}>{f.excerpt}</pre>
+                      )}
+                    </div>
+                  ))}
+                  {security.issues.map((it, i) => (
+                    <div key={`i${i}`} className="diag-row">
+                      <Badge tone="warn">{t('health.status.warn')}</Badge>
+                      <span className="diag-row__msg">{it.message}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
           )}
-          {security?.own && (security.findings.length === 0 && security.issues.length === 0 ? (
-            <Badge tone="good" dot="good">{t('skillDetail.security.clean')}</Badge>
-          ) : (
-            <div className="diag-group" style={{ padding: 0 }}>
-              {security.findings.map((f, i) => (
-                <div key={`f${i}`} className="diag-row">
-                  <Badge tone={f.severity === 'error' ? 'bad' : f.severity === 'warn' ? 'warn' : 'neutral'}>
-                    {f.severity === 'error' ? t('health.status.error') : f.severity === 'warn' ? t('health.status.warn') : 'INFO'}
-                  </Badge>
-                  <span className="diag-row__msg">
-                    {f.rule}
-                    <span className="mono" style={{ color: 'var(--c-ink-3)', marginLeft: 'var(--sp-2)' }}>
-                      {f.line ? `${f.file}:${f.line}` : f.file}
-                    </span>
-                  </span>
-                </div>
-              ))}
-              {security.issues.map((it, i) => (
-                <div key={`i${i}`} className="diag-row">
-                  <Badge tone="warn">{t('health.status.warn')}</Badge>
-                  <span className="diag-row__msg">{it.message}</span>
-                </div>
-              ))}
-            </div>
-          ))}
         </div>
 
         <div className="panel">
