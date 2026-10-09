@@ -40,6 +40,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /* ---------- 基础数据契约 ---------- */
+/** 内容体检摘要（F1/F2）：仅自有仓库技能、且存在问题时才有值 */
+export interface SkillHealth { error: number; warn: number }
+
 export interface SkillView {
   id: string; // name@来源
   name: string;
@@ -50,6 +53,27 @@ export interface SkillView {
   tags: string[];
   /** 来源追溯：收编自哪个 Agent / 外部目录（IM-04） */
   origin?: string;
+  /** 内容体检摘要：无问题的技能不带该字段，前端据此不渲染徽标 */
+  health?: SkillHealth;
+}
+
+/** 技能内容体检明细（详情页「运行检测」结果），文案已由服务端本地化 */
+export interface SkillSecurityFinding {
+  ruleId: string;
+  category: string;
+  severity: 'info' | 'warn' | 'error';
+  file: string;
+  line?: number;
+  excerpt: string;
+  /** 规则说明（本地化后的可读文案） */
+  rule: string;
+}
+
+export interface SkillSecurityResult {
+  /** 是否属于自有仓库；false = 第三方只读来源，不参与内容检测 */
+  own: boolean;
+  findings: SkillSecurityFinding[];
+  issues: { kind: string; message: string }[];
 }
 export interface PresetView { name: string; skills: string[]; tags: string[] }
 export interface AgentView {
@@ -122,6 +146,8 @@ export interface SkillCardView {
   takenOver?: boolean;
   /** 不在本工具分发范围内的行的实际位置（软链附带真实目标，home 已压成 ~）：由服务端给好，列表直接展示 */
   pathLabel?: string;
+  /** 内容体检摘要（技能库资产池从 /state 带入）：有问题的技能据此显示区别徽标 */
+  health?: SkillHealth;
   /** 客户端派生：直接展示来源目录的徽标文案，仅多目录 Agent 需要 */
   dirLabel?: string;
   dirTitle?: string;

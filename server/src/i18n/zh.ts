@@ -38,11 +38,12 @@ export const zh: Record<MsgKey, string> = {
   'diag.contentSec': '{name} · {loc} · {rule}',
   'diag.contentAllOk': '{n} 个自有仓库技能内容检查通过',
   'diag.contentNoOwn': '无自有仓库技能可检查',
-  'diag.content.yaml': '{name}: SKILL.md frontmatter 无法解析（YAML 损坏）',
-  'diag.content.missing-name': '{name}: SKILL.md frontmatter 缺少 name',
-  'diag.content.missing-description': '{name}: SKILL.md frontmatter 缺少 description',
-  'diag.content.name-dir-mismatch': '{name}: frontmatter name 与目录名不一致，可能导致加载不到',
-  'diag.content.name-slug': '{name}: frontmatter name 不符合小写连字符规范',
+  'diag.contentItem': '{name}: {msg}',
+  'diag.content.yaml': 'SKILL.md frontmatter 无法解析（YAML 损坏）',
+  'diag.content.missing-name': 'SKILL.md frontmatter 缺少 name',
+  'diag.content.missing-description': 'SKILL.md frontmatter 缺少 description',
+  'diag.content.name-dir-mismatch': 'frontmatter name 与目录名不一致，可能导致加载不到',
+  'diag.content.name-slug': 'frontmatter name 不符合小写连字符规范',
 
   /* ---------- 内容安全规则（F1） ---------- */
   'sec.rule.pipeToShell': '远程代码执行：下载内容直接管道给 shell',

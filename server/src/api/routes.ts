@@ -27,10 +27,12 @@ import { migrateTagsToFrontmatter } from '../core/repo-tags.js';
 import { takeover } from '../core/takeover.js';
 import { applyFix } from '../core/fix.js';
 import { diagnose } from '../core/diagnose.js';
+import { contentHealthMap, inspectSkill } from '../core/content.js';
 import { mergeSkill } from '../core/merge.js';
 import { Repo, ForeignSource, CustomAgent, SyncMode } from '../config/types.js';
 import { agentCards, projectCards } from '../domain/cards.js';
 import { t } from '../i18n/index.js';
+import type { MsgKey } from '../i18n/en.js';
 
 /** server 版本号，/api/logs 上报给用户用于 issue 定位（优先 cwd，兼容 dev 的 src 路径） */
 const SERVER_VERSION = (() => {
@@ -151,12 +153,17 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
 
   r.get('/state', (_req, res) => {
     const lib = library();
+    // 内容体检摘要（F1/F2）：只算自有仓库技能，供技能库列表标记「有问题的技能」。
+    // 明细按需走 /skills/:id/security，避免每次 /state 都回传全量命中。
+    const health = contentHealthMap(lib.skills, new Set(cfg.data.repos.map((r) => r.id)));
     const skills = lib.skills.map((s) => ({
       id: s.id, name: s.name, source: s.source, dir: s.dir,
       description: s.description, version: s.version,
       // 标签：config.skillMeta 覆盖优先，其次 SKILL.md frontmatter
       tags: cfg.data.skillMeta[s.id]?.tags ?? s.tags,
       origin: cfg.data.skillMeta[s.id]?.origin,
+      // 无问题时省略该字段，前端据此不渲染徽标
+      health: health.get(s.id),
     }));
     res.json({
       activeAgents: cfg.data.activeAgents,
@@ -213,6 +220,29 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       ? { sourceRef: meta.sourceRef, sourceType: meta.sourceType, takenAt: meta.takenAt, stale: await detectStale(sk.dir, meta) }
       : undefined;
     res.json({ id: sk.id, dir: sk.dir, content: fs.readFileSync(file, 'utf-8'), files, provenance });
+  });
+
+  // 内容体检明细（F1 + F2）：技能详情页「运行检测 / 重新检测」。
+  // 与 /diagnose 的 content 维度同源，这里只针对单个技能；规则文案在服务端本地化，
+  // 前端不必再维护一份规则说明（避免 36 条规则文案双份漂移）。
+  r.get('/skills/:id/security', (req, res) => {
+    const id = decodeURIComponent(req.params.id);
+    const sk = library().skills.find((s) => s.id === id);
+    if (!sk) return res.status(404).json({ error: 'skill not found' });
+    const { own, findings, issues } = inspectSkill(sk, new Set(cfg.data.repos.map((r) => r.id)));
+    res.json({
+      own,
+      findings: findings.map((f) => ({
+        ruleId: f.ruleId,
+        category: f.category,
+        severity: f.severity,
+        file: f.file,
+        line: f.line,
+        excerpt: f.excerpt,
+        rule: t(f.titleKey as MsgKey),
+      })),
+      issues: issues.map((i) => ({ kind: i.kind, message: t(`diag.content.${i.kind}` as MsgKey) })),
+    });
   });
 
   // F4：从已登记来源刷新仓库副本（用户显式动作，来源只读、不联网）

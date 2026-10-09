@@ -77,6 +77,7 @@ export function skillBadgeLegend(t: TFunc): BadgeLegendItem[] {
     { label: t('badge.state.off'), tone: 'neutral', dot: 'neutral', desc: t('badge.state.off.title') },
     { label: t('badge.readonly'), tone: 'info', desc: t('badge.readonly.title') },
     { label: t('badge.takenOver'), tone: 'good', desc: t('badge.takenOver.title') },
+    { label: t('badge.content.legend'), tone: 'warn', desc: t('badge.content.title') },
   ];
 }
 
@@ -165,12 +166,30 @@ export function linkBadge(t: TFunc, item: SkillCardView) {
 }
 
 /**
+ * 内容体检徽标（F1/F2）：让「有问题的技能」在列表里一眼可辨。
+ * error 存在走警示色，否则提示色；无 health（干净技能 / 第三方来源）不渲染。
+ */
+export function healthBadge(t: TFunc, item: SkillCardView) {
+  const h = item.health;
+  if (!h) return null;
+  return (
+    <Badge
+      tone={h.error > 0 ? 'bad' : 'warn'}
+      title={t('badge.content.title', { error: h.error, warn: h.warn })}
+    >
+      {t('badge.content', { n: h.error + h.warn })}
+    </Badge>
+  );
+}
+
+/**
  * 统一渲染 reason / 目录 / store / preset 等徽标（卡片与列表行共用）。
  * 不含 state —— 状态由 EntityItem.status 单独展示在卡片右上角 / 行右侧。
  */
 export function skillBadges(t: TFunc, item: SkillCardView) {
   return (
     <>
+      {healthBadge(t, item)}
       {reasonBadge(t, item)}
       {dirBadge(item)}
       {takenOverBadge(t, item)}

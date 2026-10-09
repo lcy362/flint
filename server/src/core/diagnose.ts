@@ -301,7 +301,7 @@ function checkContent(cfg: ConfigStore, deps: Deps, groups: DiagGroups): void {
       groups.content.push({
         key: `content:${skillId}:${issue.kind}`,
         status: 'warn',
-        message: t(`diag.content.${issue.kind}` as MsgKey, { name: s.name, dir: s.dir }),
+        message: t('diag.contentItem', { name: s.name, msg: t(`diag.content.${issue.kind}` as MsgKey) }),
         detail: { kind: issue.kind, skillId, dir: s.dir },
       });
     }

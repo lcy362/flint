@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview } from '../api/types';
+import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
 import SkillDistributeModal from '../components/skill/SkillDistributeModal';
@@ -1164,6 +1164,13 @@ function SkillDetail({
     [skill.id]
   );
 
+  // 内容体检（F1/F2）：进详情自动跑一次（单技能扫描很快），用户可点「重新检测」重跑。
+  // 与体检中心 content 维度同源；第三方只读来源由服务端返回 own:false。
+  const { data: security, loading: secLoading, reload: reloadSecurity } = useAsync<SkillSecurityResult>(
+    () => api(`/skills/${encodeURIComponent(skill.id)}/security`),
+    [skill.id]
+  );
+
   /** 标签输入归一化：按换行拆分、trim、去空、去重（兼容粘贴多行/未确认直接保存） */
   const addTagInput = (input: string, base: string[]): string[] => {
     const out = [...base];
@@ -1268,6 +1275,47 @@ function SkillDetail({
               onChange={setTags}
             />
           </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel__head">
+            <span className="panel__title">{t('skillDetail.security.title')}</span>
+            {/* 主动运行 / 重跑：纯只读扫描，不改动任何文件 */}
+            <span style={{ marginLeft: 'auto' }}>
+              <Button size="sm" loading={secLoading} onClick={reloadSecurity}>
+                {t('skillDetail.security.run')}
+              </Button>
+            </span>
+          </div>
+          {secLoading && !security && <span style={{ color: 'var(--c-ink-3)' }}>{t('common.loading')}</span>}
+          {security && !security.own && (
+            <span style={{ color: 'var(--c-ink-3)', fontSize: 'var(--fs-13)' }}>{t('skillDetail.security.notOwn')}</span>
+          )}
+          {security?.own && (security.findings.length === 0 && security.issues.length === 0 ? (
+            <Badge tone="good" dot="good">{t('skillDetail.security.clean')}</Badge>
+          ) : (
+            <div className="diag-group" style={{ padding: 0 }}>
+              {security.findings.map((f, i) => (
+                <div key={`f${i}`} className="diag-row">
+                  <Badge tone={f.severity === 'error' ? 'bad' : f.severity === 'warn' ? 'warn' : 'neutral'}>
+                    {f.severity === 'error' ? t('health.status.error') : f.severity === 'warn' ? t('health.status.warn') : 'INFO'}
+                  </Badge>
+                  <span className="diag-row__msg">
+                    {f.rule}
+                    <span className="mono" style={{ color: 'var(--c-ink-3)', marginLeft: 'var(--sp-2)' }}>
+                      {f.line ? `${f.file}:${f.line}` : f.file}
+                    </span>
+                  </span>
+                </div>
+              ))}
+              {security.issues.map((it, i) => (
+                <div key={`i${i}`} className="diag-row">
+                  <Badge tone="warn">{t('health.status.warn')}</Badge>
+                  <span className="diag-row__msg">{it.message}</span>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
 
         <div className="panel">

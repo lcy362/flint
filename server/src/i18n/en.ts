@@ -36,11 +36,12 @@ export const en = {
   'diag.contentSec': '{name} · {loc} · {rule}',
   'diag.contentAllOk': 'Content checks passed for {n} own-repository skill(s)',
   'diag.contentNoOwn': 'No own-repository skill to inspect',
-  'diag.content.yaml': '{name}: SKILL.md frontmatter cannot be parsed (broken YAML)',
-  'diag.content.missing-name': '{name}: SKILL.md frontmatter is missing "name"',
-  'diag.content.missing-description': '{name}: SKILL.md frontmatter is missing "description"',
-  'diag.content.name-dir-mismatch': '{name}: frontmatter name differs from the directory name; some agents may fail to load it',
-  'diag.content.name-slug': '{name}: frontmatter name is not lowercase-hyphen style',
+  'diag.contentItem': '{name}: {msg}',
+  'diag.content.yaml': 'SKILL.md frontmatter cannot be parsed (broken YAML)',
+  'diag.content.missing-name': 'SKILL.md frontmatter is missing "name"',
+  'diag.content.missing-description': 'SKILL.md frontmatter is missing "description"',
+  'diag.content.name-dir-mismatch': 'frontmatter name differs from the directory name; some agents may fail to load it',
+  'diag.content.name-slug': 'frontmatter name is not lowercase-hyphen style',
 
   /* ---------- content security rules (F1) ---------- */
   'sec.rule.pipeToShell': 'Remote code execution: piping a download into a shell',

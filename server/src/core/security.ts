@@ -152,21 +152,28 @@ function scanText(skill: Skill, rel: string, text: string): SecFinding[] {
 }
 
 /**
- * 内容安全扫描（F1）：遍历**自有仓库**技能的 SKILL.md 与 scripts/ 文本，
+ * 内容安全扫描（F1）：读单个技能的 SKILL.md 与 scripts/ 文本，
  * 命中危险回调 / 凭据泄漏 / 提示注入 / 混淆载荷即产出告警。
  *
- * 纯只读：不改动、不删除任何文件；第三方只读来源默认不扫（ownSources 决定范围）。
+ * 纯只读：不改动、不删除任何文件。供诊断（自有仓库批量）与详情页（单技能按需）共用。
  */
+export function scanSkillSecurity(skill: Skill): SecFinding[] {
+  const out: SecFinding[] = [];
+  if (!skill.dir || !fs.existsSync(skill.dir)) return out;
+  for (const f of skillFiles(skill.dir)) {
+    const text = readTextFile(f.abs);
+    if (!text) continue;
+    out.push(...scanText(skill, f.rel, text));
+  }
+  return out;
+}
+
+/** 批量扫描：只覆盖 self-owned 来源（第三方只读来源默认不扫，ownSources 决定范围） */
 export function scanSecurity(skills: Skill[], ownSources: Set<string>): SecFinding[] {
   const findings: SecFinding[] = [];
   for (const s of skills) {
     if (!ownSources.has(s.source)) continue;
-    if (!s.dir || !fs.existsSync(s.dir)) continue;
-    for (const f of skillFiles(s.dir)) {
-      const text = readTextFile(f.abs);
-      if (!text) continue;
-      findings.push(...scanText(s, f.rel, text));
-    }
+    findings.push(...scanSkillSecurity(s));
   }
   return findings;
 }

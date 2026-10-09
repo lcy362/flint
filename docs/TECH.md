@@ -100,6 +100,7 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 | `core/security.ts` | 内容安全扫描：危险回调 / 凭据 / 提示注入 / 混淆载荷（F1）。 |
 | `core/validate.ts` | SKILL.md frontmatter 契约校验：缺 name/description、name 与目录名不一致（F2）。 |
 | `core/security-rules.generated.ts` | 由 `server/rules/security/*.yaml` 生成的规则常量（勿手改）。 |
+| `core/content.ts` | 内容体检统一入口：健康摘要与单技能检测（诊断 / 列表 / 详情三处共用同一口径）。 |
 | `core/fix.ts` | 按诊断项 key 分发就地修复。 |
 | `core/picker.ts` | 系统原生目录 / 文件选择器（macOS osascript / Windows PowerShell / Linux zenity·kdialog）。 |
 | `domain/cards.ts` | `AgentSkillRow` / `ProjectSkillRow` → `SkillCardView`（reason / store / state / actions）。 |
@@ -274,7 +275,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/state` | 资产库聚合视图：activeAgents / skills / presets / repos / sources / customAgents / settings / home |
+| GET | `/state` | 资产库聚合视图：activeAgents / skills / presets / repos / sources / customAgents / settings / home。每个 skill 另带 `health`（内容体检摘要，error/warn 计数；仅自有仓库且存在问题时出现），供技能库列表标记 |
 | GET / PUT | `/settings` | 默认同步方式 |
 
 **技能**
@@ -282,6 +283,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/skills/:id/content` | SKILL.md 正文 + 附带文件列表 |
+| GET | `/skills/:id/security` | 内容体检明细（F1/F2）：按需扫描单个技能，返回本地化命中与契约问题；第三方只读来源返回 `own:false` |
 | PATCH | `/skills/:id` | 保存标签（归一化后写入 `skillMeta`） |
 | POST | `/skills/merge` | 同名合并仲裁 |
 | GET | `/skills/:name/agents` | 分发总览（只读）：这条技能在各智能体自身目录里的存在情况。聚合查询、不扫技能库——技能详情「分发到智能体」弹窗反查已分发清单用，避免逐目录调 `/agents/:key/skills` 造成 N 次技能库重扫 |
