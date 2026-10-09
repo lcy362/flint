@@ -34,13 +34,14 @@ export function normalizeTags(v: unknown): string[] {
  * - metadata.tags: [a, b]（agentskills.io 官方合规路径）
  * 两者合并去重，顶层优先。
  */
-export function parseSkillMeta(md: string): { name?: string; description?: string; version?: string; tags: string[] } {
+export function parseSkillMeta(md: string): { ok: boolean; name?: string; description?: string; version?: string; tags: string[] } {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(md);
-  if (!m) return { tags: [] };
+  if (!m) return { ok: true, tags: [] }; // 无 frontmatter ≠ YAML 损坏
   try {
     const y = YAML.parse(m[1]) ?? {};
     const meta = typeof y.metadata === 'object' && y.metadata !== null ? y.metadata : {};
     return {
+      ok: true,
       name: typeof y.name === 'string' ? y.name : undefined,
       description: typeof y.description === 'string' ? y.description : undefined,
       version: typeof y.version === 'string' ? y.version : undefined,
@@ -48,7 +49,8 @@ export function parseSkillMeta(md: string): { name?: string; description?: strin
       tags: normalizeTags([...normalizeTags(y.tags), ...normalizeTags(meta.tags)]),
     };
   } catch {
-    return { tags: [] };
+    // YAML 无法解析：显式暴露失败信号，供 F2 区分「真缺 name」与「根本没解析出来」
+    return { ok: false, tags: [] };
   }
 }
 

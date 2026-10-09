@@ -1,0 +1,38 @@
+# F1 · 混淆 / 编码载荷规则
+#
+# 由 scripts/gen-security-rules.mjs 生成 TS 常量。
+# 思路参考 SkillKit(UC 组)。pattern 写作正则源码中的 \uXXXX 转义，
+# 生成时经 JSON.stringify 写成 TS 字符串字面量，最终由 RegExp 解释。
+
+rules:
+  - id: OBFUSCATION_ZERO_WIDTH
+    category: obfuscation
+    severity: warn
+    flags: ''
+    titleKey: sec.rule.zeroWidth
+    pattern: |-
+      [\u200B\u200C\u200D\u2060\uFEFF]
+
+  - id: OBFUSCATION_BIDI
+    category: obfuscation
+    severity: warn
+    flags: ''
+    titleKey: sec.rule.bidiControl
+    pattern: |-
+      [\u202A-\u202E\u2066-\u2069]
+
+  - id: OBFUSCATION_UNICODE_TAGS
+    category: obfuscation
+    severity: info
+    flags: u
+    titleKey: sec.rule.unicodeTags
+    pattern: |-
+      [\u{E0001}-\u{E007F}]
+
+  - id: OBFUSCATION_LONG_BASE64
+    category: obfuscation
+    severity: info
+    flags: ''
+    titleKey: sec.rule.longBase64
+    pattern: |-
+      [A-Za-z0-9+/]{160,}={0,2}

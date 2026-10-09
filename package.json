@@ -26,7 +26,8 @@
     "start": "npm run start -w server",
     "test": "npm run test -w server && npm run test -w client",
     "test:coverage": "npm run test:coverage -w server && npm run test:coverage -w client",
-    "test:watch": "npm run test:watch -w server"
+    "test:watch": "npm run test:watch -w server",
+    "gen:security-rules": "node scripts/gen-security-rules.mjs"
   },
   "dependencies": {
     "express": "^4.19.2",

@@ -580,6 +580,7 @@ export const en = {
   'health.dim.config': 'Config',
   'health.dim.repo': 'Repositories',
   'health.dim.project': 'Projects',
+  'health.dim.content': 'Content checks',
   'health.dim.repos': 'Repositories',
   'health.dim.skills': 'Skills',
   'health.dim.presets': 'Presets',

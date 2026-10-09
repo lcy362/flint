@@ -559,6 +559,7 @@ export const zh: Record<MsgKey, string> = {
   'health.dim.config': '配置',
   'health.dim.repo': '仓库',
   'health.dim.project': '项目',
+  'health.dim.content': '内容检查',
   'health.dim.repos': '仓库',
   'health.dim.skills': '技能',
   'health.dim.presets': '预设',

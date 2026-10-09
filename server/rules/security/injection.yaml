@@ -1,0 +1,70 @@
+# F1 · 提示注入 / 隐蔽指令规则
+#
+# 由 scripts/gen-security-rules.mjs 生成 TS 常量。
+# 句式参考 SkillKit(PI 组) 与 ripwire(INJECTION 组) 的公开检测思路整理。
+# 说明：自然语言无边界，本组为「弱提示」，命中仅供参考，不做阻断。
+
+rules:
+  - id: INJECTION_IGNORE_PREVIOUS
+    category: injection
+    severity: warn
+    flags: i
+    titleKey: sec.rule.ignorePrevious
+    pattern: |-
+      \bignore\s+(all\s+)?(the\s+)?(previous|prior|above|preceding|earlier)\s+(instructions?|prompts?|rules?|messages?)
+
+  - id: INJECTION_DISREGARD
+    category: injection
+    severity: warn
+    flags: i
+    titleKey: sec.rule.disregardRules
+    pattern: |-
+      \bdisregard\s+(all\s+)?(the\s+)?(previous|prior|above)\s+(instructions?|rules?|prompts?)
+
+  - id: INJECTION_ZH_IGNORE
+    category: injection
+    severity: warn
+    flags: ''
+    titleKey: sec.rule.ignorePreviousZh
+    pattern: |-
+      忽略(掉)?(之前|以上|上述|前面|先前)(的)?(所有)?(指令|规则|提示|内容|设定)
+
+  - id: INJECTION_ZH_DISREGARD
+    category: injection
+    severity: warn
+    flags: ''
+    titleKey: sec.rule.disregardRulesZh
+    pattern: |-
+      (无视|忽略|作废)(系统|安全|所有)(的)?(指令|规则|提示|设定)
+
+  - id: INJECTION_DONT_TELL_USER
+    category: injection
+    severity: warn
+    flags: i
+    titleKey: sec.rule.dontTellUser
+    pattern: |-
+      \b(do\s+not|don'?t|never)\s+(tell|inform|notify|mention\s+(this\s+)?to)\s+(the\s+)?user
+
+  - id: INJECTION_ZH_HIDE
+    category: injection
+    severity: warn
+    flags: ''
+    titleKey: sec.rule.hideFromUserZh
+    pattern: |-
+      不要(告诉|通知|提示|透露给)用户
+
+  - id: INJECTION_AS_OF_NOW
+    category: injection
+    severity: warn
+    flags: i
+    titleKey: sec.rule.asOfNowIgnore
+    pattern: |-
+      as\s+of\s+now,?\s+(ignore|disregard|forget)
+
+  - id: INJECTION_JAILBREAK
+    category: injection
+    severity: info
+    flags: i
+    titleKey: sec.rule.jailbreak
+    pattern: |-
+      \b(jailbreak|dan\s+mode|developer\s+mode|unrestricted\s+mode|no\s+restrictions?\s+mode)\b

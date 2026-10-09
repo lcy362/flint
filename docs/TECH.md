@@ -96,7 +96,10 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 | `core/merge.ts` | 同名多来源合并仲裁。 |
 | `core/integrate.ts` | 汇总所有来源（仓库 / 外部源 / Agent 目录）为候选清单（供诊断 dup）。 |
 | `core/projects.ts` | 项目投放（复制 `.agents` 本体、写 `INDEX.md` 登记）、投放 Agent 反读、接管（副本）、回写仓库。 |
-| `core/diagnose.ts` | 6 维度只读体检。 |
+| `core/diagnose.ts` | 7 维度只读体检。 |
+| `core/security.ts` | 内容安全扫描：危险回调 / 凭据 / 提示注入 / 混淆载荷（F1）。 |
+| `core/validate.ts` | SKILL.md frontmatter 契约校验：缺 name/description、name 与目录名不一致（F2）。 |
+| `core/security-rules.generated.ts` | 由 `server/rules/security/*.yaml` 生成的规则常量（勿手改）。 |
 | `core/fix.ts` | 按诊断项 key 分发就地修复。 |
 | `core/picker.ts` | 系统原生目录 / 文件选择器（macOS osascript / Windows PowerShell / Linux zenity·kdialog）。 |
 | `domain/cards.ts` | `AgentSkillRow` / `ProjectSkillRow` → `SkillCardView`（reason / store / state / actions）。 |
@@ -250,8 +253,9 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 ## 10. 诊断与修复
 
-- `GET /diagnose` → `{ config, summary, groups, items }`，分组：`sync / dup / durability / config / repo / project`。
+- `GET /diagnose` → `{ config, summary, groups, items }`，分组：`sync / dup / durability / config / repo / project / content`。
 - 不含独立的 "Agent" 维度：Agent 侧没有能独立成立的健康问题，相关状态由 `sync` / `durability` 覆盖。
+- `content` 维度合并两类只读检查（两者都读 `SKILL.md` 正文、都默认不自愈）：`sec:<skillId>:<ruleId>:<i>` 为内容安全命中，`content:<skillId>:<kind>` 为 frontmatter 契约问题。均**不配自动修复**（`POST /fix` 无对应分支，Health 不显示修复按钮）。规则快照在 `server/rules/security/*.yaml`，经 `npm run gen:security-rules` 生成 `core/security-rules.generated.ts`（产物入库，build / start 不依赖生成步骤，运行时不联网）。
 - `POST /fix { key }` 分发：
   - `sync:<agent>` → 对账该 Agent 目录（补缺失 / 修失效，`prune:true` 回收本工具部署物）。
   - `broken:*` → 扫描全部活跃 Agent 的失效软链并修复。

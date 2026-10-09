@@ -221,13 +221,14 @@ Flint 用一个本地优先的 Web 应用解决它：以文件系统为唯一事
 
 ### 5.11 诊断与修复（DG）
 
-- **DG-01 六维体检**：`GET /diagnose` 输出 `sync / dup / durability / config / repo / project` 六维分组与汇总（ok / warn / error）。
+- **DG-01 七维体检**：`GET /diagnose` 输出 `sync / dup / durability / config / repo / project / content` 七维分组与汇总（ok / warn / error）。
   - `sync`：每个活跃目录的期望 vs 物理（缺 / 多 / 失效）。
   - `dup`：同名多来源。
   - `durability`：活跃 Agent 目录里的失效软链。
   - `config`：配置文件是否加载。
   - `repo`：仓库 / 外部源目录是否存在。
   - `project`：项目路径与 `.agents/skills` 是否存在。
+  - `content`：自有仓库技能的**内容体检**——安全（危险回调 / 凭据泄漏 / 提示注入 / 混淆载荷）与 frontmatter 契约（缺 `name`/`description`、`name` 与目录名不一致等）。纯只读、纯告警，**不配自动修复**；第三方只读来源不扫。规则表见 `server/rules/security/*.yaml`（构建期生成 TS 常量，运行时不联网）。
 - **DG-02 就地修复**：`POST /fix` 按诊断项 key 分发（`sync:<agent>`、`broken:*`、`project:<path>`、`repo:<id>`、`tags:<repoId>`），全部幂等。
 - **DG-03 操作前置确认**：修复按钮先弹出「将要执行什么」清单，用户确认后才执行。
 

@@ -8,12 +8,17 @@ import { Candidate } from './integrate.js';
 import { CONFIG_PATH } from '../config/defaults.js';
 import { log } from '../infra/logger.js';
 import { t } from '../i18n/index.js';
+import type { MsgKey } from '../i18n/en.js';
+import { scanSecurity } from './security.js';
+import type { SecFinding } from './security.js';
+import { validateAll } from './validate.js';
+import type { ContentIssue } from './validate.js';
 
 export type DiagStatus = 'ok' | 'warn' | 'error';
 
 export type DiagDimension =
   | 'sync' | 'dup' | 'durability'
-  | 'config' | 'repo' | 'project';
+  | 'config' | 'repo' | 'project' | 'content';
 
 export interface DiagItem {
   key: string;
@@ -30,6 +35,7 @@ export interface DiagGroups {
   config: DiagItem[];
   repo: DiagItem[];
   project: DiagItem[];
+  content: DiagItem[];
 }
 
 export interface DiagSummary { total: number; ok: number; warn: number; error: number }
@@ -47,7 +53,7 @@ interface Deps {
   desired: Map<string, Skill>;
 }
 
-const DIMS: DiagDimension[] = ['sync', 'dup', 'durability', 'config', 'repo', 'project'];
+const DIMS: DiagDimension[] = ['sync', 'dup', 'durability', 'config', 'repo', 'project', 'content'];
 
 /**
  * 找出自有仓库里「落在分类子目录、因而不会被识别」的技能名。
@@ -102,7 +108,7 @@ function readSubDirNames(dir: string): string[] {
  * 因此不再单列一个只会产出 OK 的分组。
  */
 export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
-  const groups: DiagGroups = { sync: [], dup: [], durability: [], config: [], repo: [], project: [] };
+  const groups: DiagGroups = { sync: [], dup: [], durability: [], config: [], repo: [], project: [], content: [] };
 
   checkConfig(groups);
   checkRepos(cfg, groups);
@@ -110,6 +116,7 @@ export function diagnose(cfg: ConfigStore, deps: Deps): DiagnoseResult {
   checkSync(cfg, deps, groups);
   checkDurability(cfg, groups);
   checkDup(deps, groups);
+  checkContent(cfg, deps, groups);
 
   // ---- 扁平化 ----
   const items: DiagItem[] = [];
@@ -247,4 +254,60 @@ function checkDup(deps: Deps, groups: DiagGroups): void {
     if (arr.length > 1) groups.dup.push({ key: `dup:${name}`, status: 'warn', message: t('diag.dupFound', { name, n: arr.length }), detail: arr });
   }
   if (groups.dup.length === 0) groups.dup.push({ key: 'dup', status: 'ok', message: t('diag.noDup') });
+}
+
+/**
+ * content 维度（F1 + F2）：对**自有仓库**技能做两类只读检查——
+ * 内容安全（危险回调 / 凭据泄漏 / 提示注入 / 混淆载荷）与 frontmatter 契约合法性。
+ *
+ * 合并为一个「内容」维度：两者都读 SKILL.md 正文、都默认不自愈、都只提示。
+ * 纯告警项不配自动修复（applyFix 无对应分支，Health 不显示「修复」按钮）。
+ * 第三方只读来源不扫（ownSources 限定的即是不变量「只读尊重」的边界）。
+ */
+function checkContent(cfg: ConfigStore, deps: Deps, groups: DiagGroups): void {
+  const ownSources = new Set(cfg.data.repos.map((r) => r.id));
+  const skills = deps.lib.skills.filter((s) => ownSources.has(s.source));
+  if (skills.length === 0) {
+    groups.content.push({ key: 'content', status: 'ok', message: t('diag.contentNoOwn') });
+    return;
+  }
+
+  let problems = 0;
+
+  // F1：内容安全。info 级不产出——提示性的弱信号只会淹没真正要紧的告警。
+  const findings: SecFinding[] = scanSecurity(skills, ownSources);
+  findings.forEach((f, i) => {
+    if (f.severity === 'info') return;
+    problems += 1;
+    groups.content.push({
+      key: `sec:${f.skillId}:${f.ruleId}:${i}`,
+      status: f.severity === 'error' ? 'error' : 'warn',
+      message: t('diag.contentSec', {
+        name: f.skillName,
+        loc: f.line ? `${f.file}:${f.line}` : f.file,
+        rule: t(f.titleKey as MsgKey),
+      }),
+      detail: f,
+    });
+  });
+
+  // F2：frontmatter 契约（缺 name/description、name 与目录名不一致……）
+  const issues: Map<string, ContentIssue[]> = validateAll(skills, ownSources);
+  for (const [skillId, list] of issues) {
+    const s = skills.find((x) => x.id === skillId);
+    if (!s) continue;
+    for (const issue of list) {
+      problems += 1;
+      groups.content.push({
+        key: `content:${skillId}:${issue.kind}`,
+        status: 'warn',
+        message: t(`diag.content.${issue.kind}` as MsgKey, { name: s.name, dir: s.dir }),
+        detail: { kind: issue.kind, skillId, dir: s.dir },
+      });
+    }
+  }
+
+  if (problems === 0) {
+    groups.content.push({ key: 'content', status: 'ok', message: t('diag.contentAllOk', { n: skills.length }) });
+  }
 }

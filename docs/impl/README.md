@@ -15,12 +15,15 @@
 
 F3 会新建一个轻量「技能正文索引」基础设施（`core/skillindex.ts`），F1 / F2 复用它批量读正文，因此 F3 放最前。
 
-| 编号 | 特性 | 文档 | 主要落点 |
-|------|------|------|----------|
-| F3 | 技能正文全文搜索 | [`03-skill-body-search.md`](./03-skill-body-search.md) | `core/skillindex.ts`、`routes.ts`、`Library.tsx` |
-| F4 | 来源/版本增强 | [`04-source-version-tracking.md`](./04-source-version-tracking.md) | `config/types.ts`、`collect.ts`/`import.ts`、`routes.ts`、详情弹窗 |
-| F1 | 内容安全扫描 | [`01-skill-security-scan.md`](./01-skill-security-scan.md) | `core/security.ts`、`diagnose.ts`、`fix.ts`、Health 视图 |
-| F2 | frontmatter 校验 | [`02-frontmatter-validation.md`](./02-frontmatter-validation.md) | `skill.ts`、`diagnose.ts`、Health 视图 |
+| 编号 | 特性 | 状态 | 文档 | 主要落点 |
+|------|------|------|------|----------|
+| F3 | 技能正文全文搜索 | ✅ 已实现 | [`03-skill-body-search.md`](./03-skill-body-search.md) | `core/skillindex.ts`、`routes.ts`、`Library.tsx` |
+| F4 | 来源/版本增强 | ✅ 已实现 | [`04-source-version-tracking.md`](./04-source-version-tracking.md) | `config/types.ts`、`collect.ts`/`import.ts`、`routes.ts`、详情弹窗 |
+| F1 | 内容安全扫描 | ✅ 已实现 | [`01-skill-security-scan.md`](./01-skill-security-scan.md) | `core/security.ts`、`server/rules/security/*.yaml`、`diagnose.ts`、Health 视图 |
+| F2 | frontmatter 校验 | ✅ 已实现 | [`02-frontmatter-validation.md`](./02-frontmatter-validation.md) | `core/validate.ts`、`skill.ts`、`diagnose.ts`、Health 视图 |
+
+> F1 与 F2 最终按本文档 §8 的建议**合并为一个 `content` 体检维度**（`sec:` / `content:` 前缀区分来源），两类检查都只读出告警、不配自动修复。规则模式参考 gitleaks(MIT)、SkillKit、ripwire 等公开实现的思路整理，以 YAML 快照入库、构建期生成 TS 常量（`npm run gen:security-rules`），运行时零新增依赖、不联网。
+
 
 ## 全期共用约定（必须遵守）
 

@@ -54,11 +54,13 @@ describe('parseSkillMeta', () => {
   });
 
   it('没有 frontmatter 时返回空 tags', () => {
-    expect(parseSkillMeta('# 标题\n正文\n')).toEqual({ tags: [] });
+    expect(parseSkillMeta('# 标题\n正文\n')).toEqual({ ok: true, tags: [] });
   });
 
-  it('YAML 非法时不抛错，回落空 tags', () => {
-    expect(parseSkillMeta('---\nfoo: [unclosed\n---\nBody\n').tags).toEqual([]);
+  it('YAML 非法时不抛错，标记 ok:false 并回落空 tags', () => {
+    const meta = parseSkillMeta('---\nfoo: [unclosed\n---\nBody\n');
+    expect(meta.ok).toBe(false);
+    expect(meta.tags).toEqual([]);
   });
 
   it('version 只接受字符串（数字版本号被忽略）', () => {

@@ -22,6 +22,7 @@ const DIM_MSG_KEY: Record<string, MsgKey> = {
   config: 'health.dim.config',
   repo: 'health.dim.repo',
   project: 'health.dim.project',
+  content: 'health.dim.content',
   repos: 'health.dim.repos',
   skills: 'health.dim.skills',
   presets: 'health.dim.presets',

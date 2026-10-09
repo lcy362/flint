@@ -1,0 +1,113 @@
+# F1 · 危险代码回调规则（pattern 为正则源码字面量）
+#
+# 由 scripts/gen-security-rules.mjs 生成 server/src/core/security-rules.generated.ts。
+# 规则模式参考公开实现整理（gitleaks MIT / SkillKit / ripwire 的检测思路），非直接复制。
+# titleKey 指向双端 i18n（server/src/i18n/{zh,en}.ts）。
+#
+# 约定：pattern 用 YAML 单行块标量 `|-` 书写，内容原样保留（不解释 \u 转义），
+# 生成时以 JSON.stringify 写出，保证正则源码与字符转义都不失真。
+
+rules:
+  - id: DANGEROUS_PIPE_TO_SHELL
+    category: dangerous
+    severity: error
+    flags: i
+    titleKey: sec.rule.pipeToShell
+    pattern: |-
+      \b(curl|wget)\b[^|\n]*\|+\s*(sudo\s+)?(ba|z|k)?sh\b
+
+  - id: DANGEROUS_BASH_C_REMOTE
+    category: dangerous
+    severity: error
+    flags: i
+    titleKey: sec.rule.bashCRemote
+    pattern: |-
+      \b(ba|z|k)?sh\s+-c\s*["']?\s*\$\s*\(
+
+  - id: DANGEROUS_REVERSE_SHELL
+    category: dangerous
+    severity: error
+    flags: i
+    titleKey: sec.rule.reverseShell
+    pattern: |-
+      /dev/tcp/
+
+  - id: DANGEROUS_NETCAT_EXEC
+    category: dangerous
+    severity: warn
+    flags: i
+    titleKey: sec.rule.netcatExec
+    pattern: |-
+      \bnc\b[^\n]{0,40}\s-[a-z]*e[a-z]*\b
+
+  - id: DANGEROUS_POWERSHELL_IEX
+    category: dangerous
+    severity: error
+    flags: i
+    titleKey: sec.rule.powershellIex
+    pattern: |-
+      \b(iex|invoke-expression)\b
+
+  - id: DANGEROUS_RM_RF_ABSOLUTE
+    category: dangerous
+    severity: error
+    flags: i
+    titleKey: sec.rule.rmRfAbsolute
+    pattern: |-
+      \brm\s+-([a-z]*r[a-z]*f|[a-z]*f[a-z]*r)[a-z]*\s+(/|~|\$HOME)\b
+
+  - id: DANGEROUS_EVAL_CALL
+    category: dangerous
+    severity: warn
+    flags: i
+    titleKey: sec.rule.evalCall
+    pattern: |-
+      \beval\s*\(
+
+  - id: DANGEROUS_CHILD_PROCESS
+    category: dangerous
+    severity: warn
+    flags: i
+    titleKey: sec.rule.childProcess
+    pattern: |-
+      \bchild_process\b
+
+  - id: DANGEROUS_SUBPROCESS_SHELL
+    category: dangerous
+    severity: warn
+    flags: i
+    titleKey: sec.rule.subprocessShell
+    pattern: |-
+      subprocess\.(run|call|popen)[^\n]{0,80}shell\s*=\s*true
+
+  - id: DANGEROUS_OS_SYSTEM
+    category: dangerous
+    severity: warn
+    flags: i
+    titleKey: sec.rule.osSystem
+    pattern: |-
+      \bos\.system\s*\(
+
+  - id: DANGEROUS_SUDO
+    category: dangerous
+    severity: warn
+    flags: i
+    titleKey: sec.rule.sudo
+    pattern: |-
+      \bsudo\b
+
+  - id: DANGEROUS_CHMOD_777
+    category: dangerous
+    severity: warn
+    flags: i
+    titleKey: sec.rule.chmod777
+    pattern: |-
+      \bchmod\s+(-r\s+)?777\b
+
+  - id: DANGEROUS_SHELL_RC_WRITE
+    category: dangerous
+    severity: warn
+    flags: i
+    titleKey: sec.rule.shellRcWrite
+    pattern: |-
+      >>?\s*[^\n]{0,60}\.(bashrc|zshrc|bash_profile)\b

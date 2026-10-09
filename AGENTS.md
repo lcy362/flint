@@ -48,7 +48,8 @@ server/src/
 ├─ index.ts         # 入口：装配 ConfigStore / Router，resync（供自动化任务按需调用）
 ├─ api/routes.ts    # 全部 REST 路由（唯一 HTTP 出口）
 ├─ config/          # types.ts（数据模型）/ store.ts（加载·迁移·保存）/ defaults.ts
-├─ core/            # 领域逻辑：scan / sync / agents / tags / collect / takeover / projects / diagnose / fix ...
+├─ core/            # 领域逻辑：scan / sync / agents / tags / collect / takeover / projects / diagnose / fix / security / validate ...
+├─ rules/           # 安全扫描规则快照（F1）：security/*.yaml → 构建期生成 core/security-rules.generated.ts
 ├─ domain/cards.ts  # 领域行 → 前端展示契约（SkillCardView）
 └─ infra/           # logger / picker / config-store 适配
 
