@@ -109,6 +109,8 @@ export interface StateView {
 export interface RepoView { id: string; name?: string; path: string; root?: string }
 /** 第三方仓库 */
 export interface SourceView { id: string; name: string; path: string; layout: string; linked: boolean }
+/** 从 Git 仓库导入：拉取代码到托管目录后，用返回的 path 走既有登记流程 */
+export interface GitCloneResult { path: string; cloned: boolean }
 
 /* ---------- 统一技能展示契约（三处上下文共用） ---------- */
 export type SkillReason = 'own' | 'preset' | 'manual' | 'external' | 'shared';

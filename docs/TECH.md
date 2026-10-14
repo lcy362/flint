@@ -296,6 +296,8 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | PUT / DELETE | `/repos/:id` | 编辑（可切类型）/ 删除 |
 | POST | `/repos/scan/:id` | 扫描单仓库 |
 | POST | `/repos/detect` | 探测目录布局 |
+| POST | `/repos/preview` | 登记预览（只扫描不落库） |
+| POST | `/sources/clone` | 「从 Git 仓库导入」：按 Git 地址克隆代码到托管目录（`<flint 数据目录>/sources/<仓库名>`），返回本地路径供随后走登记流程 |
 | POST | `/repos/:id/tags-migrate` | 标签迁移到 frontmatter |
 | GET | `/repos/:id/collect/preview` | 归集预览 |
 | POST | `/repos/:id/collect` | 归集 |

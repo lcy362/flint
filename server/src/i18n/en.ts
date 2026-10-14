@@ -153,6 +153,10 @@ export const en = {
   /* ---------- register preview ---------- */
   'register.idEmpty': 'ID must not be empty',
   'register.idInvalid': 'Invalid ID {id}: only letters, digits and . _ - are allowed, starting with a letter or digit',
+  'register.gitUrlEmpty': 'Git URL must not be empty',
+  'register.gitUrlInvalid': 'Unsupported Git URL {url}: use https://, ssh://, git://, file:// or user@host:path',
+  'register.gitCloneFailed': 'Failed to clone the Git repository',
+  'register.gitCloneTimeout': 'Cloning the Git repository timed out',
   'api.skillEnabled': 'This skill is currently enabled; disable it first (remove it from the desired set) before deleting',
   'api.noRepoToCollect': 'No repository to collect into',
 } as const;

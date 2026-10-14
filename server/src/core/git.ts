@@ -27,12 +27,19 @@ const GIT_BIN = GIT_CANDIDATES.find((p) => fs.existsSync(p)) ?? '/usr/bin/git';
 
 export interface GitOut { status: number | null; out: string; err: string; timedOut: boolean }
 
-/** 执行 git；超时则杀整个进程组并立即 resolve，绝不阻塞主进程 */
-export function gitRun(dir: string, args: string[], timeout = 8000): Promise<GitOut> {
+export interface GitRunOpts {
+  timeout?: number;
+  /** 覆盖子进程环境（如 clone 需要 GIT_TERMINAL_PROMPT=0 防止私库挂起等口令输入） */
+  env?: NodeJS.ProcessEnv;
+}
+
+/** 底层执行 git；超时则杀整个进程组并立即 resolve，绝不阻塞主进程 */
+function runGit(argv: string[], opts: GitRunOpts = {}): Promise<GitOut> {
+  const timeout = opts.timeout ?? 8000;
   return new Promise((resolve) => {
     // detached 让 git 成为进程组组长，超时可连同其子进程一起杀掉，
     // 否则（如内网 HTTPS 仓库）子进程仍持有管道，close 事件迟迟不触发。
-    const child = spawn(GIT_BIN, ['-C', dir, ...args], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    const child = spawn(GIT_BIN, argv, { stdio: ['ignore', 'pipe', 'pipe'], detached: true, env: opts.env });
     let out = '';
     let err = '';
     let done = false;
@@ -54,6 +61,16 @@ export function gitRun(dir: string, args: string[], timeout = 8000): Promise<Git
     child.on('error', () => finish(null));
     child.on('close', (code) => finish(code));
   });
+}
+
+/** 在已有目录内执行 git（自动注入 -C dir）；env 可覆盖子进程环境 */
+export function gitRun(dir: string, args: string[], timeout = 8000, env?: NodeJS.ProcessEnv): Promise<GitOut> {
+  return runGit(['-C', dir, ...args], { timeout, env });
+}
+
+/** 在没有本地目录时执行 git（如 clone 到尚不存在的目标目录）；同样异步、带超时、杀进程组 */
+export function gitExec(args: string[], opts: GitRunOpts = {}): Promise<GitOut> {
+  return runGit(args, opts);
 }
 
 /** 执行 git 并返回 stdout 文本；非零退出/超时返回 undefined */

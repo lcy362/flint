@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult } from '../api/types';
+import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type GitCloneResult } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
 import SkillDistributeModal from '../components/skill/SkillDistributeModal';
@@ -271,6 +271,9 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
   const [busy, setBusy] = useState<string | null>(null);
   const [addFor, setAddFor] = useState<RepoView | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // 「从 Git 仓库导入」拉取到的目录：作为新建第三方仓库的预设路径，交给登记流程
+  const [gitOpen, setGitOpen] = useState(false);
+  const [presetPath, setPresetPath] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<WarehouseTarget | null>(null);
   // F4·仓库级来源：并发拉取 git 状态（远端地址 / 领先落后）。
   // mount 时不联网（fetch=false），只读本地引用秒回；「检查更新」才联网校验。
@@ -417,15 +420,26 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
       <EntityList
         title={t('repo.section')}
         items={items}
-        toolbar={<Button size="sm" variant="ghost" onClick={() => setCreateOpen(true)}>{t('repo.register')}</Button>}
+        toolbar={
+          <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+            <Button size="sm" variant="ghost" onClick={() => setGitOpen(true)}>{t('repo.gitImport')}</Button>
+            <Button size="sm" variant="ghost" onClick={() => setCreateOpen(true)}>{t('repo.register')}</Button>
+          </div>
+        }
         empty={<EmptyState title={t('repo.empty.title')} hint={t('repo.empty.hint')} />}
         hideToggle
+      />
+      <GitImportModal
+        open={gitOpen}
+        onClose={() => setGitOpen(false)}
+        onPulled={(path) => { setGitOpen(false); setPresetPath(path); setCreateOpen(true); }}
       />
       <WarehouseModal
         open={createOpen || !!editTarget}
         target={editTarget}
-        onClose={() => { setCreateOpen(false); setEditTarget(null); }}
-        onDone={() => { setCreateOpen(false); setEditTarget(null); reload(); }}
+        presetPath={presetPath ?? undefined}
+        onClose={() => { setCreateOpen(false); setEditTarget(null); setPresetPath(null); }}
+        onDone={() => { setCreateOpen(false); setEditTarget(null); setPresetPath(null); reload(); }}
       />
       <AddSkillsModal repo={addFor} onClose={() => setAddFor(null)} onDone={() => { setAddFor(null); reload(); }} />
     </>
@@ -849,13 +863,64 @@ function skillsRootOf(p: string): string {
   return `${trimmed.slice(0, end)}/skills`;
 }
 
-function draftFrom(target: WarehouseTarget | null | undefined): WarehouseDraft {
-  if (!target) return EMPTY_DRAFT;
+function draftFrom(target: WarehouseTarget | null | undefined, presetPath?: string): WarehouseDraft {
+  if (!target) return presetPath ? { ...EMPTY_DRAFT, kind: 'source', path: presetPath } : EMPTY_DRAFT;
   if (target.kind === 'source') {
     return { kind: 'source', id: target.id, name: target.name ?? '', path: target.path, layout: target.layout, root: '' };
   }
   // 自有仓库没有布局可配，草稿里的 layout 只服务于第三方来源分支
   return { kind: 'repo', id: target.id, name: target.name ?? '', path: target.path, layout: 'auto', root: target.root ?? '' };
+}
+
+/**
+ * 从 Git 仓库导入：只负责把代码拉取到本工具托管目录，成功后把该目录交给既有登记流程
+ * （登记弹窗以预设路径打开，用户确认布局 → 预览 → 落库）。此步不改 config。
+ */
+function GitImportModal({
+  open,
+  onClose,
+  onPulled,
+}: Readonly<{ open: boolean; onClose: () => void; onPulled: (path: string) => void }>) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [wasOpen, setWasOpen] = useState(false);
+  if (open !== wasOpen) { setWasOpen(open); if (open) setUrl(''); }
+
+  const pull = async () => {
+    if (!url.trim()) return;
+    setBusy(true);
+    try {
+      const r = await api<GitCloneResult>('/sources/clone', { method: 'POST', body: JSON.stringify({ url: url.trim() }) });
+      toast.push(t('repo.gitImportDone', { path: r.path }), 'good');
+      onPulled(r.path);
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : String(e), 'bad');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      open={open}
+      title={t('repo.gitImportTitle')}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={busy} disabled={!url.trim()} onClick={pull}>{t('repo.gitImportPull')}</Button>
+        </>
+      }
+    >
+      <FieldInput
+        label={t('repo.gitImportUrl')}
+        placeholder="https://github.com/owner/repo.git"
+        hint={t('repo.gitImportHint')}
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+      />
+    </Modal>
+  );
 }
 
 /**
@@ -866,15 +931,20 @@ function draftFrom(target: WarehouseTarget | null | undefined): WarehouseDraft {
  * 保证改定位后扫描根不变、技能不会「消失」：
  * - 自有 → 第三方：把当前扫描根写进路径（root 的语义被吸收）
  * - 第三方 → 自有：把当前路径同时记为 root，显式声明扫描根就是该目录
+ *
+ * presetPath：新建第三方仓库时预填的路径（来自「从 Git 仓库导入」拉取到的目录），
+ * 拉取后直接落到这套登记流程里，用户只需确认布局并在预览后登记。
  */
 function WarehouseModal({
   open,
   target,
+  presetPath,
   onClose,
   onDone,
 }: Readonly<{
   open: boolean;
   target?: WarehouseTarget | null;
+  presetPath?: string;
   onClose: () => void;
   onDone: () => void;
 }>) {
@@ -891,7 +961,7 @@ function WarehouseModal({
   // 每次打开时载入目标值（新建则重置），避免残留上一次的输入
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) { setD(draftFrom(target)); setPreview(null); }
+    if (open) { setD(draftFrom(target, presetPath)); setPreview(null); }
   }
 
   // 表单一有改动，旧预览即失效，须重新预览

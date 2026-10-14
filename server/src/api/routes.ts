@@ -12,6 +12,7 @@ import {
 } from '../core/agents.js';
 import { scanAll, detectLayoutAbs } from '../core/scanner.js';
 import { previewRegister, idIssue, type RegisterPreviewInput } from '../core/register.js';
+import { cloneSourceRepo, gitUrlIssue } from '../core/source-clone.js';
 import * as presets from '../core/presets.js';
 import * as active from '../core/active.js';
 import { syncActive, diffSync, deployOne, copySkill } from '../core/sync.js';
@@ -448,6 +449,16 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
 
   // ---- foreign sources ----
   r.get('/sources', (_req, res) => res.json(cfg.data.foreignSources));
+  // 从 Git 地址拉取第三方仓库代码到托管目录（只拉代码、不改 config）：
+  // 返回本地路径，前端随后用它走既有的登记流程（预览 → 落库）。
+  r.post('/sources/clone', async (req, res) => {
+    const url = typeof (req.body as { url?: unknown })?.url === 'string' ? String((req.body as { url: string }).url).trim() : '';
+    if (!url) return res.status(400).json({ error: 'url required' });
+    const issue = gitUrlIssue(url);
+    if (issue) return res.status(400).json({ error: issue });
+    try { res.json(await cloneSourceRepo(url)); }
+    catch (e) { res.status(500).json({ error: (e as Error).message }); }
+  });
   r.post('/sources', (req, res) => {
     const body = req.body as ForeignSource;
     if (!body.id || !body.path) return res.status(400).json({ error: 'id/path required' });

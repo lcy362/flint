@@ -155,6 +155,10 @@ export const zh: Record<MsgKey, string> = {
   /* ---------- register preview ---------- */
   'register.idEmpty': '标识 ID 不能为空',
   'register.idInvalid': '标识 {id} 不合法：只允许字母、数字与 . _ -，且以字母或数字开头',
+  'register.gitUrlEmpty': 'Git 地址不能为空',
+  'register.gitUrlInvalid': '不支持的 Git 地址 {url}：请使用 https://、ssh://、git://、file:// 或 user@host:path',
+  'register.gitCloneFailed': '拉取 Git 仓库失败',
+  'register.gitCloneTimeout': '拉取 Git 仓库超时',
   'api.skillEnabled': '该技能正处于启用状态；请先关闭（移除期望）再删除',
   'api.noRepoToCollect': '无仓库可归集',
 };
