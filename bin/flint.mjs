@@ -125,8 +125,10 @@ function resolveDirectory(raw) {
     fail(`Directory not found: ${raw}\n        Resolved to: ${abs}`);
   }
   if (!stat.isDirectory()) fail(`Not a directory: ${abs}`);
-  const trimmed = abs.replace(/[\\/]+$/, '');
-  return trimmed || abs;
+  // 去掉结尾分隔符（`/a/b/` 与 `/a/b` 视为同一目录）；用循环而非正则，避免回溯开销
+  let end = abs.length;
+  while (end > 0 && (abs[end - 1] === '/' || abs[end - 1] === '\\')) end -= 1;
+  return abs.slice(0, end) || abs;
 }
 
 /**

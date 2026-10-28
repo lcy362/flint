@@ -881,7 +881,10 @@ function skillsRootOf(p: string): string {
 
 /** 路径末段作为缺省显示名：本地目录与托管克隆目录都适用 */
 function baseNameOf(p: string): string {
-  const trimmed = p.replace(/[\\/]+$/, '');
+  // 手写循环代替 `/[\\/]+$/`：后者在失败匹配时会回溯（S8786），这里的代价是线性的
+  let end = p.length;
+  while (end > 0 && (p[end - 1] === '/' || p[end - 1] === '\\')) end -= 1;
+  const trimmed = p.slice(0, end);
   const i = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
   return i >= 0 ? trimmed.slice(i + 1) : trimmed;
 }
