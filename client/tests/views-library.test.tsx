@@ -202,6 +202,32 @@ describe('Library 技能库', () => {
     expect(apiMock.mock.calls.some((c) => c[0] === '/repos' && c[1]?.method === 'POST')).toBe(true);
   });
 
+  it('命令直达：addSource 参数带入目录、自动预览待确认，并清掉地址参数', async () => {
+    baseRoutes({
+      'POST /repos/preview': () => ({
+        id: 'cli-lib', idFromDir: true, idTaken: false, exists: true, scanRoot: '/tmp/cli-lib',
+        layout: 'flat', skillCount: 1, skills: [{ name: 'gamma', description: '' }],
+      }),
+      'POST /sources': () => [],
+    });
+    navigate({ tab: 'library', sub: null, query: new URLSearchParams({ addSource: '/tmp/cli-lib' }) });
+    render(wrap(<Library />));
+
+    // 弹窗自动打开、路径已填、识别结果已列出——无需用户再点「预览」
+    await waitFor(() => expect(screen.getByText('Detection preview')).toBeTruthy());
+    expect(screen.getByDisplayValue('/tmp/cli-lib')).toBeTruthy();
+    expect(screen.getByText('1 skills detected')).toBeTruthy();
+    expect(apiMock.mock.calls.some((c) => c[0] === '/repos/preview')).toBe(true);
+
+    // 一次性意图：参数从地址里清掉，刷新不会再弹
+    await waitFor(() => expect(window.location.hash).not.toContain('addSource'));
+
+    // 仍是待确认态：未点确认前不落库
+    expect(apiMock.mock.calls.some((c) => c[0] === '/sources' && c[1]?.method === 'POST')).toBe(false);
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm registration' }));
+    await waitFor(() => expect(apiMock.mock.calls.some((c) => c[0] === '/sources' && c[1]?.method === 'POST')).toBe(true));
+  });
+
   it('登记预览：id 不合法（目录名推导失败）时必须手动输入才能确认', async () => {
     baseRoutes({
       'POST /repos/preview': () => ({

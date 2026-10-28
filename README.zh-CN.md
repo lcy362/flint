@@ -139,7 +139,7 @@ flint
 
 命令会在服务就绪后立刻返回：Flint 常驻后台，CLI 自己退出（与 `./start.sh` 同一套行为），并打印访问地址、进程 PID 与日志路径；用 `kill <PID>` 停止实例。实例已在运行时再次执行只会重新打开页面，不会重复启动。
 
-然后打开 **http://localhost:8787**。常用参数：`flint --port 9000`、`flint -y`（强制重启）、`flint --no-open`、`flint --foreground`（前台排错）、`flint --help`。他人进程占用的端口不会被杀，只报错退出。
+然后打开 **http://localhost:8787**。常用参数：`flint <目录>`（或在该目录内执行 `flint .`，页面直达「登记第三方仓库」——路径已填入、识别结果已预览，确认后才落库）、`flint --port 9000`、`flint -y`（强制重启）、`flint --no-open`、`flint --foreground`（前台排错）、`flint --help`。他人进程占用的端口不会被杀，只报错退出。
 
 **更新与查看版本：**
 

@@ -200,6 +200,7 @@ export const en = {
   'repo.preview.idTaken': 'ID {id} is already taken by another repository; choose another',
   'repo.preview.needId': 'Cannot derive a valid ID from the directory name; enter the ID manually above',
   'repo.idDefaultHint': 'Leave empty to use the directory name (validated on preview)',
+  'repo.prefilledHint': 'The directory was filled in by the command and already scanned — nothing is saved until you confirm.',
 
   /* ---------- collect wizard (library page) ---------- */
   'collect.taken.fully': 'Taken over',

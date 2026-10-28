@@ -268,6 +268,7 @@ type WarehouseTarget = (RepoView & { kind: 'repo' }) | (SourceView & { kind: 'so
 function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[]; sources: SourceView[]; reload: () => void }>) {
   const { t } = useI18n();
   const toast = useToast();
+  const route = useRoute();
   const [busy, setBusy] = useState<string | null>(null);
   const [addFor, setAddFor] = useState<RepoView | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -275,6 +276,21 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
   const [gitOpen, setGitOpen] = useState(false);
   const [presetPath, setPresetPath] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<WarehouseTarget | null>(null);
+
+  /**
+   * 命令直达：`flint <目录>` 把目录写进地址（`#/library?addSource=<路径>`）。
+   * 这里只做「打开登记弹窗 + 预填路径」，落库仍要用户点确认；
+   * 参数随即从地址里清掉——它是「一次性的意图」，刷新或关掉弹窗后不该再弹回来。
+   */
+  const addSourceDir = route.query.get('addSource');
+  useEffect(() => {
+    if (!addSourceDir) return;
+    setPresetPath(addSourceDir);
+    setCreateOpen(true);
+    const query = new URLSearchParams(route.query);
+    query.delete('addSource');
+    navigate({ ...route, query }, { replace: true });
+  }, [addSourceDir]);
   // F4·仓库级来源：并发拉取 git 状态（远端地址 / 领先落后）。
   // mount 时不联网（fetch=false），只读本地引用秒回；「检查更新」才联网校验。
   const [repoStatus, setRepoStatus] = useState<Record<string, RepoStatus>>({});
@@ -863,8 +879,20 @@ function skillsRootOf(p: string): string {
   return `${trimmed.slice(0, end)}/skills`;
 }
 
+/** 路径末段作为缺省显示名：本地目录与托管克隆目录都适用 */
+function baseNameOf(p: string): string {
+  const trimmed = p.replace(/[\\/]+$/, '');
+  const i = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+  return i >= 0 ? trimmed.slice(i + 1) : trimmed;
+}
+
 function draftFrom(target: WarehouseTarget | null | undefined, presetPath?: string): WarehouseDraft {
-  if (!target) return presetPath ? { ...EMPTY_DRAFT, kind: 'source', path: presetPath } : EMPTY_DRAFT;
+  // 预填路径时连显示名一起给出（id 仍交给预览按目录名推导，避免前端重复一套命名规则）
+  if (!target) {
+    return presetPath
+      ? { ...EMPTY_DRAFT, kind: 'source', path: presetPath, name: baseNameOf(presetPath) }
+      : EMPTY_DRAFT;
+  }
   if (target.kind === 'source') {
     return { kind: 'source', id: target.id, name: target.name ?? '', path: target.path, layout: target.layout, root: '' };
   }
@@ -970,18 +998,19 @@ function WarehouseModal({
     setPreview(null);
   };
 
-  const runPreview = async () => {
-    if (!d.path.trim()) return;
+  const runPreview = async (draft?: WarehouseDraft) => {
+    const cur = draft ?? d;
+    if (!cur.path.trim()) return;
     setPreviewBusy(true);
     try {
       const p = await api<RegisterPreview>('/repos/preview', {
         method: 'POST',
         body: JSON.stringify({
-          kind: d.kind,
-          path: d.path.trim(),
-          root: d.kind === 'repo' ? (d.root.trim() || undefined) : undefined,
-          layout: d.kind === 'source' ? d.layout : undefined,
-          id: d.id.trim() || undefined,
+          kind: cur.kind,
+          path: cur.path.trim(),
+          root: cur.kind === 'repo' ? (cur.root.trim() || undefined) : undefined,
+          layout: cur.kind === 'source' ? cur.layout : undefined,
+          id: cur.id.trim() || undefined,
         }),
       });
       setPreview(p);
@@ -991,6 +1020,21 @@ function WarehouseModal({
       setPreviewBusy(false);
     }
   };
+
+  /**
+   * 带预设路径打开（`flint <目录>` / 「从 Git 仓库导入」）时自动跑一次预览：
+   * 弹窗一出现就是「路径已填入 + 识别结果已列出」的待确认态，用户只需核对后点确认。
+   * 同一个预设路径只自动预览一次，用户返回修改后不会因重渲染被反复覆盖。
+   */
+  const autoPreviewed = useRef<string | null>(null);
+  useEffect(() => {
+    // 关窗即忘掉这次自动预览，下次（哪怕同一个目录）命令带进来时仍会自动识别
+    if (!open) { autoPreviewed.current = null; return; }
+    if (editing || !presetPath) return;
+    if (autoPreviewed.current === presetPath) return;
+    autoPreviewed.current = presetPath;
+    void runPreview(draftFrom(null, presetPath));
+  }, [open, editing, presetPath]);
 
   const switchKind = (k: 'repo' | 'source') => {
     if (k === d.kind) return;
@@ -1075,7 +1119,7 @@ function WarehouseModal({
           // 第一步：只预览不落库
           <>
             <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
-            <Button variant="primary" loading={previewBusy} disabled={!d.path.trim()} onClick={runPreview}>
+            <Button variant="primary" loading={previewBusy} disabled={!d.path.trim()} onClick={() => runPreview()}>
               {t('repo.preview')}
             </Button>
           </>
@@ -1083,6 +1127,11 @@ function WarehouseModal({
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+        {!editing && presetPath && (
+          <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', lineHeight: 1.6 }}>
+            {t('repo.prefilledHint')}
+          </div>
+        )}
         <div>
           <span className="field-label">{t('repo.kind')}</span>
           <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>

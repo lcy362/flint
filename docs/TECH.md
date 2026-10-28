@@ -363,6 +363,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - 极简 **hash 路由**，作为"当前页面"的唯一数据源：`#/<tab>[/<sub>][?<query>]`。
 - 一级页面（6 个 tab）、二级详情（Agent key / 项目 id / 技能 id / 预设名）、筛选条件全部写进地址，刷新 / 分享可复原。
 - hooks：`useRoute` / `useQueryParam` / `useQueryFlag` / `useQueryValue` / `useQueryList`；高频输入用 `replace: true` 避免污染历史栈。
+- **命令 → 页面的唯一契约**：`#/library?addSource=<绝对路径>`。CLI（`bin/flint.mjs`）只拼地址，前端 `Library` 消费一次后立刻 `replace` 掉该参数（一次性意图，刷新不再复现），随后打开登记弹窗、预填路径并自动跑一次预览；落库与否仍由用户在弹窗里确认。CLI 与服务器之间没有额外通道。
 
 ### 12.2 状态
 

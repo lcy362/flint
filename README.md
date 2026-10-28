@@ -188,6 +188,7 @@ Then open **http://localhost:8787**. Both commands are registered, with the same
 | Command | Description |
 | --- | --- |
 | `flint` | Start in the background and open the browser — the only overarching command |
+| `flint <directory>` / `flint .` | Open the page straight on "register a third-party source": the path is filled in, the detection preview is already run, and nothing is saved until you confirm |
 | `flint -p 9000` / `flint --port 9000` | Listen on a custom port (default `8787`, or `$PORT`) |
 | `flint -y` / `flint -r` / `flint --restart` | Force restart: stop the running Flint instance, then start fresh |
 | `flint --no-open` | Start without auto-opening the browser (CI / headless) |

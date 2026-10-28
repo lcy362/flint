@@ -194,6 +194,7 @@ export const zh: Record<MsgKey, string> = {
   'repo.preview.idTaken': '标识 {id} 已被其他仓库使用，请更换',
   'repo.preview.needId': '无法从目录名推导合法标识，请在上方手动填写标识 ID',
   'repo.idDefaultHint': '留空则使用目录名（预览时校验）',
+  'repo.prefilledHint': '目录已按命令带入并完成识别（待确认）：核对无误后点「确认登记」才会落库。',
 
   /* ---------- collect wizard (library page) ---------- */
   'collect.taken.fully': '已接管',

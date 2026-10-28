@@ -6,6 +6,9 @@
  *   Node 版本检查 → 端口自检 / 已有实例识别 → 后台拉起 server → 等待就绪 → 打开浏览器 → 退出。
  * 运行日志落 FLINT_LOGS（默认 ~/.flint/logs），控制台只保留必要的启动信息。
  * 排错或容器场景要前台运行时，用 --foreground。
+ *
+ * 另带一个「登记意图」入口：`flint <目录>`（或在该目录内执行 `flint .`）会把页面直接开到
+ * 「登记第三方仓库」弹窗，路径已填入、识别结果已预览，等用户点确认才落库——CLI 本身不写 config。
  */
 import fs from 'node:fs';
 import net from 'node:net';
@@ -40,9 +43,15 @@ const HELP = `Flint — local-first personal AI skills asset manager
 Usage:
   npx flint-skills-hub [options]
   npx flint [options]
+  npx flint <directory>       Register a directory as a third-party source
+  npx flint .                 Same, for the directory you are in
 
 Starts the server in the background (same model as ./start.sh), waits until it
 answers, opens the browser, then exits — Flint keeps running in the background.
+
+Passing a directory opens the Web UI directly on "register a third-party source"
+with that path filled in and the detection preview already run; nothing is saved
+until you confirm there.
 
 Options:
   -p, --port <port>   Port to listen on (default: ${DEFAULT_PORT}, or $PORT)
@@ -82,6 +91,8 @@ function parseArgs(argv) {
     foreground: false,
     help: false,
     version: false,
+    /** 待登记为第三方仓库的目录（位置参数，原始写法；稍后解析成绝对路径） */
+    addSource: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -92,9 +103,40 @@ function parseArgs(argv) {
     else if (arg === '-f' || arg === '--foreground') opts.foreground = true;
     else if (arg === '-p' || arg === '--port') opts.port = parsePort(argv[++i]);
     else if (arg.startsWith('--port=')) opts.port = parsePort(arg.slice('--port='.length));
-    else fail(`Unknown option: ${arg}\nRun with --help for usage.`);
+    else if (arg.startsWith('-')) fail(`Unknown option: ${arg}\nRun with --help for usage.`);
+    else if (opts.addSource) fail(`Only one directory at a time: already got ${opts.addSource}, then ${arg}`);
+    else opts.addSource = arg;
   }
   return opts;
+}
+
+/**
+ * 位置参数 → 绝对目录路径。相对路径按调用时的 cwd 解析（`flint .` 才符合直觉），
+ * 支持 `~` 开头。不存在 / 不是目录时直接报错——带着一个不存在的路径开页面，
+ * 用户只会看到「目录不存在」的预览，不如在终端里就说清楚。
+ */
+function resolveDirectory(raw) {
+  const expanded = raw === '~' || raw.startsWith('~/') ? path.join(os.homedir(), raw.slice(1)) : raw;
+  const abs = path.resolve(process.cwd(), expanded);
+  let stat;
+  try {
+    stat = fs.statSync(abs);
+  } catch {
+    fail(`Directory not found: ${raw}\n        Resolved to: ${abs}`);
+  }
+  if (!stat.isDirectory()) fail(`Not a directory: ${abs}`);
+  const trimmed = abs.replace(/[\\/]+$/, '');
+  return trimmed || abs;
+}
+
+/**
+ * 页面地址：带目录时直达「登记第三方仓库」——
+ * 路径以 URL 参数交给前端预填，落库与否仍由用户在页面上确认（CLI 不写 config）。
+ */
+function pageUrl(opts) {
+  const base = `http://localhost:${opts.port}`;
+  if (!opts.addSource) return base;
+  return `${base}/#/library?addSource=${encodeURIComponent(opts.addSource)}`;
 }
 
 /** Node 版本门槛与 package.json 的 engines 一致，早报错胜过运行时报怪错 */
@@ -344,9 +386,11 @@ async function waitForChild(port, child, timeoutMs = 30000) {
 
 /** 已在运行：能应答就开浏览器收工，不能应答（僵进程）就提示重启 */
 async function handleAlreadyRunning(opts, pids) {
-  const url = `http://localhost:${opts.port}`;
+  const url = pageUrl(opts);
   if (await ping(opts.port)) {
-    info(`Flint is already running (PID:${pids.join(',')}); the page is open — no restart needed.`);
+    info(`Flint is already running (PID:${pids.join(',')}); no restart needed.`);
+    // 带上目录时这个地址就是「登记入口」，--no-open / 无 GUI 环境下也得打印出来
+    info(`Web UI:  ${url}`);
     maybeOpen(url, opts);
     info('Keep using the running instance as-is; restarting only helps if it behaves incorrectly.');
     restartHints();
@@ -385,7 +429,7 @@ async function startBackground(opts) {
   info('Waiting for the server to be ready ...');
   const result = await waitForChild(opts.port, child);
 
-  const url = `http://localhost:${opts.port}`;
+  const url = pageUrl(opts);
   if (result === 'exited') {
     fail(`The server process exited during startup. See the log: ${STARTUP_LOG}\n${tailLog()}`);
   }
@@ -415,7 +459,7 @@ async function startForeground(opts) {
   // server 入口在模块顶层就 listen 了，import 即启动
   await import(pathToFileURL(SERVER_ENTRY).href);
 
-  const url = `http://localhost:${opts.port}`;
+  const url = pageUrl(opts);
   if (!(await waitReady(opts.port, 20000))) {
     warn(`Server did not respond within 20s — check the log at ${APP_LOG}`);
     return;
@@ -437,6 +481,9 @@ async function main() {
 
   assertNodeVersion();
 
+  // 位置参数（目录）先校验：路径不合法时就在终端里报，不把「待确认的无效登记」开进页面
+  if (opts.addSource) opts.addSource = resolveDirectory(opts.addSource);
+
   if (!fs.existsSync(SERVER_ENTRY)) {
     fail(
       'server build not found.\n' +
@@ -454,6 +501,7 @@ async function main() {
   }
 
   console.log(BANNER);
+  if (opts.addSource) info(`Pending registration (confirm in the Web UI): ${opts.addSource}`);
   if (opts.foreground) await startForeground(opts);
   else await startBackground(opts);
 }
