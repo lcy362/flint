@@ -186,6 +186,10 @@ export interface GitCloneResult { path: string; cloned: boolean }
 /** 从 npx 命令安装：在托管目录执行安装命令后，用 suggestedRoot（缺省 path）走既有登记流程 */
 export interface NpxInstallResult {
   ok: boolean;
+  /** 从原始命令解析出的包名（登记时写入 installer） */
+  pkg: string;
+  /** 从原始命令解析出的参数（登记时写入 installer） */
+  args: string[];
   path: string;
   /** 安装产物里推断出的技能扫描根（如 <staging>/.claude/skills）；装空了缺省 */
   suggestedRoot?: string;

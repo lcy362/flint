@@ -275,9 +275,9 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
   // 「从 Git 仓库导入」拉取到的目录：作为新建第三方仓库的预设路径，交给登记流程
   const [gitOpen, setGitOpen] = useState(false);
   const [presetPath, setPresetPath] = useState<string | null>(null);
-  // 「从 npx 命令安装」：安装成功后的目录（预设路径）+ 安装器信息（登记时落库）
+  // 「从 npx 命令安装」：安装成功后的目录（预设路径）+ 解析出的安装器信息（登记时落库）
   const [npxOpen, setNpxOpen] = useState(false);
-  const [presetInstaller, setPresetInstaller] = useState<{ pkg: string; args: string } | null>(null);
+  const [presetInstaller, setPresetInstaller] = useState<{ pkg: string; args: string[] } | null>(null);
   // npx 来源的「更新」弹窗（打开即一键重跑安装器，SSE 流式展示）
   const [updateTarget, setUpdateTarget] = useState<SourceView | null>(null);
   const [editTarget, setEditTarget] = useState<WarehouseTarget | null>(null);
@@ -901,11 +901,11 @@ interface WarehouseDraft {
   path: string;
   layout: string;
   root: string;
-  /** npx 来源的专用更新命令（空格分隔）；仅编辑 npx 安装的来源时使用 */
-  updateArgs: string;
+  /** npx 来源的专用更新命令（原始命令，可带 npx 前缀）；仅编辑 npx 安装的来源时使用 */
+  updateCmd: string;
 }
 
-const EMPTY_DRAFT: WarehouseDraft = { kind: 'repo', id: '', name: '', path: '', layout: 'auto', root: '', updateArgs: '' };
+const EMPTY_DRAFT: WarehouseDraft = { kind: 'repo', id: '', name: '', path: '', layout: 'auto', root: '', updateCmd: '' };
 
 /** 自有仓库缺省扫描 <路径>/skills */
 function skillsRootOf(p: string): string {
@@ -936,11 +936,11 @@ function draftFrom(target: WarehouseTarget | null | undefined, presetPath?: stri
   }
   if (target.kind === 'source') {
     // npx 安装的来源：把已登记的更新命令带回表单（留空 = 一键重跑安装命令）
-    const updateArgs = target.installer?.kind === 'npx' ? (target.installer.updateArgs ?? []).join(' ') : '';
-    return { kind: 'source', id: target.id, name: target.name ?? '', path: target.path, layout: target.layout, root: '', updateArgs };
+    const updateCmd = target.installer?.kind === 'npx' ? (target.installer.updateArgs ?? []).join(' ') : '';
+    return { kind: 'source', id: target.id, name: target.name ?? '', path: target.path, layout: target.layout, root: '', updateCmd };
   }
   // 自有仓库没有布局可配，草稿里的 layout 只服务于第三方来源分支
-  return { kind: 'repo', id: target.id, name: target.name ?? '', path: target.path, layout: 'auto', root: target.root ?? '', updateArgs: '' };
+  return { kind: 'repo', id: target.id, name: target.name ?? '', path: target.path, layout: 'auto', root: target.root ?? '', updateCmd: '' };
 }
 
 /** 流式执行日志面板：等宽、自动滚到底、只保留最近 N 行（进度行可能很多） */
@@ -1075,7 +1075,21 @@ function GitImportModal({
 }
 
 /**
- * 从 npx 命令安装：在 flint 托管目录里跑第三方包的安装命令（笼子 + 非交互 env + git 快照），
+ * 展示用：把用户输入的原始 npx 命令还原成「将执行」的一行。
+ * 仅供界面预览（服务端才是权威解析——那里还处理引号与包名校验）。
+ */
+function previewNpxCommand(cmd: string): string | undefined {
+  const tokens = cmd.trim().split(/\s+/).filter(Boolean);
+  if (tokens[0] === 'npx') tokens.shift();
+  while (tokens[0] === '--yes' || tokens[0] === '-y') tokens.shift();
+  const pkg = tokens[0] && !tokens[0].startsWith('-') ? tokens.shift() : undefined;
+  if (!pkg) return undefined;
+  return `npx --yes ${pkg} ${tokens.join(' ')}`.trim();
+}
+
+/**
+ * 从 npx 命令安装：用户只粘一条原始安装命令（如 `npx impeccable skills install`），
+ * flint 解析出包名与参数，在托管目录里执行（笼子 + 非交互 env + git 快照），
  * 成功后把安装目录（优先用推断出的技能扫描根）交给既有登记流程。此步不改 config。
  *
  * 弹窗固定展示三段说明（规范要求 / 不满足的后果 / 执行后如何验证）——安装器行为不可控，
@@ -1088,15 +1102,17 @@ function NpxImportModal({
 }: Readonly<{
   open: boolean;
   onClose: () => void;
-  onInstalled: (r: { path: string; pkg: string; args: string }) => void;
+  onInstalled: (r: { path: string; pkg: string; args: string[] }) => void;
 }>) {
   const { t } = useI18n();
   const toast = useToast();
   const { exec, lines, busy, elapsed } = useStreamRunner();
-  const [pkg, setPkg] = useState('');
-  const [args, setArgs] = useState('');
+  const [cmd, setCmd] = useState('');
   const [wasOpen, setWasOpen] = useState(false);
-  if (open !== wasOpen) { setWasOpen(open); if (open) { setPkg(''); setArgs(''); } }
+  if (open !== wasOpen) { setWasOpen(open); if (open) setCmd(''); }
+
+  // 展示用解析（服务端才是权威解析）：把原始命令还原成「将执行」的一行
+  const preview = previewNpxCommand(cmd);
 
   const specLine = (title: string, body: string) => (
     <div style={{ fontSize: 'var(--fs-12)', lineHeight: 1.7 }}>
@@ -1106,11 +1122,11 @@ function NpxImportModal({
   );
 
   const run = async () => {
-    if (!pkg.trim()) return;
+    if (!cmd.trim()) return;
     try {
-      const r = await exec<NpxInstallResult>('/sources/npx', { pkg: pkg.trim(), args });
+      const r = await exec<NpxInstallResult>('/sources/npx', { command: cmd.trim() });
       toast.push(t('repo.npxImportDone', { path: r.suggestedRoot ?? r.path }), 'good');
-      onInstalled({ path: r.suggestedRoot ?? r.path, pkg: pkg.trim(), args });
+      onInstalled({ path: r.suggestedRoot ?? r.path, pkg: r.pkg, args: r.args });
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
     }
@@ -1124,24 +1140,23 @@ function NpxImportModal({
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
-          <Button variant="primary" loading={busy} disabled={!pkg.trim()} onClick={run}>{t('repo.npxImportRun')}</Button>
+          <Button variant="primary" loading={busy} disabled={!cmd.trim()} onClick={run}>{t('repo.npxImportRun')}</Button>
         </>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
         <FieldInput
-          label={t('repo.npxImportPkg')}
-          placeholder={t('repo.npxImportPkgPlaceholder')}
-          value={pkg}
-          onChange={(e) => setPkg(e.target.value)}
+          label={t('repo.npxImportCmd')}
+          placeholder={t('repo.npxImportCmdPlaceholder')}
+          hint={t('repo.npxImportCmdHint')}
+          value={cmd}
+          onChange={(e) => setCmd(e.target.value)}
         />
-        <FieldInput
-          label={t('repo.npxImportArgs')}
-          placeholder={t('repo.npxImportArgsPlaceholder')}
-          hint={t('repo.npxImportArgsHint')}
-          value={args}
-          onChange={(e) => setArgs(e.target.value)}
-        />
+        {preview && (
+          <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
+            {t('repo.npxWillRun', { cmd: preview })}
+          </div>
+        )}
         {/* 执行前的规范 / 风险 / 验证说明 */}
         <div
           style={{
@@ -1261,7 +1276,7 @@ function WarehouseModal({
   open: boolean;
   target?: WarehouseTarget | null;
   presetPath?: string;
-  presetInstaller?: { pkg: string; args: string };
+  presetInstaller?: { pkg: string; args: string[] };
   onClose: () => void;
   onDone: () => void;
 }>) {
@@ -1359,14 +1374,14 @@ function WarehouseModal({
         const path = d.path.trim();
         if (editing) {
           const body: Record<string, unknown> = { name, path, layout: d.layout, root: d.root.trim() || undefined, kind: 'source' };
-          // npx 安装的来源：更新命令可改（留空 = 一键重跑安装命令）；普通来源不碰 installer
+          // npx 安装的来源：更新命令可改（原始命令，可带 npx 前缀）；普通来源不碰 installer
           const inst = target?.kind === 'source' ? target.installer : undefined;
           if (inst?.kind === 'npx') {
             body.installer = {
               kind: 'npx',
               pkg: inst.pkg,
               args: inst.args,
-              updateArgs: d.updateArgs.trim() ? d.updateArgs.trim().split(/\s+/) : undefined,
+              updateCmd: d.updateCmd.trim() || undefined,
             };
           }
           await api(`/sources/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) });
@@ -1493,11 +1508,11 @@ function WarehouseModal({
         {/* npx 安装的来源：可配一条专用更新命令；留空 = 更新时一键重跑安装命令 */}
         {editing && target?.kind === 'source' && target.installer?.kind === 'npx' && (
           <FieldInput
-            label={t('repo.npxUpdateArgs')}
-            placeholder={t('repo.npxUpdateArgsPlaceholder')}
-            hint={t('repo.npxUpdateArgsHint')}
-            value={d.updateArgs}
-            onChange={(e) => set('updateArgs', e.target.value)}
+            label={t('repo.npxUpdateCmd')}
+            placeholder={t('repo.npxUpdateCmdPlaceholder')}
+            hint={t('repo.npxUpdateCmdHint')}
+            value={d.updateCmd}
+            onChange={(e) => set('updateCmd', e.target.value)}
           />
         )}
 

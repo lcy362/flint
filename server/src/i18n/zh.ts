@@ -162,6 +162,7 @@ export const zh: Record<MsgKey, string> = {
   'register.npxPkgEmpty': 'npm 包名不能为空',
   'register.npxPkgInvalid': '不支持的 npm 包名 {pkg}：仅允许字母、数字与 - _ . ~，支持 @scope/name 与 @version',
   'register.npxArgsInvalid': '安装参数不允许包含控制字符',
+  'register.npxCmdNoPkg': '无法从命令中识别 npm 包名，请写成：npx <包名> <子命令>',
   'register.npxInstallFailed': 'npx 安装命令执行失败',
   'register.npxInstallTimeout': 'npx 安装命令执行超时',
   'api.skillEnabled': '该技能正处于启用状态；请先关闭（移除期望）再删除',

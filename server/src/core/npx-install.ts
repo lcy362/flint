@@ -76,6 +76,59 @@ export function parseArgs(input: string | string[] | undefined): string[] {
 }
 
 /**
+ * 命令行切分：按空白切，支持单 / 双引号包裹（引号内的空格保留）。
+ * 用户粘的是原始命令（`npx impeccable skills install --dir "my dir"`），不能简单 split(/\s+/)。
+ */
+export function splitCmdTokens(cmd: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let quote: '"' | "'" | null = null;
+  let has = false;
+  for (const ch of cmd) {
+    if (quote) {
+      if (ch === quote) quote = null;
+      else { cur += ch; continue; }
+      // 收尾引号：保留已攒的内容
+      out.push(cur);
+      cur = '';
+      has = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; has = true; continue; }
+    if (/\s/.test(ch)) {
+      if (cur || has) { out.push(cur); cur = ''; has = false; }
+      continue;
+    }
+    cur += ch;
+    has = true;
+  }
+  if (cur || has) out.push(cur);
+  return out.filter((s) => s.length > 0);
+}
+
+/**
+ * 解析用户输入的原始 npx 命令：`npx [--yes] <pkg> [args...]`。
+ * - 允许省略 `npx` 前缀（直接写包名也行）；`--yes` / `-y` 会被丢掉（本工具自带 --yes）；
+ * - 已知包名（knownPkg，更新命令场景）时用它消歧：`npx impeccable skills update` → args=[skills, update]；
+ * - 未知包名时，第一个非选项 token 即包名。
+ */
+export function parseNpxCommand(cmd: string, opts: { knownPkg?: string } = {}): { pkg?: string; args: string[] } {
+  const tokens = splitCmdTokens(cmd);
+  if (tokens[0] === 'npx') tokens.shift();
+  while (tokens[0] === '--yes' || tokens[0] === '-y') tokens.shift();
+  const known = opts.knownPkg;
+  if (known) {
+    if (tokens[0] === known) tokens.shift();
+    return { pkg: known, args: tokens };
+  }
+  if (tokens[0] && !tokens[0].startsWith('-')) {
+    const pkg = tokens.shift();
+    return { pkg, args: tokens };
+  }
+  return { pkg: undefined, args: tokens };
+}
+
+/**
  * 由包名推导托管目录名 / 缺省 id：@scope/name → scope-name，去掉 @version 后缀，
  * 非法字符净化成 `-`。结果一定是合法 id（与 dirNameFromUrl 同款保证）。
  */
@@ -230,6 +283,10 @@ export interface NpxInstallInput {
 
 export interface NpxInstallResult {
   ok: boolean;
+  /** 解析出的包名（登记时写入 installer） */
+  pkg: string;
+  /** 解析出的参数（登记时写入 installer） */
+  args: string[];
   /** 安装落地目录（= 托管目录） */
   path: string;
   /** 建议的登记路径（技能扫描根）；装空了为 undefined */
@@ -246,11 +303,11 @@ export interface NpxInstallResult {
  */
 export async function npxInstall(input: NpxInstallInput): Promise<NpxInstallResult> {
   const issue = npxPkgIssue(input.pkg);
-  if (issue) return { ok: false, path: '', reused: false, log: '', message: issue };
+  if (issue) return { ok: false, pkg: input.pkg, args: [], path: '', reused: false, log: '', message: issue };
   const args = parseArgs(input.args);
   const id = input.id?.trim() || defaultIdFromPkg(input.pkg);
   const idProblem = idIssue(id);
-  if (idProblem) return { ok: false, path: '', reused: false, log: '', message: idProblem };
+  if (idProblem) return { ok: false, pkg: input.pkg, args, path: '', reused: false, log: '', message: idProblem };
   const dir = input.dir ?? stagingDirFor(id);
   const reused = fs.existsSync(dir) && fs.readdirSync(dir).length > 0;
 
@@ -262,12 +319,12 @@ export async function npxInstall(input: NpxInstallInput): Promise<NpxInstallResu
   if (!r.ok) {
     const message = r.timedOut ? t('register.npxInstallTimeout') : t('register.npxInstallFailed');
     log.info('npx-install', 'npx install failed', { pkg: input.pkg, dir, code: r.code, timedOut: r.timedOut });
-    return { ok: false, path: dir, reused, log: r.log, message };
+    return { ok: false, pkg: input.pkg, args, path: dir, reused, log: r.log, message };
   }
   await gitCommitAll(dir, `flint: npx install ${input.pkg}`);
   const suggestedRoot = suggestScanRoot(dir);
   log.info('npx-install', 'npx install done', { pkg: input.pkg, dir, suggestedRoot });
-  return { ok: true, path: dir, suggestedRoot, reused, log: r.log };
+  return { ok: true, pkg: input.pkg, args, path: dir, suggestedRoot, reused, log: r.log };
 }
 
 export interface NpxUpdateInput {
@@ -304,8 +361,9 @@ export interface NpxInstaller {
 /**
  * 安装器信息落库规整：仅接受 kind='npx' 且包名合法的形态。
  * 返回 issue 非空时调用方应拒绝本次请求（400）；raw 缺省表示「无安装器」。
+ * updateCmd：用户填的原始更新命令（可带 `npx <pkg>` 前缀），按已知包名消歧后落成 updateArgs。
  */
-export function normalizeInstaller(raw: unknown): { installer?: NpxInstaller; issue?: string } {
+export function normalizeInstaller(raw: unknown, opts: { knownPkg?: string } = {}): { installer?: NpxInstaller; issue?: string } {
   if (raw === undefined || raw === null) return {};
   const o = raw as Record<string, unknown>;
   if (o.kind !== 'npx' || typeof o.pkg !== 'string') {
@@ -315,7 +373,13 @@ export function normalizeInstaller(raw: unknown): { installer?: NpxInstaller; is
   if (issue) return { issue };
   try {
     const args = parseArgs(o.args as string | string[] | undefined);
-    const updateArgs = parseArgs(o.updateArgs as string | string[] | undefined);
+    const known = opts.knownPkg ?? o.pkg.trim();
+    let updateArgs: string[] = [];
+    if (typeof o.updateCmd === 'string' && o.updateCmd.trim()) {
+      updateArgs = parseNpxCommand(o.updateCmd, { knownPkg: known }).args;
+    } else {
+      updateArgs = parseArgs(o.updateArgs as string | string[] | undefined);
+    }
     const at = typeof o.at === 'string' ? o.at : undefined;
     return {
       installer: {

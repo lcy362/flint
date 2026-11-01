@@ -13,7 +13,7 @@ import {
 import { scanAll, detectLayoutAbs } from '../core/scanner.js';
 import { previewRegister, idIssue, type RegisterPreviewInput } from '../core/register.js';
 import { cloneSourceRepo, gitUrlIssue } from '../core/source-clone.js';
-import { npxInstall, npxUpdate, npxPkgIssue, normalizeInstaller, parseArgs } from '../core/npx-install.js';
+import { npxInstall, npxUpdate, npxPkgIssue, normalizeInstaller, parseArgs, parseNpxCommand } from '../core/npx-install.js';
 import { sseHead, sseSend, sseEnd, createLineEmitter } from './sse.js';
 import * as presets from '../core/presets.js';
 import * as active from '../core/active.js';
@@ -510,22 +510,31 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     }
     sseEnd(res);
   });
-  // 从 npx 命令安装（SSE 流式）：在托管目录里跑第三方包的安装命令（笼子 + 非交互 env +
-  // git 快照），实时转发安装器输出；成功后把目录（含建议的技能扫描根）交给既有登记流程。
-  // 此步不改 config。
+  // 从 npx 命令安装（SSE 流式）：用户粘一条原始安装命令（如 `npx impeccable skills install`），
+  // 这里解析出包名与参数，在托管目录里执行（笼子 + 非交互 env + git 快照），实时转发安装器输出；
+  // 成功后把目录（含建议的技能扫描根）交给既有登记流程。此步不改 config。
   r.post('/sources/npx', async (req, res) => {
-    const body = (req.body ?? {}) as { pkg?: unknown; args?: unknown; id?: unknown };
-    const pkg = typeof body.pkg === 'string' ? body.pkg.trim() : '';
+    const body = (req.body ?? {}) as { command?: unknown; pkg?: unknown; args?: unknown; id?: unknown };
+    // 原始命令优先（用户只填一条命令）；兼容旧的 pkg + args 形态
+    const rawCmd = typeof body.command === 'string' ? body.command.trim() : '';
+    let pkg: string;
+    let args: string[];
+    if (rawCmd) {
+      const parsed = parseNpxCommand(rawCmd);
+      pkg = parsed.pkg ?? '';
+      args = parsed.args;
+      if (!pkg) return res.status(400).json({ error: t('register.npxCmdNoPkg') });
+    } else {
+      pkg = typeof body.pkg === 'string' ? body.pkg.trim() : '';
+      args = parseArgs(body.args as string | string[] | undefined);
+    }
     const issue = npxPkgIssue(pkg);
     if (issue) return res.status(400).json({ error: issue });
     const id = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
     if (id && idIssue(id)) return res.status(400).json({ error: idIssue(id) });
-    // 参数校验放在开流之前：非法参数走普通 4xx，不进流
-    let args: string[] | undefined;
-    try { args = parseArgs(body.args as string | string[] | undefined); } catch (e) { return res.status(400).json({ error: (e as Error).message }); }
     const emit = createLineEmitter(res);
     sseHead(res);
-    sseSend(res, { phase: 'start', pkg, args });
+    sseSend(res, { phase: 'start', pkg, args, command: `npx ${pkg} ${args.join(' ')}`.trim() });
     try {
       const r = await npxInstall({ pkg, args, id, onOutput: emit });
       if (!r.ok) {
@@ -583,7 +592,8 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       if (installer === null) {
         delete src.installer;
       } else {
-        const norm = normalizeInstaller(installer);
+        // 已知包名用于消歧：用户填的更新命令可带 `npx <pkg>` 前缀
+        const norm = normalizeInstaller(installer, { knownPkg: src.installer?.pkg });
         if (norm.issue) return res.status(400).json({ error: norm.issue });
         if (norm.installer) src.installer = norm.installer;
       }

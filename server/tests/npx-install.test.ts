@@ -9,6 +9,8 @@ import {
   npxUpdate,
   normalizeInstaller,
   parseArgs,
+  parseNpxCommand,
+  splitCmdTokens,
   suggestScanRoot,
 } from '../src/core/npx-install.js';
 import { idIssue } from '../src/core/register.js';
@@ -61,6 +63,38 @@ describe('defaultIdFromPkg（包名推导缺省 id）', () => {
     for (const pkg of ['impeccable', '@pbakaus/impeccable', 'impeccable@1.2.3', '我的 包']) {
       expect(idIssue(defaultIdFromPkg(pkg))).toBeUndefined();
     }
+  });
+});
+
+describe('parseNpxCommand（原始命令解析）', () => {
+  it('解析 npx <pkg> <args...>', () => {
+    expect(parseNpxCommand('npx impeccable skills install')).toEqual({ pkg: 'impeccable', args: ['skills', 'install'] });
+    expect(parseNpxCommand('npx impeccable skills install -y --project')).toEqual({ pkg: 'impeccable', args: ['skills', 'install', '-y', '--project'] });
+  });
+
+  it('省略 npx 前缀也行；--yes / -y 会被丢掉（本工具自带）', () => {
+    expect(parseNpxCommand('impeccable skills install')).toEqual({ pkg: 'impeccable', args: ['skills', 'install'] });
+    expect(parseNpxCommand('npx --yes impeccable skills install').args).toEqual(['skills', 'install']);
+    expect(parseNpxCommand('npx -y impeccable skills install').args).toEqual(['skills', 'install']);
+  });
+
+  it('已知包名时按该包消歧（更新命令场景）', () => {
+    expect(parseNpxCommand('npx impeccable skills update -y --force', { knownPkg: 'impeccable' }))
+      .toEqual({ pkg: 'impeccable', args: ['skills', 'update', '-y', '--force'] });
+    expect(parseNpxCommand('skills update -y', { knownPkg: 'impeccable' }))
+      .toEqual({ pkg: 'impeccable', args: ['skills', 'update', '-y'] });
+  });
+
+  it('解析不出包名 → pkg 缺省（路由转 400）', () => {
+    expect(parseNpxCommand('npx').pkg).toBeUndefined();
+    expect(parseNpxCommand('').pkg).toBeUndefined();
+  });
+});
+
+describe('splitCmdTokens（引号感知切分）', () => {
+  it('引号内的空格保留', () => {
+    expect(splitCmdTokens('npx pkg install --dir "my dir"')).toEqual(['npx', 'pkg', 'install', '--dir', 'my dir']);
+    expect(splitCmdTokens("npx pkg install --dir 'a b'")).toEqual(['npx', 'pkg', 'install', '--dir', 'a b']);
   });
 });
 

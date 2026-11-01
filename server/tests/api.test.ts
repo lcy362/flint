@@ -259,16 +259,19 @@ describe('仓库与来源', () => {
     await call('DELETE', '/repos/extra');
   });
 
-  it('SSE：/sources/npx 流式安装（桩安装器）——start / log / done 事件齐全', async () => {
+  it('SSE：/sources/npx 流式安装（原始命令 + 桩安装器）——start / log / done 事件齐全', async () => {
     const restore = useNpxStub();
     try {
-      const r = await callStream('POST', '/sources/npx', { pkg: 'impeccable', args: 'install -y' });
+      const r = await callStream('POST', '/sources/npx', { command: 'npx impeccable install -y' });
       expect(r.status).toBe(200);
       const phases = r.events.map((e: any) => e.phase);
       expect(phases[0]).toBe('start');
       expect(phases.at(-1)).toBe('done');
       const done = r.events.at(-1);
       expect(done.ok).toBe(true);
+      // 命令被解析成包名 + 参数，登记时直接落库
+      expect(done.pkg).toBe('impeccable');
+      expect(done.args).toEqual(['install', '-y']);
       // 建议根指向装出技能的目录，登记流程可直接用
       expect(String(done.suggestedRoot)).toContain('.claude');
       // 安装器输出以 log 事件实时到过界面
@@ -279,7 +282,7 @@ describe('仓库与来源', () => {
   it('SSE：/sources/npx 安装失败 → error 事件带可读文案', async () => {
     const restore = useNpxStub();
     try {
-      const r = await callStream('POST', '/sources/npx', { pkg: 'impeccable', args: 'install fail' });
+      const r = await callStream('POST', '/sources/npx', { command: 'npx impeccable install fail' });
       expect(r.status).toBe(200); // 流已开：错误以事件给出，不是 HTTP 错误
       const last = r.events.at(-1);
       expect(last.phase).toBe('error');
@@ -287,8 +290,11 @@ describe('仓库与来源', () => {
     } finally { restore(); }
   });
 
-  it('SSE：/sources/npx 参数不合法走普通 4xx（不开流）', async () => {
-    const bad = await call('POST', '/sources/npx', { pkg: 'Foo' });
+  it('SSE：/sources/npx 命令里认不出包名 / 参数不合法走普通 4xx（不开流）', async () => {
+    const noPkg = await call('POST', '/sources/npx', { command: 'npx' });
+    expect(noPkg.status).toBe(400);
+    expect(typeof noPkg.body.error).toBe('string');
+    const bad = await call('POST', '/sources/npx', { command: 'npx Foo install' });
     expect(bad.status).toBe(400);
     expect(typeof bad.body.error).toBe('string');
   });

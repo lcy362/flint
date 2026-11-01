@@ -160,6 +160,7 @@ export const en = {
   'register.npxPkgEmpty': 'npm package name must not be empty',
   'register.npxPkgInvalid': 'Unsupported npm package name {pkg}: letters, digits and - _ . ~ only; @scope/name and @version are allowed',
   'register.npxArgsInvalid': 'Install arguments must not contain control characters',
+  'register.npxCmdNoPkg': 'Cannot tell the npm package from the command — try: npx <package> <subcommand>',
   'register.npxInstallFailed': 'The npx install command failed',
   'register.npxInstallTimeout': 'The npx install command timed out',
   'api.skillEnabled': 'This skill is currently enabled; disable it first (remove it from the desired set) before deleting',
