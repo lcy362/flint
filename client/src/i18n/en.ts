@@ -200,8 +200,11 @@ export const en = {
   'repo.npxPhase': 'Downloading and installing',
   'repo.gitPhase': 'Cloning / fetching',
   'stream.done': 'Done',
+  'stream.failed': 'Failed',
+  'stream.interrupted': 'Connection interrupted (the server may have restarted, or the network dropped) — the operation was stopped',
   'stream.elapsed': 'Elapsed {s}s',
   'stream.progress': 'Downloading',
+  'stream.installing': 'Installing',
   'repo.layout': 'Layout',
   'repo.layout.auto': 'auto (detect automatically)',
   'repo.layout.nested': 'nested (categorised)',
@@ -228,6 +231,7 @@ export const en = {
   'repo.preview.confirm': 'Confirm registration',
   'repo.preview.count': '{n} skills detected',
   'repo.preview.none': 'No skills detected: make sure the directory exists and contains SKILL.md',
+  'repo.preview.zeroBlocked': '0 skills detected — cannot register (point the path at the directory that holds the skills)',
   'repo.preview.missing': 'Directory does not exist: {root}',
   'repo.preview.id': 'Register ID: {id}',
   'repo.preview.idFromDir': 'No ID given; the directory name {id} will be used',
@@ -235,6 +239,8 @@ export const en = {
   'repo.preview.needId': 'Cannot derive a valid ID from the directory name; enter the ID manually above',
   'repo.idDefaultHint': 'Leave empty to use the directory name (validated on preview)',
   'repo.prefilledHint': 'The directory was filled in by the command and already scanned — nothing is saved until you confirm.',
+  'repo.importSummary': '{pkg} was installed via the npx command (it ran inside the managed directory).',
+  'repo.importEscaped': 'Note: the installer wrote outside the managed directory — {paths}. Flint does not clean these up; remove them on the Agents page or absorb them via "Collect + Takeover".',
 
   /* ---------- collect wizard (library page) ---------- */
   'collect.taken.fully': 'Taken over',

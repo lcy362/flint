@@ -165,6 +165,8 @@ export const zh: Record<MsgKey, string> = {
   'register.npxCmdNoPkg': '无法从命令中识别 npm 包名，请写成：npx <包名> <子命令>',
   'register.npxInstallFailed': 'npx 安装命令执行失败',
   'register.npxInstallTimeout': 'npx 安装命令执行超时',
+  'register.npxInstallIdle': '安装器长时间没有输出，已判定卡住并终止——请检查命令是否需要交互确认，或改用支持非交互执行的参数',
+  'register.zeroSkills': '该目录里没有识别到任何技能（含 SKILL.md 的技能目录），无法登记——请确认路径指向技能所在目录',
   'api.skillEnabled': '该技能正处于启用状态；请先关闭（移除期望）再删除',
   'api.noRepoToCollect': '无仓库可归集',
 };

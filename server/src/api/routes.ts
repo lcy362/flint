@@ -8,9 +8,9 @@ import { log } from '../infra/logger.js';
 import { pickDirectory, pickFile } from '../infra/picker.js';
 import {
   listAgents, agentSkillRows, agentOwnSkillRow, allAgentDefs, findAgentDef, resolveGlobalDir, effectiveAgentKey,
-  setPrimary, pruneAliasStrategies,
+  setPrimary, pruneAliasStrategies, expandTilde,
 } from '../core/agents.js';
-import { scanAll, detectLayoutAbs } from '../core/scanner.js';
+import { scanAll, detectLayoutAbs, scanDir, resolveLayout } from '../core/scanner.js';
 import { previewRegister, idIssue, type RegisterPreviewInput } from '../core/register.js';
 import { cloneSourceRepo, gitUrlIssue } from '../core/source-clone.js';
 import { npxInstall, npxUpdate, npxPkgIssue, normalizeInstaller, parseArgs, parseNpxCommand } from '../core/npx-install.js';
@@ -550,7 +550,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     try {
       const r = await npxInstall({ pkg, args, id, onOutput: emit, onProgress: progress.emit });
       if (!r.ok) {
-        sseSend(res, { phase: 'error', error: r.message, log: r.log });
+        sseSend(res, { phase: 'error', error: r.message, log: r.log, escaped: r.escaped ?? [] });
         return sseEnd(res);
       }
       progress.flush();
@@ -561,7 +561,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     sseEnd(res);
   });
   r.post('/sources', (req, res) => {
-    const body = req.body as ForeignSource;
+    const body = req.body as ForeignSource & { requireSkills?: boolean };
     if (!body.id || !body.path) return res.status(400).json({ error: 'id/path required' });
     // 兜底校验：id 规则与重名检查（仓库 / 来源共用一个 id 命名空间）
     const issue = idIssue(body.id);
@@ -572,8 +572,18 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     // npx 安装来源携带 installer（更新时重跑安装器）；手动 / git 克隆来源无此字段
     const norm = normalizeInstaller(body.installer);
     if (norm.issue) return res.status(400).json({ error: norm.issue });
+    // 导入流程（Git 克隆 / npx 安装）：扫不到技能就不许登记（PRD EK-07 / C19），
+    // 避免留下一个永远空着的来源；手动登记是用户的明确选择，不拦。
+    if (body.requireSkills) {
+      const scanRoot = expandTilde(String(body.path ?? '').trim());
+      const skills = fs.existsSync(scanRoot)
+        ? scanDir(scanRoot, 'preview', resolveLayout(scanRoot, body.layout ?? 'auto'))
+        : [];
+      if (skills.length === 0) return res.status(400).json({ error: t('register.zeroSkills') });
+    }
+    const { requireSkills, ...rest } = body;
     cfg.data.foreignSources.push({
-      ...body,
+      ...rest,
       ...(norm.installer ? { installer: norm.installer } : {}),
       layout: body.layout ?? 'auto',
       linked: body.linked ?? true,

@@ -128,7 +128,12 @@ export async function streamApi<T>(path: string, body: unknown, handlers: Stream
           stage: ev.stage,
         });
       } else if (ev.phase === 'done') return ev as unknown as T;
-      else if (ev.phase === 'error') throw new Error(ev.error ?? 'stream failed');
+      else if (ev.phase === 'error') {
+        // 失败事件也带上下文（如笼外写入清单）——挂在 error 上，调用方可取用
+        const err = new Error(ev.error ?? 'stream failed') as Error & { event?: StreamEvent };
+        err.event = ev;
+        throw err;
+      }
     }
   }
   throw new Error('stream ended unexpectedly');
@@ -219,6 +224,8 @@ export interface NpxInstallResult {
   /** 安装产物里推断出的技能扫描根（如 <staging>/.claude/skills）；装空了缺省 */
   suggestedRoot?: string;
   reused: boolean;
+  /** 安装器写到托管目录之外的路径（本次运行期间被改动的家目录条目）；flint 不自动清理 */
+  escaped?: string[];
   log: string;
   message?: string;
 }

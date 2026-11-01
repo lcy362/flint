@@ -278,6 +278,8 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
   // 「从 npx 命令安装」：安装成功后的目录（预设路径）+ 解析出的安装器信息（登记时落库）
   const [npxOpen, setNpxOpen] = useState(false);
   const [presetInstaller, setPresetInstaller] = useState<{ pkg: string; args: string[] } | null>(null);
+  // npx 安装的上一步摘要（包名 + 笼外写入清单）：带到登记弹窗，别让安装结果凭空消失
+  const [importSummary, setImportSummary] = useState<{ pkg: string; escaped: string[] } | null>(null);
   // npx 来源的「更新」弹窗（打开即一键重跑安装器，SSE 流式展示）
   const [updateTarget, setUpdateTarget] = useState<SourceView | null>(null);
   const [editTarget, setEditTarget] = useState<WarehouseTarget | null>(null);
@@ -476,6 +478,7 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
           setNpxOpen(false);
           setPresetPath(r.path);
           setPresetInstaller({ pkg: r.pkg, args: r.args });
+          setImportSummary({ pkg: r.pkg, escaped: r.escaped ?? [] });
           setCreateOpen(true);
         }}
       />
@@ -490,8 +493,9 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
         target={editTarget}
         presetPath={presetPath ?? undefined}
         presetInstaller={presetInstaller ?? undefined}
-        onClose={() => { setCreateOpen(false); setEditTarget(null); setPresetPath(null); setPresetInstaller(null); }}
-        onDone={() => { setCreateOpen(false); setEditTarget(null); setPresetPath(null); setPresetInstaller(null); reload(); }}
+        importSummary={importSummary ?? undefined}
+        onClose={() => { setCreateOpen(false); setEditTarget(null); setPresetPath(null); setPresetInstaller(null); setImportSummary(null); }}
+        onDone={() => { setCreateOpen(false); setEditTarget(null); setPresetPath(null); setPresetInstaller(null); setImportSummary(null); reload(); }}
       />
       <AddSkillsModal repo={addFor} onClose={() => setAddFor(null)} onDone={() => { setAddFor(null); reload(); }} />
     </>
@@ -927,12 +931,23 @@ function baseNameOf(p: string): string {
   return i >= 0 ? trimmed.slice(i + 1) : trimmed;
 }
 
-function draftFrom(target: WarehouseTarget | null | undefined, presetPath?: string): WarehouseDraft {
+/** npm 包名 → 合法登记 ID（@scope/name → scope-name，与服务端 defaultIdFromPkg 同口径） */
+function idFromPkg(pkg: string): string {
+  const slug = pkg.trim().replace(/@[^@/]+$/, '').replace(/^@/, '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!slug) return '';
+  return /^[A-Za-z0-9]/.test(slug) ? slug : `s-${slug}`;
+}
+
+function draftFrom(target: WarehouseTarget | null | undefined, presetPath?: string, pkg?: string): WarehouseDraft {
   // 预填路径时连显示名一起给出（id 仍交给预览按目录名推导，避免前端重复一套命名规则）
   if (!target) {
-    return presetPath
-      ? { ...EMPTY_DRAFT, kind: 'source', path: presetPath, name: baseNameOf(presetPath) }
-      : EMPTY_DRAFT;
+    if (!presetPath) return EMPTY_DRAFT;
+    // npx 安装带入包名：直接用它做 ID 与名称——否则会登记成目录名（如 "skills"），用户还得手改
+    if (pkg) {
+      const id = idFromPkg(pkg);
+      return { ...EMPTY_DRAFT, kind: 'source', path: presetPath, id, name: pkg };
+    }
+    return { ...EMPTY_DRAFT, kind: 'source', path: presetPath, name: baseNameOf(presetPath) };
   }
   if (target.kind === 'source') {
     // npx 安装的来源：把已登记的更新命令带回表单（留空 = 一键重跑安装命令）
@@ -945,6 +960,12 @@ function draftFrom(target: WarehouseTarget | null | undefined, presetPath?: stri
 
 /** 流式执行日志面板：等宽、自动滚到底、只保留最近 N 行（进度行可能很多） */
 const LOG_KEEP = 300;
+
+/**
+ * 流式请求的静默兜底（毫秒）：服务端有 5 分钟无输出看门狗，这里留 1 分钟余量——
+ * 正常情况下服务端的错误事件先到，这个兜底只接「连接被掐」（重启 / 断网）。
+ */
+const STREAM_IDLE_GUARD_MS = 360_000;
 
 function LogPanel({ lines }: Readonly<{ lines: string[] }>) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -976,12 +997,13 @@ function LogPanel({ lines }: Readonly<{ lines: string[] }>) {
 }
 
 /** 执行阶段 + 耗时的一行说明（流式任务进行中展示） */
-function StreamStatus({ busy, elapsed, runningText }: Readonly<{ busy: boolean; elapsed: number; runningText: string }>) {
+function StreamStatus({ status, elapsed, runningText }: Readonly<{ status: 'idle' | 'running' | 'done' | 'failed'; elapsed: number; runningText: string }>) {
   const { t } = useI18n();
-  if (!busy && elapsed === 0) return null;
+  if (status === 'idle') return null;
+  const label = status === 'running' ? runningText : status === 'failed' ? t('stream.failed') : t('stream.done');
   return (
-    <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
-      {busy ? runningText : t('stream.done')} · {t('stream.elapsed', { s: elapsed })}
+    <div style={{ fontSize: 'var(--fs-12)', color: status === 'failed' ? 'var(--c-bad)' : 'var(--c-ink-3)' }}>
+      {label} · {t('stream.elapsed', { s: elapsed })}
     </div>
   );
 }
@@ -1007,12 +1029,14 @@ function ProgressBar({ progress }: Readonly<{ progress: StreamProgress | undefin
   if (!progress) return null;
   const { percent, received, total, stage } = progress;
   const determinate = typeof percent === 'number' && Number.isFinite(percent);
-  const sizeText = received !== undefined
+  const sizeText = received !== undefined && received > 0
     ? `${fmtBytes(received)}${total !== undefined && total > 0 ? ` / ${fmtBytes(total)}` : ''}`
     : undefined;
   const label = determinate ? `${Math.round(percent)}%` : sizeText;
-  // git 的阶段名（Receiving objects 等）是技术术语，原样展示；npm 侧统一叫「正在下载」
-  const stageText = stage && stage !== 'download' ? stage : t('stream.progress');
+  // git 的阶段名（Receiving objects 等）是技术术语，原样展示；npm 侧区分「下载中 / 安装中」
+  const stageText = stage === 'install'
+    ? t('stream.installing')
+    : stage && stage !== 'download' ? stage : t('stream.progress');
   if (!label && !stageText) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
@@ -1036,31 +1060,46 @@ function ProgressBar({ progress }: Readonly<{ progress: StreamProgress | undefin
  * 每个调用方（导入 / 安装 / 更新弹窗）各持一份实例，互不干扰。
  */
 function useStreamRunner() {
+  const { t } = useI18n();
   const [lines, setLines] = useState<string[]>([]);
   const [progress, setProgress] = useState<StreamProgress | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
   const [elapsed, setElapsed] = useState(0);
+  const busy = status === 'running';
   const timer = useRef<number | null>(null);
   useEffect(() => () => { if (timer.current !== null) window.clearInterval(timer.current); }, []);
   const exec = useCallback(async <T,>(path: string, body: unknown): Promise<T> => {
     setLines([]);
     setProgress(undefined);
     setElapsed(0);
-    setBusy(true);
+    setStatus('running');
     const started = Date.now();
     timer.current = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    // 兜底：长时间收不到任何事件（服务端重启 / 连接被掐）就中断，避免界面永远停在「进行中」
+    const ctrl = new AbortController();
+    let lastEvent = Date.now();
+    const guard = window.setInterval(() => {
+      if (Date.now() - lastEvent > STREAM_IDLE_GUARD_MS) ctrl.abort();
+    }, 15_000);
     try {
-      return await streamApi<T>(path, body, {
-        onLog: (line) => setLines((prev) => [...prev, line].slice(-LOG_KEEP)),
-        onProgress: (p) => setProgress(p),
+      const out = await streamApi<T>(path, body, {
+        onLog: (line) => { lastEvent = Date.now(); setLines((prev) => [...prev, line].slice(-LOG_KEEP)); },
+        onProgress: (p) => { lastEvent = Date.now(); setProgress(p); },
+        signal: ctrl.signal,
       });
+      setStatus('done');
+      return out;
+    } catch (e) {
+      setStatus('failed');
+      if (ctrl.signal.aborted) throw new Error(t('stream.interrupted'));
+      throw e;
     } finally {
+      window.clearInterval(guard);
       if (timer.current !== null) window.clearInterval(timer.current);
       timer.current = null;
-      setBusy(false);
     }
-  }, []);
-  return { exec, lines, progress, busy, elapsed };
+  }, [t]);
+  return { exec, lines, progress, status, busy, elapsed };
 }
 
 /**
@@ -1075,7 +1114,7 @@ function GitImportModal({
 }: Readonly<{ open: boolean; onClose: () => void; onPulled: (path: string) => void }>) {
   const { t } = useI18n();
   const toast = useToast();
-  const { exec, lines, progress, busy, elapsed } = useStreamRunner();
+  const { exec, lines, progress, status, busy, elapsed } = useStreamRunner();
   const [url, setUrl] = useState('');
   const [wasOpen, setWasOpen] = useState(false);
   if (open !== wasOpen) { setWasOpen(open); if (open) setUrl(''); }
@@ -1113,7 +1152,7 @@ function GitImportModal({
         />
         {(busy || lines.length > 0 || progress) && (
           <>
-            <StreamStatus busy={busy} elapsed={elapsed} runningText={t('repo.gitPhase')} />
+            <StreamStatus status={status} elapsed={elapsed} runningText={t('repo.gitPhase')} />
             <ProgressBar progress={progress} />
             <LogPanel lines={lines} />
           </>
@@ -1151,11 +1190,11 @@ function NpxImportModal({
 }: Readonly<{
   open: boolean;
   onClose: () => void;
-  onInstalled: (r: { path: string; pkg: string; args: string[] }) => void;
+  onInstalled: (r: { path: string; pkg: string; args: string[]; escaped?: string[] }) => void;
 }>) {
   const { t } = useI18n();
   const toast = useToast();
-  const { exec, lines, progress, busy, elapsed } = useStreamRunner();
+  const { exec, lines, progress, status, busy, elapsed } = useStreamRunner();
   const [cmd, setCmd] = useState('');
   const [wasOpen, setWasOpen] = useState(false);
   if (open !== wasOpen) { setWasOpen(open); if (open) setCmd(''); }
@@ -1175,9 +1214,12 @@ function NpxImportModal({
     try {
       const r = await exec<NpxInstallResult>('/sources/npx', { command: cmd.trim() });
       toast.push(t('repo.npxImportDone', { path: r.suggestedRoot ?? r.path }), 'good');
-      onInstalled({ path: r.suggestedRoot ?? r.path, pkg: r.pkg, args: r.args });
+      onInstalled({ path: r.suggestedRoot ?? r.path, pkg: r.pkg, args: r.args, escaped: r.escaped });
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
+      // 失败也可能写了笼子之外（如安装器半途而废）——照样告知
+      const escaped = (e as Error & { event?: { escaped?: string[] } }).event?.escaped ?? [];
+      if (escaped.length > 0) toast.push(t('repo.importEscaped', { paths: escaped.join('、') }), 'bad');
     }
   };
 
@@ -1225,7 +1267,7 @@ function NpxImportModal({
         </div>
         {(busy || lines.length > 0 || progress) && (
           <>
-            <StreamStatus busy={busy} elapsed={elapsed} runningText={t('repo.npxPhase')} />
+            <StreamStatus status={status} elapsed={elapsed} runningText={t('repo.npxPhase')} />
             <ProgressBar progress={progress} />
             <LogPanel lines={lines} />
           </>
@@ -1253,7 +1295,7 @@ function NpxUpdateModal({
 }>) {
   const { t } = useI18n();
   const toast = useToast();
-  const { exec, lines, progress, busy, elapsed } = useStreamRunner();
+  const { exec, lines, progress, status, busy, elapsed } = useStreamRunner();
   const started = useRef(false);
 
   useEffect(() => {
@@ -1262,10 +1304,13 @@ function NpxUpdateModal({
     started.current = true;
     void (async () => {
       try {
-        const out = await exec<{ ok: boolean; updated: boolean; diff?: string }>(
+        const out = await exec<{ ok: boolean; updated: boolean; diff?: string; escaped?: string[] }>(
           `/repos/${encodeURIComponent(source.id)}/npx-update`,
           {},
         );
+        if ((out.escaped ?? []).length > 0) {
+          toast.push(t('repo.importEscaped', { paths: (out.escaped ?? []).join('、') }), 'bad');
+        }
         if (out.updated) {
           // git diff --stat 的末行是汇总（N files changed, ...），放进 toast 即可
           const summary = out.diff ? out.diff.split('\n').filter(Boolean).pop() : undefined;
@@ -1292,7 +1337,7 @@ function NpxUpdateModal({
         <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', lineHeight: 1.7 }}>
           {t('repo.npxUpdateAuto', { pkg: source?.installer?.pkg ?? '' })}
         </div>
-        <StreamStatus busy={busy} elapsed={elapsed} runningText={t('repo.npxPhase')} />
+        <StreamStatus status={status} elapsed={elapsed} runningText={t('repo.npxPhase')} />
         <ProgressBar progress={progress} />
         <LogPanel lines={lines} />
       </div>
@@ -1321,6 +1366,7 @@ function WarehouseModal({
   target,
   presetPath,
   presetInstaller,
+  importSummary,
   onClose,
   onDone,
 }: Readonly<{
@@ -1328,6 +1374,7 @@ function WarehouseModal({
   target?: WarehouseTarget | null;
   presetPath?: string;
   presetInstaller?: { pkg: string; args: string[] };
+  importSummary?: { pkg: string; escaped: string[] };
   onClose: () => void;
   onDone: () => void;
 }>) {
@@ -1344,7 +1391,7 @@ function WarehouseModal({
   // 每次打开时载入目标值（新建则重置），避免残留上一次的输入
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) { setD(draftFrom(target, presetPath)); setPreview(null); }
+    if (open) { setD(draftFrom(target, presetPath, presetInstaller?.pkg)); setPreview(null); }
   }
 
   // 表单一有改动，旧预览即失效，须重新预览
@@ -1388,8 +1435,8 @@ function WarehouseModal({
     if (editing || !presetPath) return;
     if (autoPreviewed.current === presetPath) return;
     autoPreviewed.current = presetPath;
-    void runPreview(draftFrom(null, presetPath));
-  }, [open, editing, presetPath]);
+    void runPreview(draftFrom(null, presetPath, presetInstaller?.pkg));
+  }, [open, editing, presetPath, presetInstaller?.pkg]);
 
   const switchKind = (k: 'repo' | 'source') => {
     if (k === d.kind) return;
@@ -1440,6 +1487,8 @@ function WarehouseModal({
           const body: Record<string, unknown> = { id, name, path, layout: d.layout };
           // npx 安装流程带入的安装器信息：登记即落库，之后该来源的「更新」重跑安装命令
           if (presetInstaller) body.installer = { kind: 'npx', pkg: presetInstaller.pkg, args: presetInstaller.args };
+          // 导入流程：服务端据此拒绝「扫不到技能」的登记（手动登记不拦）
+          if (importFlow) body.requireSkills = true;
           await api('/sources', { method: 'POST', body: JSON.stringify(body) });
         }
       }
@@ -1454,8 +1503,12 @@ function WarehouseModal({
     }
   };
 
-  // 登记阻塞：id 不合法或重名时必须先解决；编辑不受预览约束
-  const previewBlocked = !editing && !!preview && (!!preview.idIssue || !!preview.idTaken);
+  // 导入流程（Git 克隆 / npx 安装带路径进来）：扫不到技能就不许登记（PRD EK-07）；
+  // 手动登记是用户的明确选择，允许先登记后补内容。
+  const importFlow = !editing && !!presetPath;
+  // 登记阻塞：id 不合法 / 重名 /（导入流程）扫不到技能时必须先解决；编辑不受预览约束
+  const previewBlocked = !editing && !!preview
+    && (!!preview.idIssue || !!preview.idTaken || (importFlow && preview.skillCount === 0));
 
   const kindLabel = (k: 'repo' | 'source') => (k === 'repo' ? t('repo.kind.own') : t('repo.kind.third'));
 
@@ -1496,6 +1549,28 @@ function WarehouseModal({
         {!editing && presetPath && (
           <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', lineHeight: 1.6 }}>
             {t('repo.prefilledHint')}
+          </div>
+        )}
+        {/* 上一步（npx 安装）的结果摘要：装了什么、有没有写到笼子之外 */}
+        {!editing && importSummary && (
+          <div
+            style={{
+              border: '1px solid var(--c-line)',
+              borderRadius: 'var(--rd-md)',
+              padding: 'var(--sp-3)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--sp-2)',
+              fontSize: 'var(--fs-12)',
+              lineHeight: 1.7,
+            }}
+          >
+            <div>{t('repo.importSummary', { pkg: importSummary.pkg })}</div>
+            {importSummary.escaped.length > 0 && (
+              <div style={{ color: 'var(--c-warn)' }}>
+                {t('repo.importEscaped', { paths: importSummary.escaped.join('、') })}
+              </div>
+            )}
           </div>
         )}
         <div>
@@ -1595,6 +1670,9 @@ function WarehouseModal({
             </div>
             {preview.exists && preview.skillCount === 0 && (
               <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{t('repo.preview.none')}</div>
+            )}
+            {preview.exists && preview.skillCount === 0 && importFlow && (
+              <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-bad)' }}>{t('repo.preview.zeroBlocked')}</div>
             )}
             {preview.skills.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: 180, overflowY: 'auto' }}>

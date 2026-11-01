@@ -298,13 +298,13 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | POST | `/repos/detect` | 探测目录布局 |
 | POST | `/repos/preview` | 登记预览（只扫描不落库） |
 | POST | `/sources/clone` | 「从 Git 仓库导入」：按 Git 地址克隆代码到托管目录（`<flint 数据目录>/sources/<仓库名>`）。**SSE 流式**：`start / log / progress / done / error` 事件，log 实时转发 clone / fetch 输出，progress 给真实下载百分比（clone / fetch 强制 `--progress`，否则非 TTY 下 git 全静默）；done 带本地路径供随后走登记流程 |
-| POST | `/sources/npx` | 「从 npx 命令安装」：用户粘一条**原始安装命令**（如 `npx impeccable skills install`），服务端解析出包名与参数后，在托管目录 `<flint 数据目录>/sources/<id>` 内执行 `npx --yes <pkg> <args>`（笼子 + 非交互 env + git 快照）。**SSE 流式**：done 带落地路径、解析出的 pkg / args 与推断出的技能扫描根，供随后走登记流程；`installer` 信息随登记落库（EK-07）。命令解析不出包名 / 参数不合法发生在开流前，走普通 4xx |
+| POST | `/sources/npx` | 「从 npx 命令安装」：用户粘一条**原始安装命令**（如 `npx impeccable skills install`），服务端解析出包名与参数后，在托管目录 `<flint 数据目录>/sources/<id>` 内执行 `npx --yes <pkg> <args>`（笼子 + 非交互 env + git 快照）。**SSE 流式**：done 带落地路径、解析出的 pkg / args、推断出的技能扫描根与 `escaped`（安装器写到的笼外位置，C21），供随后走登记流程；`installer` 信息随登记落库（EK-07）。命令解析不出包名 / 参数不合法发生在开流前，走普通 4xx |
 | POST | `/repos/:id/npx-update` | npx 来源更新（EK-07）：**SSE 流式**在托管目录重跑安装器（`updateArgs` 优先，否则重跑安装命令），done 带 `updated`（产物是否有变化）与 `diff`（git --stat）。与 `/repos/:id/sync`（git pull，JSON 契约不变）分工 |
 | POST | `/repos/:id/tags-migrate` | 标签迁移到 frontmatter |
 | GET | `/repos/:id/collect/preview` | 归集预览 |
 | POST | `/repos/:id/collect` | 归集 |
 | POST | `/repos/:id/takeover` | 接管 |
-| GET / POST | `/sources` | 列出 / 登记第三方仓库 |
+| GET / POST | `/sources` | 列出 / 登记第三方仓库。导入流程（Git 克隆 / npx 安装）带 `requireSkills: true` 时，扫不到技能直接 400（EK-07 / C22） |
 | PUT / DELETE | `/sources/:id` | 编辑（可切类型）/ 删除 |
 
 **Agent / 活跃**
@@ -432,8 +432,10 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 - **C14 标签落在生态共识位置**：优先 `SKILL.md` frontmatter 顶层 `tags`（社区 40+ 工具原生读取、随 git 版本化）；本工具对暂未回写的标签以 `skillMeta` 暂存并提供迁移。
 - **C15 多布局宽容读取**：外部源支持 flat / nested / 带索引清单；**自有仓库恒为扁平**（只认根下的 `SKILL.md`，分类子目录里的技能由诊断报出、不静默丢弃）。发现一律**以 `SKILL.md` 存在为准**，不以目录深度为准；单 skill 仓库（根自身含 `SKILL.md`，如 patent-disclosure-skill）整体识别为一个 skill，`skills/` 下的子技能不单独列出。
-- **C19 npx 安装器笼子（EK-07）**：第三方包的安装命令只在托管目录 `<flint 数据目录>/sources/<id>` 内执行——cwd 隔离 + 非交互 env（`CI` / `GIT_TERMINAL_PROMPT` / `npm_config_yes`）+ 异步 spawn 带超时（禁 `spawnSync`、禁 shell 拼接、argv 传参）+ 目录自动 `git init`（安装 / 更新前后各存快照提交，可 diff 可回滚；同时保证「从 cwd 向上探测项目根」的安装器收敛在笼内）。**用户只填一条原始命令**（`npx impeccable skills install`）：服务端解析出包名与参数（引号感知切分，`npx` 前缀与 `--yes` 可省），不要求用户拆成「包名 + 参数」两栏。flint 不认识任何具体包：跑什么、落下什么、登记什么，全凭用户给的命令与安装后的扫描结果；预览 0 技能即拒绝登记。安装器绕过笼子写入真实 Agent 目录时**不自动清理**（只动自己的，C13 的自动边界在此同样适用），出路是手动删除或归集 + 接管收编。npx 来源的更新 = 在笼内重跑安装命令（`installer.updateArgs` 优先，否则重跑安装命令），不走 git pull。**长任务一律 SSE 流式**（`/sources/clone`、`/sources/npx`、`/repos/:id/npx-update`）：子进程输出按 `\r` / `\n` 规整成行、限长 + 120ms 合流限流后以 `start / log / progress / done / error` 事件实时下发，前端日志面板自动滚底、只留最近 300 行；参数校验错误发生在开流之前，仍走普通 JSON + 4xx。
-- **C20 下载进度只报真实值**：进度事件的字段是 `percent`（0–100，有确切百分比才给）/ `received`（已传输字节）/ `total` / `stage`。git 侧强制 `--progress`（stderr 非 TTY 时 git 默认全静默），从 `Receiving objects: 45% (…/…, 1.20/2.70 MiB)` 解析真实百分比与字节；npm 在非 TTY 下不渲染进度条，改用 npx 缓存目录（`<npm 缓存>/_npx`）的实际增长量作为「已下载多少」的真实指标。**拿不到百分比就不给百分比**——前端此时画不定进度条 + 体积文本，绝不用估算值或动画冒充真实比例。
+- **C19 npx 安装器笼子（EK-07）**：第三方包的安装命令只在托管目录 `<flint 数据目录>/sources/<id>` 内执行——cwd 隔离 + 非交互 env（`CI` / `GIT_TERMINAL_PROMPT` / `npm_config_yes`）+ 异步 spawn 带超时（禁 `spawnSync`、禁 shell 拼接、argv 传参）+ 目录自动 `git init`（安装 / 更新前后各存快照提交，可 diff 可回滚；同时保证「从 cwd 向上探测项目根」的安装器收敛在笼内）。**用户只填一条原始命令**（`npx impeccable skills install`）：服务端解析出包名与参数（引号感知切分，`npx` 前缀与 `--yes` 可省），不要求用户拆成「包名 + 参数」两栏。flint 不认识任何具体包：跑什么、落下什么、登记什么，全凭用户给的命令与安装后的扫描结果；预览 0 技能即拒绝登记（C22）。安装器绕过笼子写入真实 Agent 目录时**不自动清理**（只动自己的，C13 的自动边界在此同样适用），但会**如实告知**（C21），出路是手动删除或归集 + 接管收编。安装超时 10 分钟（首次全新安装要下载包 + 给各 harness 装技能，实测可超过 5 分钟），另有 5 分钟「无输出看门狗」：安装器长时间不出声（实测 impeccable 打印完 `Detected harnesses` 后会静默卡住）就提前收场并说明原因；失败时清掉本次新建笼子里的半成品（已有来源的目录不动）。前端配套一条静默兜底（6 分钟无事件即中断），防止服务端重启 / 断网后界面永远停在「进行中」。npx 来源的更新 = 在笼内重跑安装命令（`installer.updateArgs` 优先，否则重跑安装命令），不走 git pull。**长任务一律 SSE 流式**（`/sources/clone`、`/sources/npx`、`/repos/:id/npx-update`）：子进程输出按 `\r` / `\n` 规整成行、限长 + 120ms 合流限流后以 `start / log / progress / done / error` 事件实时下发，前端日志面板自动滚底、只留最近 300 行；参数校验错误发生在开流之前，仍走普通 JSON + 4xx。
+- **C20 下载进度只报真实值**：进度事件的字段是 `percent`（0–100，有确切百分比才给）/ `received`（已传输字节）/ `total` / `stage`。git 侧强制 `--progress`（stderr 非 TTY 时 git 默认全静默），从 `Receiving objects: 45% (…/…, 1.20/2.70 MiB)` 解析真实百分比与字节；npm 在非 TTY 下不渲染进度条，改用 npx 缓存目录（`<npm 缓存>/_npx`）的实际增长量作为「已下载多少」的真实指标。**拿不到百分比就不给百分比**——前端此时画不定进度条 + 体积文本，绝不用估算值或动画冒充真实比例。缓存体积连续两次不变即判定下载结束，阶段切到「正在安装」，避免进度条停在某个数字上让人以为卡死。
+- **C21 笼外写入如实告知**：笼子只约束 cwd，安装器仍能通过 HOME 探测到用户的真实 Agent 目录并写入（实测 impeccable 会写 `~/.claude/agents`、`~/.grok/skills`、`~/.config/opencode/skills`）。flint **只报不改**：安装结束后取「安装器输出里声明过的家目录位置」∩「本次运行期间确实被改动的路径」，把交集作为 `escaped` 随结果返回，登记弹窗直接列出（要求两个信号同时成立，避免把用户同时在跑的 IDE 写自己的配置目录误报成安装器越界）。清理仍走人工：Agent 页手动删除，或「归集 + 接管」收编。
+- **C22 导入流程禁 0 技能**：Git 克隆 / npx 安装带来的登记（前端带 `requireSkills`）若扫不到技能 → 前端禁用「确认登记」+ 后端 400 兜底，避免留下永远空着的来源；手动登记是用户的明确选择，不拦（可以先登记后补内容）。
 
 ### 边界类
 

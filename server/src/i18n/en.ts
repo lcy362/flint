@@ -163,6 +163,8 @@ export const en = {
   'register.npxCmdNoPkg': 'Cannot tell the npm package from the command — try: npx <package> <subcommand>',
   'register.npxInstallFailed': 'The npx install command failed',
   'register.npxInstallTimeout': 'The npx install command timed out',
+  'register.npxInstallIdle': 'The installer produced no output for a long time and was treated as stuck and terminated — check whether the command needs interactive confirmation, or use flags that support non-interactive execution',
+  'register.zeroSkills': 'No skills found in that directory (a skill directory contains SKILL.md) — cannot register; check that the path points at the skills',
   'api.skillEnabled': 'This skill is currently enabled; disable it first (remove it from the desired set) before deleting',
   'api.noRepoToCollect': 'No repository to collect into',
 } as const;

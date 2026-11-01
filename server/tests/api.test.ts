@@ -259,6 +259,20 @@ describe('仓库与来源', () => {
     await call('DELETE', '/repos/extra');
   });
 
+  it('POST /sources 拒绝 0 技能的目录（导入流程；PRD EK-07：预览 0 技能即拒绝登记）', async () => {
+    const empty = path.join(ctx.base, 'empty-source');
+    fs.mkdirSync(empty, { recursive: true });
+    const res = await call('POST', '/sources', { id: 'empty-src', path: empty, requireSkills: true });
+    expect(res.status).toBe(400);
+    expect(typeof res.body.error).toBe('string');
+    // 不落库
+    expect((await call('GET', '/sources')).body.map((s: any) => s.id)).not.toContain('empty-src');
+    // 手动登记（未带 requireSkills）是用户的明确选择，允许先登记后补内容
+    const manual = await call('POST', '/sources', { id: 'empty-src', path: empty });
+    expect(manual.status).toBe(200);
+    await call('DELETE', '/sources/empty-src');
+  });
+
   it('SSE：/sources/npx 流式安装（原始命令 + 桩安装器）——start / log / done 事件齐全', async () => {
     const restore = useNpxStub();
     try {

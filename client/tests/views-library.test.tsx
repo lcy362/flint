@@ -8,9 +8,10 @@ import { I18nProvider } from '../src/i18n';
 import { navigate } from '../src/state/router';
 import type { StateView } from '../src/api/types';
 
-const { apiMock } = vi.hoisted(() => ({ apiMock: vi.fn() }));
+const { apiMock, streamMock } = vi.hoisted(() => ({ apiMock: vi.fn(), streamMock: vi.fn() }));
 vi.mock('../src/api/types', () => ({
   api: apiMock,
+  streamApi: streamMock,
   assertApiPath: (p: string) => p,
 }));
 
@@ -200,6 +201,35 @@ describe('Library 技能库', () => {
     await userEvent.click(confirm);
     await waitFor(() => expect(screen.getByText(/Own repository team registered/)).toBeTruthy());
     expect(apiMock.mock.calls.some((c) => c[0] === '/repos' && c[1]?.method === 'POST')).toBe(true);
+  });
+
+  it('npx 导入 → 登记：ID 预填包名、告警展示笼外写入、0 技能时禁止登记', async () => {
+    baseRoutes({
+      'POST /repos/preview': () => ({
+        id: 'impeccable', idFromDir: false, idTaken: false, exists: true, scanRoot: '/tmp/imp/.grok/skills',
+        layout: 'flat', skillCount: 0, skills: [],
+      }),
+      'POST /sources': () => [],
+    });
+    streamMock.mockResolvedValue({
+      ok: true, pkg: 'impeccable', args: ['skills', 'install'], path: '/tmp/imp/.grok/skills',
+      suggestedRoot: undefined, reused: false, escaped: ['~/.claude/agents'], log: '',
+    });
+    render(wrap(<Library />));
+    await waitFor(() => expect(screen.getByText('My Repo')).toBeTruthy());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Install from npx command' }));
+    await userEvent.type(await screen.findByPlaceholderText('npx impeccable skills install'), 'npx impeccable skills install');
+    await userEvent.click(screen.getByRole('button', { name: 'Install' }));
+
+    // 登记弹窗：ID / 名称用包名（不是目录名 "skills"）——两处都是 impeccable
+    await waitFor(() => expect(screen.getAllByDisplayValue('impeccable').length).toBe(2));
+    // 上一步摘要 + 笼外写入告警都摊开给用户
+    await waitFor(() => expect(screen.getByText(/impeccable was installed via the npx command/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/wrote outside the managed directory/)).toBeTruthy());
+    // 0 技能 → 禁止登记（确认按钮禁用）
+    await waitFor(() => expect(screen.getByText(/cannot register/)).toBeTruthy());
+    expect(await screen.findByRole('button', { name: 'Confirm registration' })).toBeDisabled();
   });
 
   it('命令直达：addSource 参数带入目录、自动预览待确认，并清掉地址参数', async () => {

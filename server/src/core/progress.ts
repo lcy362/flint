@@ -114,10 +114,16 @@ export function npxCacheRoot(): string {
 /**
  * 盯住 npx 缓存增长：npm 在非 TTY 下不渲染进度条，但解包出来的体积在涨——
  * 拿它当「已下载多少」的真实指标（只统计本次开始后新建 / 改动过的缓存目录）。
+ *
+ * 阶段语义：
+ * - `download`：体积在涨 → 「正在下载 X MB」；
+ * - `install`：体积连续两次不变 → 下载结束，转入安装阶段（「正在安装」）。
  * 返回停止函数。
  */
 export function watchNpxDownload(startedAt: number, onProgress: (p: ProgressInfo) => void, intervalMs = 400): () => void {
   let last = -1;
+  let stable = 0;
+  let installing = false;
   const tick = () => {
     const root = npxCacheRoot();
     let entries: fs.Dirent[];
@@ -133,7 +139,19 @@ export function watchNpxDownload(startedAt: number, onProgress: (p: ProgressInfo
     }
     if (total > last) {
       last = total;
-      onProgress({ received: total, stage: 'download' });
+      stable = 0;
+      installing = false;
+      // 还没下载到东西时不报 0 字节——「0 B」是噪声，不是进度
+      if (total > 0) onProgress({ received: total, stage: 'download' });
+      return;
+    }
+    // 体积不再增长：下载多半结束了，转入安装阶段（避免进度条停住让人以为卡死）
+    if (!installing && total > 0) {
+      stable += 1;
+      if (stable >= 2) {
+        installing = true;
+        onProgress({ received: total, stage: 'install' });
+      }
     }
   };
   const timer = setInterval(tick, intervalMs);

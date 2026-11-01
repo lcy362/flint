@@ -7,6 +7,7 @@ import { sourcesDir } from './source-clone.js';
 import { gitRun } from './git.js';
 import { idIssue } from './register.js';
 import { watchNpxDownload, type ProgressInfo } from './progress.js';
+import { detectEscapedWrites, parseDeclaredHomePaths } from './cage.js';
 import { log } from '../infra/logger.js';
 import { t } from '../i18n/index.js';
 
@@ -19,13 +20,34 @@ import { t } from '../i18n/index.js';
  * - argv 数组传参、shell:false，杜绝选项注入与 shell 元字符；
  * - cwd 一律收敛在托管目录（`<flint 数据目录>/sources/<id>`），安装器只能写到这里；
  * - 非交互 env（CI / GIT_TERMINAL_PROMPT / npm_config_yes）防止挂起；
- * - detached + 超时杀进程组，npx 首次要下载包，超时给足 5 分钟；
+ * - detached + 超时杀进程组，npx 首次要下载包，超时给足 10 分钟；
  * - 托管目录自动 git init：每次安装 / 更新前后各存一个快照提交，用户可 diff / 回滚，
  *   同时保证「从 cwd 向上探测项目根」的安装器（如 impeccable --project）收敛在笼子内。
  */
 
-/** npx 超时：首次运行要下载包（含 engine 二进制），给足 5 分钟 */
-export const NPX_TIMEOUT_MS = 300_000;
+/**
+ * npx 超时：首次运行要下载包（含 engine 二进制），再慢的安装器还要给多个 harness 装技能，
+ * 实测全新安装可到 5 分钟以上——给足 10 分钟，别把正常安装判死。
+ */
+export const NPX_TIMEOUT_MS = 600_000;
+
+/**
+ * 看门狗：安装器连续这么久没有任何输出，就判定它卡住了（实测 impeccable 打印完
+ * 「Detected harnesses」后会长时间静默）。早收场 + 说清原因，好过干等总超时。
+ */
+export const NPX_IDLE_MS = 300_000;
+
+/** 失败清理半成品：把「本次新建的笼子」清空，只留一个空目录（重试时从干净状态开始） */
+function cleanupPartialInstall(dir: string): void {
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (name === '.git') continue; // 保留快照历史，便于事后回看
+      fs.rmSync(path.join(dir, name), { recursive: true, force: true });
+    }
+  } catch {
+    /* 清理失败不影响主流程：笼子里的残留由诊断页报出 */
+  }
+}
 
 /** 子进程输出最多回传的字符数（尾部，错误信息通常在末尾） */
 const LOG_TAIL = 8000;
@@ -150,8 +172,12 @@ export interface NpxRunResult {
   /** 进程退出码（超时 / 启动失败为 null） */
   code: number | null;
   timedOut: boolean;
+  /** 长时间无输出被看门狗掐断（安装器卡住） */
+  idleTimedOut: boolean;
   /** 输出尾部（stdout + stderr 合并，截断到 LOG_TAIL） */
   log: string;
+  /** 安装器输出里声明要写入的家目录位置（如 ~/.claude）——用于判定越界写入 */
+  declared?: string[];
 }
 
 /** 在指定目录里执行 `npx --yes <pkg> <args...>`；异步、带超时、超时杀进程组。
@@ -165,6 +191,7 @@ export function runNpx(
   timeoutMs = NPX_TIMEOUT_MS,
   onOutput?: (chunk: string) => void,
   onProgress?: (p: ProgressInfo) => void,
+  idleMs = NPX_IDLE_MS,
 ): Promise<NpxRunResult> {
   return new Promise((resolve) => {
     const child = spawn(npxBin(), ['--yes', pkg, ...args], {
@@ -176,24 +203,50 @@ export function runNpx(
     let out = '';
     let done = false;
     let timedOut = false;
+    let idleTimedOut = false;
     // 下载进度：盯 npx 缓存目录体积增长（npm 自己不给百分比）
     const stopWatch = onProgress ? watchNpxDownload(Date.now(), onProgress) : undefined;
+    const kill = () => {
+      try { if (child.pid) process.kill(-child.pid, 'SIGKILL'); } catch { /* 组不存在则忽略 */ }
+      try { child.kill('SIGKILL'); } catch { /* ignore */ }
+    };
     const finish = (code: number | null) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
+      if (idleTimer) clearTimeout(idleTimer);
       stopWatch?.();
       const tail = out.length > LOG_TAIL ? `…${out.slice(-LOG_TAIL)}` : out;
-      resolve({ ok: code === 0, code, timedOut, log: tail.trim() });
+      // 安装器声明要写的位置：对**完整输出**解析——分块到达时路径可能被切断，
+      // 逐块解析会漏（实测 ~/.claude 被切成两半就丢了）。
+      const parseInput = out.length > 200_000 ? out.slice(-200_000) : out;
+      resolve({ ok: code === 0, code, timedOut, idleTimedOut, log: tail.trim(), declared: parseDeclaredHomePaths(parseInput) });
     };
     const timer = setTimeout(() => {
       timedOut = true;
-      try { if (child.pid) process.kill(-child.pid, 'SIGKILL'); } catch { /* 组不存在则忽略 */ }
-      try { child.kill('SIGKILL'); } catch { /* ignore */ }
+      kill();
       finish(null); // 不等 close，立即返回
     }, timeoutMs);
-    child.stdout.on('data', (d) => { out += d; onOutput?.(String(d)); });
-    child.stderr.on('data', (d) => { out += d; onOutput?.(String(d)); });
+    // 看门狗：安装器长时间不出声（卡在下载 / 等待交互）就提前收场，
+    // 而不是让用户对着一个不动的界面等到总超时。
+    let idleTimer: NodeJS.Timeout | null = null;
+    const armIdle = () => {
+      if (!idleMs) return;
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        idleTimedOut = true;
+        kill();
+        finish(null);
+      }, idleMs);
+    };
+    const onData = (d: Buffer) => {
+      out += d;
+      armIdle();
+      onOutput?.(String(d));
+    };
+    child.stdout.on('data', onData);
+    child.stderr.on('data', onData);
+    armIdle();
     child.on('error', (e) => { out += `\n${String(e)}`; finish(null); });
     child.on('close', (code) => finish(code));
   });
@@ -308,6 +361,11 @@ export interface NpxInstallResult {
   suggestedRoot?: string;
   /** 本次是否在已存在的托管目录上重跑（false = 全新目录） */
   reused: boolean;
+  /**
+   * 安装器写到笼子之外的路径（本次运行期间被改动的家目录条目）。
+   * flint 不自动清理（C13），只如实告知用户；为空表示没有越界写入。
+   */
+  escaped?: string[];
   log: string;
   message?: string;
 }
@@ -324,22 +382,29 @@ export async function npxInstall(input: NpxInstallInput): Promise<NpxInstallResu
   const idProblem = idIssue(id);
   if (idProblem) return { ok: false, pkg: input.pkg, args, path: '', reused: false, log: '', message: idProblem };
   const dir = input.dir ?? stagingDirFor(id);
-  const reused = fs.existsSync(dir) && fs.readdirSync(dir).length > 0;
+  const reused = fs.existsSync(dir) && fs.readdirSync(dir).some((n) => n !== '.git');
 
   await ensureStagingGit(dir);
   await gitCommitAll(dir, 'flint: baseline before npx install');
   log.info('npx-install', 'Running npx install', { pkg: input.pkg, args, dir });
 
+  const startedAt = Date.now();
   const r = await runNpx(input.pkg, args, dir, NPX_TIMEOUT_MS, input.onOutput, input.onProgress);
+  // 笼外写入检测：安装器可能通过 HOME 探测到真实 Agent 目录并写入（C19 的已知边界）
+  const escaped = detectEscapedWrites(startedAt, dir, r.declared ?? []);
   if (!r.ok) {
-    const message = r.timedOut ? t('register.npxInstallTimeout') : t('register.npxInstallFailed');
-    log.info('npx-install', 'npx install failed', { pkg: input.pkg, dir, code: r.code, timedOut: r.timedOut });
-    return { ok: false, pkg: input.pkg, args, path: dir, reused, log: r.log, message };
+    const message = r.timedOut
+      ? t('register.npxInstallTimeout')
+      : r.idleTimedOut ? t('register.npxInstallIdle') : t('register.npxInstallFailed');
+    // 失败清理半成品：只在本次新建的笼子上清（已有来源的目录不动，避免毁掉用户已装好的内容）
+    if (!reused) cleanupPartialInstall(dir);
+    log.info('npx-install', 'npx install failed', { pkg: input.pkg, dir, code: r.code, timedOut: r.timedOut, escaped: escaped.length });
+    return { ok: false, pkg: input.pkg, args, path: dir, reused, escaped, log: r.log, message };
   }
   await gitCommitAll(dir, `flint: npx install ${input.pkg}`);
   const suggestedRoot = suggestScanRoot(dir);
-  log.info('npx-install', 'npx install done', { pkg: input.pkg, dir, suggestedRoot });
-  return { ok: true, pkg: input.pkg, args, path: dir, suggestedRoot, reused, log: r.log };
+  log.info('npx-install', 'npx install done', { pkg: input.pkg, dir, suggestedRoot, escaped: escaped.length });
+  return { ok: true, pkg: input.pkg, args, path: dir, suggestedRoot, reused, escaped, log: r.log };
 }
 
 export interface NpxUpdateInput {
@@ -362,6 +427,8 @@ export interface NpxUpdateResult {
   usedArgs: string[];
   /** 改动统计（git diff --stat）；无改动为空串 */
   diff: string;
+  /** 安装器写到笼子之外的路径（本次运行期间被改动的家目录条目） */
+  escaped?: string[];
   log: string;
   message?: string;
 }
@@ -423,14 +490,18 @@ export async function npxUpdate(input: NpxUpdateInput): Promise<NpxUpdateResult>
   await gitCommitAll(input.dir, 'flint: snapshot before npx update');
   log.info('npx-install', 'Running npx update', { pkg: input.pkg, args: usedArgs, dir: input.dir });
 
+  const startedAt = Date.now();
   const r = await runNpx(input.pkg, usedArgs, input.dir, NPX_TIMEOUT_MS, input.onOutput, input.onProgress);
+  const escaped = detectEscapedWrites(startedAt, input.dir, r.declared ?? []);
   if (!r.ok) {
-    const message = r.timedOut ? t('register.npxInstallTimeout') : t('register.npxInstallFailed');
-    log.info('npx-install', 'npx update failed', { pkg: input.pkg, dir: input.dir, code: r.code, timedOut: r.timedOut });
-    return { ok: false, updated: false, usedArgs, diff: '', log: r.log, message };
+    const message = r.timedOut
+      ? t('register.npxInstallTimeout')
+      : r.idleTimedOut ? t('register.npxInstallIdle') : t('register.npxInstallFailed');
+    log.info('npx-install', 'npx update failed', { pkg: input.pkg, dir: input.dir, code: r.code, timedOut: r.timedOut, escaped: escaped.length });
+    return { ok: false, updated: false, usedArgs, diff: '', escaped, log: r.log, message };
   }
   const diff = await gitDiffStatStaged(input.dir);
   const updated = diff.length > 0;
-  log.info('npx-install', 'npx update done', { pkg: input.pkg, dir: input.dir, updated });
-  return { ok: true, updated, usedArgs, diff, log: r.log };
+  log.info('npx-install', 'npx update done', { pkg: input.pkg, dir: input.dir, updated, escaped: escaped.length });
+  return { ok: true, updated, usedArgs, diff, escaped, log: r.log };
 }

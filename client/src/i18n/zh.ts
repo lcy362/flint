@@ -194,8 +194,11 @@ export const zh: Record<MsgKey, string> = {
   'repo.npxPhase': '下载与安装中',
   'repo.gitPhase': '正在拉取代码',
   'stream.done': '已完成',
+  'stream.failed': '已失败',
+  'stream.interrupted': '连接中断（服务端可能重启或网络中断），已停止本次操作',
   'stream.elapsed': '已用时 {s}s',
   'stream.progress': '正在下载',
+  'stream.installing': '正在安装',
   'repo.layout': '布局',
   'repo.layout.auto': 'auto（自动检测）',
   'repo.layout.nested': 'nested（嵌套分类）',
@@ -222,6 +225,7 @@ export const zh: Record<MsgKey, string> = {
   'repo.preview.confirm': '确认登记',
   'repo.preview.count': '识别到 {n} 个技能',
   'repo.preview.none': '未识别到任何技能：请确认目录存在且含 SKILL.md',
+  'repo.preview.zeroBlocked': '识别到 0 个技能，不能登记（请改指技能所在目录后再试）',
   'repo.preview.missing': '目录不存在：{root}',
   'repo.preview.id': '登记标识：{id}',
   'repo.preview.idFromDir': '未填标识，将使用目录名 {id}',
@@ -229,6 +233,8 @@ export const zh: Record<MsgKey, string> = {
   'repo.preview.needId': '无法从目录名推导合法标识，请在上方手动填写标识 ID',
   'repo.idDefaultHint': '留空则使用目录名（预览时校验）',
   'repo.prefilledHint': '目录已按命令带入并完成识别（待确认）：核对无误后点「确认登记」才会落库。',
+  'repo.importSummary': '已通过 npx 命令安装 {pkg}（命令在托管目录内执行）。',
+  'repo.importEscaped': '注意：安装器写到了托管目录之外——{paths}。flint 不会自动清理这些位置，请在 Agent 页手动删除，或用「归集 + 接管」收编。',
 
   /* ---------- collect wizard (library page) ---------- */
   'collect.taken.fully': '已接管',
