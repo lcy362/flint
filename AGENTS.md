@@ -89,7 +89,7 @@ docs/releases/      # 各版本 release notes（GitHub Release 正文来源）
 - **只读尊重**：第三方只读来源、Agent 自带技能、外部软链都不擅自改写 / 删除。
 - **npx 安装器关进笼子**：第三方包的安装命令只在 flint 托管目录（`<flint 数据目录>/sources/<id>`，自动 git init 做快照）内执行——cwd 隔离、非交互 env、异步带超时；flint 不认识具体包，装没装进来以登记预览为准（0 个技能即拒登记）。安装器若绕过笼子写入真实 Agent 目录，flint 不自动清理，出路是 Agent 页手动删除或「归集 + 接管」收编。
 
-> 完整约定见 `docs/TECH.md` §13（C1–C18、F1–F4）。
+> 完整约定见 `docs/TECH.md` §13（C1–C22、F1–F4）；**已知未修问题**见 `docs/TECH.md` §15。
 
 ## 6. 代码与文案约定
 
