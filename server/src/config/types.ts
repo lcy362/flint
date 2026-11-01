@@ -35,6 +35,11 @@ export interface ForeignSource {
   layout: Layout;
   /** true=只读关联（不拷贝本体）；false=已收编（拷贝进仓库） */
   linked: boolean;
+  /**
+   * npx 安装器信息：「从 npx 命令安装」登记的来源携带（git 克隆 / 手动登记的来源无此字段）。
+   * 更新时按 updateArgs ?? args 在托管目录里重跑安装器，而不是 git pull。
+   */
+  installer?: { kind: 'npx'; pkg: string; args: string[]; updateArgs?: string[]; at?: string };
 }
 
 /** 自定义 Agent（AG-03）：内置清单之外由用户新增的任意工具 */

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type GitCloneResult } from '../api/types';
+import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type GitCloneResult, type NpxInstallResult } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
 import SkillDistributeModal from '../components/skill/SkillDistributeModal';
@@ -275,6 +275,9 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
   // 「从 Git 仓库导入」拉取到的目录：作为新建第三方仓库的预设路径，交给登记流程
   const [gitOpen, setGitOpen] = useState(false);
   const [presetPath, setPresetPath] = useState<string | null>(null);
+  // 「从 npx 命令安装」：安装成功后的目录（预设路径）+ 安装器信息（登记时落库）
+  const [npxOpen, setNpxOpen] = useState(false);
+  const [presetInstaller, setPresetInstaller] = useState<{ pkg: string; args: string } | null>(null);
   const [editTarget, setEditTarget] = useState<WarehouseTarget | null>(null);
 
   /**
@@ -321,13 +324,26 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
     } finally { setChecking(null); }
   };
 
-  // 仓库同步：git pull 后重拉状态与目录列表
+  // 仓库同步：git pull 后重拉状态与目录列表。
+  // npx 安装的来源（foreignSources.installer）由后端重跑安装器，updated = 产物有变化。
   const [syncing, setSyncing] = useState<string | null>(null);
   const syncRepo = async (id: string) => {
     setSyncing(id);
     try {
-      const out = await api<{ updated: boolean }>(`/repos/${encodeURIComponent(id)}/sync`, { method: 'POST' });
-      toast.push(out.updated ? t('repo.synced') : t('repo.alreadyUpToDate'), out.updated ? 'good' : 'info');
+      const out = await api<{ updated: boolean; diff?: string }>(`/repos/${encodeURIComponent(id)}/sync`, { method: 'POST' });
+      const npx = sources.find((s) => s.id === id)?.installer?.kind === 'npx';
+      if (npx) {
+        if (out.updated) {
+          // git diff --stat 的末行是汇总（N files changed, ...），放进 toast 即可
+          const summary = out.diff ? out.diff.split('\n').filter(Boolean).pop() : undefined;
+          toast.push(summary ? t('repo.npxUpdatedDiff', { summary }) : t('repo.npxUpdated'), 'good');
+          toast.push(t('repo.npxCopyHint'), 'info');
+        } else {
+          toast.push(t('repo.npxNoChange'), 'info');
+        }
+      } else {
+        toast.push(out.updated ? t('repo.synced') : t('repo.alreadyUpToDate'), out.updated ? 'good' : 'info');
+      }
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
     } finally {
@@ -395,6 +411,8 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
     }),
     ...sources.map((s) => {
       const st = repoStatus[s.id];
+      // npx 安装的来源：无 git remote，走「重跑安装器」的更新（一键，可配专用更新命令）
+      const npx = s.installer?.kind === 'npx';
       return {
         id: `source:${s.id}`,
         title: s.name || s.id,
@@ -408,11 +426,21 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
         badges: (
           <>
             {st?.behind != null && st.behind > 0 && <Badge tone="warn" title={t('repo.remoteHint')}>{t('repo.hasUpdates')}</Badge>}
+            {npx && (
+              <Badge tone="accent" title={t('repo.npxBadgeTitle', { pkg: s.installer?.pkg ?? '', args: (s.installer?.args ?? []).join(' ') })}>
+                {t('repo.npxBadge')}
+              </Badge>
+            )}
             <Badge tone="neutral">{s.layout}</Badge>
           </>
         ),
         actions: (
           <>
+            {npx && (
+              <Button size="sm" variant="ghost" loading={syncing === s.id} onClick={() => syncRepo(s.id)} title={t('repo.npxUpdateHint')}>
+                {t('repo.npxUpdate')}
+              </Button>
+            )}
             {st?.remote && (
               <>
                 <Button size="sm" variant="ghost" loading={checking === s.id} onClick={() => checkUpdates(s.id)} title={t('repo.checkHint')}>
@@ -439,6 +467,7 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
         toolbar={
           <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
             <Button size="sm" variant="ghost" onClick={() => setGitOpen(true)}>{t('repo.gitImport')}</Button>
+            <Button size="sm" variant="ghost" onClick={() => setNpxOpen(true)}>{t('repo.npxImport')}</Button>
             <Button size="sm" variant="ghost" onClick={() => setCreateOpen(true)}>{t('repo.register')}</Button>
           </div>
         }
@@ -450,12 +479,23 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
         onClose={() => setGitOpen(false)}
         onPulled={(path) => { setGitOpen(false); setPresetPath(path); setCreateOpen(true); }}
       />
+      <NpxImportModal
+        open={npxOpen}
+        onClose={() => setNpxOpen(false)}
+        onInstalled={(r) => {
+          setNpxOpen(false);
+          setPresetPath(r.path);
+          setPresetInstaller({ pkg: r.pkg, args: r.args });
+          setCreateOpen(true);
+        }}
+      />
       <WarehouseModal
         open={createOpen || !!editTarget}
         target={editTarget}
         presetPath={presetPath ?? undefined}
-        onClose={() => { setCreateOpen(false); setEditTarget(null); setPresetPath(null); }}
-        onDone={() => { setCreateOpen(false); setEditTarget(null); setPresetPath(null); reload(); }}
+        presetInstaller={presetInstaller ?? undefined}
+        onClose={() => { setCreateOpen(false); setEditTarget(null); setPresetPath(null); setPresetInstaller(null); }}
+        onDone={() => { setCreateOpen(false); setEditTarget(null); setPresetPath(null); setPresetInstaller(null); reload(); }}
       />
       <AddSkillsModal repo={addFor} onClose={() => setAddFor(null)} onDone={() => { setAddFor(null); reload(); }} />
     </>
@@ -865,9 +905,11 @@ interface WarehouseDraft {
   path: string;
   layout: string;
   root: string;
+  /** npx 来源的专用更新命令（空格分隔）；仅编辑 npx 安装的来源时使用 */
+  updateArgs: string;
 }
 
-const EMPTY_DRAFT: WarehouseDraft = { kind: 'repo', id: '', name: '', path: '', layout: 'auto', root: '' };
+const EMPTY_DRAFT: WarehouseDraft = { kind: 'repo', id: '', name: '', path: '', layout: 'auto', root: '', updateArgs: '' };
 
 /** 自有仓库缺省扫描 <路径>/skills */
 function skillsRootOf(p: string): string {
@@ -897,10 +939,12 @@ function draftFrom(target: WarehouseTarget | null | undefined, presetPath?: stri
       : EMPTY_DRAFT;
   }
   if (target.kind === 'source') {
-    return { kind: 'source', id: target.id, name: target.name ?? '', path: target.path, layout: target.layout, root: '' };
+    // npx 安装的来源：把已登记的更新命令带回表单（留空 = 一键重跑安装命令）
+    const updateArgs = target.installer?.kind === 'npx' ? (target.installer.updateArgs ?? []).join(' ') : '';
+    return { kind: 'source', id: target.id, name: target.name ?? '', path: target.path, layout: target.layout, root: '', updateArgs };
   }
   // 自有仓库没有布局可配，草稿里的 layout 只服务于第三方来源分支
-  return { kind: 'repo', id: target.id, name: target.name ?? '', path: target.path, layout: 'auto', root: target.root ?? '' };
+  return { kind: 'repo', id: target.id, name: target.name ?? '', path: target.path, layout: 'auto', root: target.root ?? '', updateArgs: '' };
 }
 
 /**
@@ -955,6 +999,101 @@ function GitImportModal({
 }
 
 /**
+ * 从 npx 命令安装：在 flint 托管目录里跑第三方包的安装命令（笼子 + 非交互 env + git 快照），
+ * 成功后把安装目录（优先用推断出的技能扫描根）交给既有登记流程。此步不改 config。
+ *
+ * 弹窗固定展示三段说明（规范要求 / 不满足的后果 / 执行后如何验证）——安装器行为不可控，
+ * 用户必须在执行前知道失败形态与验证方式。
+ */
+function NpxImportModal({
+  open,
+  onClose,
+  onInstalled,
+}: Readonly<{
+  open: boolean;
+  onClose: () => void;
+  onInstalled: (r: { path: string; pkg: string; args: string }) => void;
+}>) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const [pkg, setPkg] = useState('');
+  const [args, setArgs] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [wasOpen, setWasOpen] = useState(false);
+  if (open !== wasOpen) { setWasOpen(open); if (open) { setPkg(''); setArgs(''); } }
+
+  const specLine = (title: string, body: string) => (
+    <div style={{ fontSize: 'var(--fs-12)', lineHeight: 1.7 }}>
+      <span style={{ fontWeight: 600 }}>{title}</span>
+      <span style={{ color: 'var(--c-ink-3)' }}> {body}</span>
+    </div>
+  );
+
+  const run = async () => {
+    if (!pkg.trim()) return;
+    setBusy(true);
+    try {
+      const r = await api<NpxInstallResult>('/sources/npx', {
+        method: 'POST',
+        body: JSON.stringify({ pkg: pkg.trim(), args }),
+      });
+      toast.push(t('repo.npxImportDone', { path: r.suggestedRoot ?? r.path }), 'good');
+      onInstalled({ path: r.suggestedRoot ?? r.path, pkg: pkg.trim(), args });
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : String(e), 'bad');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      open={open}
+      title={t('repo.npxImportTitle')}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={busy} disabled={!pkg.trim()} onClick={run}>{t('repo.npxImportRun')}</Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+        <FieldInput
+          label={t('repo.npxImportPkg')}
+          placeholder={t('repo.npxImportPkgPlaceholder')}
+          value={pkg}
+          onChange={(e) => setPkg(e.target.value)}
+        />
+        <FieldInput
+          label={t('repo.npxImportArgs')}
+          placeholder={t('repo.npxImportArgsPlaceholder')}
+          hint={t('repo.npxImportArgsHint')}
+          value={args}
+          onChange={(e) => setArgs(e.target.value)}
+        />
+        {/* 执行前的规范 / 风险 / 验证说明 */}
+        <div
+          style={{
+            border: '1px solid var(--c-line)',
+            borderRadius: 'var(--rd-md)',
+            padding: 'var(--sp-3)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--sp-2)',
+          }}
+        >
+          <div style={{ fontWeight: 600 }}>{t('repo.npxSpecTitle')}</div>
+          {specLine('①', t('repo.npxSpecReq'))}
+          {specLine('②', t('repo.npxSpecRisk'))}
+          {specLine('③', t('repo.npxSpecVerify'))}
+          <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{t('repo.npxTestedNote')}</div>
+        </div>
+        {busy && <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{t('repo.npxImportRunning')}</div>}
+      </div>
+    </Modal>
+  );
+}
+
+/**
  * 登记 / 编辑仓库（自有与第三方共用一套表单）。
  *
  * 编辑既有仓库时可切换「自有 / 第三方」定位。两类仓库的扫描根不同
@@ -963,19 +1102,25 @@ function GitImportModal({
  * - 自有 → 第三方：把当前扫描根写进路径（root 的语义被吸收）
  * - 第三方 → 自有：把当前路径同时记为 root，显式声明扫描根就是该目录
  *
- * presetPath：新建第三方仓库时预填的路径（来自「从 Git 仓库导入」拉取到的目录），
- * 拉取后直接落到这套登记流程里，用户只需确认布局并在预览后登记。
+ * presetPath：新建第三方仓库时预填的路径（来自「从 Git 仓库导入」拉取到的目录、
+ * 或「从 npx 命令安装」推断出的技能扫描根），拉取后直接落到这套登记流程里，
+ * 用户只需确认布局并在预览后登记。
+ *
+ * presetInstaller：npx 安装来源的安装器信息——登记落库时一并写入，
+ * 之后该来源的「更新」= 在托管目录重跑安装命令（可配专用更新命令）。
  */
 function WarehouseModal({
   open,
   target,
   presetPath,
+  presetInstaller,
   onClose,
   onDone,
 }: Readonly<{
   open: boolean;
   target?: WarehouseTarget | null;
   presetPath?: string;
+  presetInstaller?: { pkg: string; args: string };
   onClose: () => void;
   onDone: () => void;
 }>) {
@@ -1072,12 +1217,23 @@ function WarehouseModal({
         const name = d.name.trim() || id;
         const path = d.path.trim();
         if (editing) {
-          await api(`/sources/${encodeURIComponent(id)}`, {
-            method: 'PUT',
-            body: JSON.stringify({ name, path, layout: d.layout, root: d.root.trim() || undefined, kind: 'source' }),
-          });
+          const body: Record<string, unknown> = { name, path, layout: d.layout, root: d.root.trim() || undefined, kind: 'source' };
+          // npx 安装的来源：更新命令可改（留空 = 一键重跑安装命令）；普通来源不碰 installer
+          const inst = target?.kind === 'source' ? target.installer : undefined;
+          if (inst?.kind === 'npx') {
+            body.installer = {
+              kind: 'npx',
+              pkg: inst.pkg,
+              args: inst.args,
+              updateArgs: d.updateArgs.trim() ? d.updateArgs.trim().split(/\s+/) : undefined,
+            };
+          }
+          await api(`/sources/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) });
         } else {
-          await api('/sources', { method: 'POST', body: JSON.stringify({ id, name, path, layout: d.layout }) });
+          const body: Record<string, unknown> = { id, name, path, layout: d.layout };
+          // npx 安装流程带入的安装器信息：登记即落库，之后该来源的「更新」重跑安装命令
+          if (presetInstaller) body.installer = { kind: 'npx', pkg: presetInstaller.pkg, args: presetInstaller.args };
+          await api('/sources', { method: 'POST', body: JSON.stringify(body) });
         }
       }
       const registeredKey = d.kind === 'repo' ? 'repo.registered.own' : 'repo.registered.third';
@@ -1190,6 +1346,17 @@ function WarehouseModal({
             placeholder="skills"
             value={d.root}
             onChange={(e) => set('root', e.target.value)}
+          />
+        )}
+
+        {/* npx 安装的来源：可配一条专用更新命令；留空 = 更新时一键重跑安装命令 */}
+        {editing && target?.kind === 'source' && target.installer?.kind === 'npx' && (
+          <FieldInput
+            label={t('repo.npxUpdateArgs')}
+            placeholder={t('repo.npxUpdateArgsPlaceholder')}
+            hint={t('repo.npxUpdateArgsHint')}
+            value={d.updateArgs}
+            onChange={(e) => set('updateArgs', e.target.value)}
           />
         )}
 

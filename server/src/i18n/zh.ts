@@ -159,6 +159,11 @@ export const zh: Record<MsgKey, string> = {
   'register.gitUrlInvalid': '不支持的 Git 地址 {url}：请使用 https://、ssh://、git://、file:// 或 user@host:path',
   'register.gitCloneFailed': '拉取 Git 仓库失败',
   'register.gitCloneTimeout': '拉取 Git 仓库超时',
+  'register.npxPkgEmpty': 'npm 包名不能为空',
+  'register.npxPkgInvalid': '不支持的 npm 包名 {pkg}：仅允许字母、数字与 - _ . ~，支持 @scope/name 与 @version',
+  'register.npxArgsInvalid': '安装参数不允许包含控制字符',
+  'register.npxInstallFailed': 'npx 安装命令执行失败',
+  'register.npxInstallTimeout': 'npx 安装命令执行超时',
   'api.skillEnabled': '该技能正处于启用状态；请先关闭（移除期望）再删除',
   'api.noRepoToCollect': '无仓库可归集',
 };

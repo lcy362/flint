@@ -157,6 +157,11 @@ export const en = {
   'register.gitUrlInvalid': 'Unsupported Git URL {url}: use https://, ssh://, git://, file:// or user@host:path',
   'register.gitCloneFailed': 'Failed to clone the Git repository',
   'register.gitCloneTimeout': 'Cloning the Git repository timed out',
+  'register.npxPkgEmpty': 'npm package name must not be empty',
+  'register.npxPkgInvalid': 'Unsupported npm package name {pkg}: letters, digits and - _ . ~ only; @scope/name and @version are allowed',
+  'register.npxArgsInvalid': 'Install arguments must not contain control characters',
+  'register.npxInstallFailed': 'The npx install command failed',
+  'register.npxInstallTimeout': 'The npx install command timed out',
   'api.skillEnabled': 'This skill is currently enabled; disable it first (remove it from the desired set) before deleting',
   'api.noRepoToCollect': 'No repository to collect into',
 } as const;

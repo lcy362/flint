@@ -108,9 +108,21 @@ export interface StateView {
 /** 自有仓库；id 参与 skill 标识（name@id）不可变，name 仅作显示、缺省回落 id */
 export interface RepoView { id: string; name?: string; path: string; root?: string }
 /** 第三方仓库 */
-export interface SourceView { id: string; name: string; path: string; layout: string; linked: boolean }
+export interface SourceView { id: string; name: string; path: string; layout: string; linked: boolean; installer?: SourceInstaller }
+/** npx 安装来源的安装器信息：更新时在托管目录重跑安装命令（updateArgs 优先） */
+export interface SourceInstaller { kind: 'npx'; pkg: string; args: string[]; updateArgs?: string[]; at?: string }
 /** 从 Git 仓库导入：拉取代码到托管目录后，用返回的 path 走既有登记流程 */
 export interface GitCloneResult { path: string; cloned: boolean }
+/** 从 npx 命令安装：在托管目录执行安装命令后，用 suggestedRoot（缺省 path）走既有登记流程 */
+export interface NpxInstallResult {
+  ok: boolean;
+  path: string;
+  /** 安装产物里推断出的技能扫描根（如 <staging>/.claude/skills）；装空了缺省 */
+  suggestedRoot?: string;
+  reused: boolean;
+  log: string;
+  message?: string;
+}
 
 /* ---------- 统一技能展示契约（三处上下文共用） ---------- */
 export type SkillReason = 'own' | 'preset' | 'manual' | 'external' | 'shared';

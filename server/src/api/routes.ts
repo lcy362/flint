@@ -13,6 +13,7 @@ import {
 import { scanAll, detectLayoutAbs } from '../core/scanner.js';
 import { previewRegister, idIssue, type RegisterPreviewInput } from '../core/register.js';
 import { cloneSourceRepo, gitUrlIssue } from '../core/source-clone.js';
+import { npxInstall, npxUpdate, npxPkgIssue, normalizeInstaller } from '../core/npx-install.js';
 import * as presets from '../core/presets.js';
 import * as active from '../core/active.js';
 import { syncActive, diffSync, deployOne, copySkill } from '../core/sync.js';
@@ -326,11 +327,24 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (!st) return res.status(404).json({ error: 'repo has no git remote' });
     res.json(st);
   });
-  // F4·仓库级同步：直接 git pull（自有/第三方均可），成功后触发 resync 让变更生效
+  // F4·仓库级同步：直接 git pull（自有/第三方均可），成功后触发 resync 让变更生效。
+  // npx 安装的来源（ForeignSource.installer）不走 pull——在托管目录里重跑安装器
+  // （updateArgs 优先，否则重跑安装命令 = 一键更新）。
   r.post('/repos/:id/sync', async (req, res) => {
     const target = cfg.data.repos.find((x) => x.id === req.params.id)
       ?? cfg.data.foreignSources.find((x) => x.id === req.params.id);
     if (!target) return res.status(404).json({ error: 'repo not found' });
+    const installer = 'installer' in target ? target.installer : undefined;
+    if (installer?.kind === 'npx') {
+      const out = await npxUpdate({ dir: target.path, pkg: installer.pkg, args: installer.args, updateArgs: installer.updateArgs });
+      if (!out.ok) return res.status(500).json({ error: out.message || t('register.npxInstallFailed'), log: out.log });
+      if (out.updated) {
+        installer.at = new Date().toISOString();
+        cfg.save();
+      }
+      touch();
+      return res.json(out);
+    }
     const out = await pullRepo(target.path);
     if (!out.ok) return res.status(500).json({ error: out.message || 'pull failed' });
     touch();
@@ -459,6 +473,21 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     try { res.json(await cloneSourceRepo(url)); }
     catch (e) { res.status(500).json({ error: (e as Error).message }); }
   });
+  // 从 npx 命令安装：在托管目录里跑第三方包的安装命令（笼子 + 非交互 env + 快照），
+  // 成功后把目录（含建议的技能扫描根）交给既有登记流程。此步不改 config。
+  r.post('/sources/npx', async (req, res) => {
+    const body = (req.body ?? {}) as { pkg?: unknown; args?: unknown; id?: unknown };
+    const pkg = typeof body.pkg === 'string' ? body.pkg.trim() : '';
+    const issue = npxPkgIssue(pkg);
+    if (issue) return res.status(400).json({ error: issue });
+    const id = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
+    if (id && idIssue(id)) return res.status(400).json({ error: idIssue(id) });
+    try {
+      const r = await npxInstall({ pkg, args: body.args as string | string[] | undefined, id });
+      if (!r.ok) return res.status(500).json({ error: r.message, log: r.log });
+      res.json(r);
+    } catch (e) { res.status(500).json({ error: (e as Error).message }); }
+  });
   r.post('/sources', (req, res) => {
     const body = req.body as ForeignSource;
     if (!body.id || !body.path) return res.status(400).json({ error: 'id/path required' });
@@ -468,8 +497,12 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (cfg.data.repos.some((x) => x.id === body.id) || cfg.data.foreignSources.some((x) => x.id === body.id)) {
       return res.status(409).json({ error: t('api.repoExists', { id: body.id }) });
     }
+    // npx 安装来源携带 installer（更新时重跑安装器）；手动 / git 克隆来源无此字段
+    const norm = normalizeInstaller(body.installer);
+    if (norm.issue) return res.status(400).json({ error: norm.issue });
     cfg.data.foreignSources.push({
       ...body,
+      ...(norm.installer ? { installer: norm.installer } : {}),
       layout: body.layout ?? 'auto',
       linked: body.linked ?? true,
     });
@@ -485,14 +518,26 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   });
   // 编辑第三方仓库：改名称 / 路径 / 布局 / 只读关联；kind='repo' 时转为自有仓库
   // （此时 root 由调用方给出，用于维持原扫描根不变）。
+  // installer：npx 来源的安装器信息——更新命令可改（留空 = 重跑安装命令的一键更新），
+  // 显式传 null 表示清除（退化为普通目录来源）。
   r.put('/sources/:id', (req, res) => {
     const src = cfg.data.foreignSources.find((x) => x.id === req.params.id);
     if (!src) return res.status(404).json({ error: 'source not found' });
-    const { name, path: p, layout, linked, kind, root } = req.body ?? {};
+    const { name, path: p, layout, linked, kind, root, installer } = req.body ?? {};
     if (name !== undefined) src.name = name || src.id;
     if (p) src.path = p;
     if (layout) src.layout = layout;
     if (linked !== undefined) src.linked = linked === true;
+
+    if ('installer' in (req.body ?? {})) {
+      if (installer === null) {
+        delete src.installer;
+      } else {
+        const norm = normalizeInstaller(installer);
+        if (norm.issue) return res.status(400).json({ error: norm.issue });
+        if (norm.installer) src.installer = norm.installer;
+      }
+    }
 
     if (kind === 'repo') {
       cfg.data.foreignSources = cfg.data.foreignSources.filter((x) => x.id !== src.id);
