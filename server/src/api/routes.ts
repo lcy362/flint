@@ -14,7 +14,7 @@ import { scanAll, detectLayoutAbs } from '../core/scanner.js';
 import { previewRegister, idIssue, type RegisterPreviewInput } from '../core/register.js';
 import { cloneSourceRepo, gitUrlIssue } from '../core/source-clone.js';
 import { npxInstall, npxUpdate, npxPkgIssue, normalizeInstaller, parseArgs, parseNpxCommand } from '../core/npx-install.js';
-import { sseHead, sseSend, sseEnd, createLineEmitter } from './sse.js';
+import { sseHead, sseSend, sseEnd, createLineEmitter, createProgressReporter } from './sse.js';
 import * as presets from '../core/presets.js';
 import * as active from '../core/active.js';
 import { syncActive, diffSync, deployOne, copySkill } from '../core/sync.js';
@@ -359,11 +359,19 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
       return res.status(404).json({ error: 'npx source not found' });
     }
     const inst = target.installer;
-    const emit = createLineEmitter(res);
+    const progress = createProgressReporter(res);
+    const emit = createLineEmitter(res, progress.emit);
     sseHead(res);
     sseSend(res, { phase: 'start', pkg: inst.pkg, args: inst.updateArgs?.length ? inst.updateArgs : inst.args });
     try {
-      const out = await npxUpdate({ dir: target.path, pkg: inst.pkg, args: inst.args, updateArgs: inst.updateArgs, onOutput: emit });
+      const out = await npxUpdate({
+        dir: target.path,
+        pkg: inst.pkg,
+        args: inst.args,
+        updateArgs: inst.updateArgs,
+        onOutput: emit,
+        onProgress: progress.emit,
+      });
       if (!out.ok) {
         sseSend(res, { phase: 'error', error: out.message || t('register.npxInstallFailed'), log: out.log });
         return sseEnd(res);
@@ -373,6 +381,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
         cfg.save();
       }
       touch();
+      progress.flush();
       sseSend(res, { phase: 'done', ...out });
     } catch (e) {
       sseSend(res, { phase: 'error', error: (e as Error).message });
@@ -499,11 +508,13 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (!url) return res.status(400).json({ error: 'url required' });
     const issue = gitUrlIssue(url);
     if (issue) return res.status(400).json({ error: issue });
-    const emit = createLineEmitter(res);
+    const progress = createProgressReporter(res);
+    const emit = createLineEmitter(res, progress.emit);
     sseHead(res);
     sseSend(res, { phase: 'start', url });
     try {
       const r = await cloneSourceRepo(url, emit);
+      progress.flush();
       sseSend(res, { phase: 'done', ...r });
     } catch (e) {
       sseSend(res, { phase: 'error', error: (e as Error).message });
@@ -532,15 +543,17 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (issue) return res.status(400).json({ error: issue });
     const id = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
     if (id && idIssue(id)) return res.status(400).json({ error: idIssue(id) });
-    const emit = createLineEmitter(res);
+    const progress = createProgressReporter(res);
+    const emit = createLineEmitter(res, progress.emit);
     sseHead(res);
     sseSend(res, { phase: 'start', pkg, args, command: `npx ${pkg} ${args.join(' ')}`.trim() });
     try {
-      const r = await npxInstall({ pkg, args, id, onOutput: emit });
+      const r = await npxInstall({ pkg, args, id, onOutput: emit, onProgress: progress.emit });
       if (!r.ok) {
         sseSend(res, { phase: 'error', error: r.message, log: r.log });
         return sseEnd(res);
       }
+      progress.flush();
       sseSend(res, { phase: 'done', ...r });
     } catch (e) {
       sseSend(res, { phase: 'error', error: (e as Error).message });

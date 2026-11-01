@@ -201,6 +201,7 @@ export const en = {
   'repo.gitPhase': 'Cloning / fetching',
   'stream.done': 'Done',
   'stream.elapsed': 'Elapsed {s}s',
+  'stream.progress': 'Downloading',
   'repo.layout': 'Layout',
   'repo.layout.auto': 'auto (detect automatically)',
   'repo.layout.nested': 'nested (categorised)',

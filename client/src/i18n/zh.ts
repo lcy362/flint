@@ -195,6 +195,7 @@ export const zh: Record<MsgKey, string> = {
   'repo.gitPhase': '正在拉取代码',
   'stream.done': '已完成',
   'stream.elapsed': '已用时 {s}s',
+  'stream.progress': '正在下载',
   'repo.layout': '布局',
   'repo.layout.auto': 'auto（自动检测）',
   'repo.layout.nested': 'nested（嵌套分类）',

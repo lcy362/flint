@@ -41,12 +41,28 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 /* ---------- SSE 流式请求（耗时操作的实时进度） ---------- */
 
-/** 流式事件：start（开始）/ log（一行输出）/ done（成功，余下字段即结果载荷）/ error（失败） */
+/** 下载进度（诚实口径：有确切百分比才给百分比，npm 侧只给已下载字节） */
+export interface StreamProgress {
+  /** 0–100；拿不到就是 undefined */
+  percent?: number;
+  /** 已传输字节 */
+  received?: number;
+  /** 总字节（拿不到就是 undefined） */
+  total?: number;
+  /** 阶段说明（git 阶段名 / 'download'） */
+  stage?: string;
+}
+
+/** 流式事件：start（开始）/ log（一行输出）/ progress（下载进度）/ done（成功，余下字段即结果载荷）/ error（失败） */
 export interface StreamEvent {
-  phase: 'start' | 'log' | 'done' | 'error';
+  phase: 'start' | 'log' | 'progress' | 'done' | 'error';
   line?: string;
   error?: string;
   log?: string;
+  percent?: number;
+  received?: number;
+  total?: number;
+  stage?: string;
   [key: string]: unknown;
 }
 
@@ -63,6 +79,8 @@ export function splitSseFrames(buffer: string): { frames: string[]; rest: string
 export interface StreamHandlers {
   /** 每来一行输出回调一次（已规整：限长、按 \r / \n 切分） */
   onLog?: (line: string) => void;
+  /** 每来一次下载进度回调一次 */
+  onProgress?: (p: StreamProgress) => void;
   signal?: AbortSignal;
 }
 
@@ -102,7 +120,14 @@ export async function streamApi<T>(path: string, body: unknown, handlers: Stream
       let ev: StreamEvent;
       try { ev = JSON.parse(frame.slice('data: '.length)) as StreamEvent; } catch { continue; }
       if (ev.phase === 'log' && ev.line) handlers.onLog?.(ev.line);
-      else if (ev.phase === 'done') return ev as unknown as T;
+      else if (ev.phase === 'progress') {
+        handlers.onProgress?.({
+          percent: ev.percent,
+          received: ev.received,
+          total: ev.total,
+          stage: ev.stage,
+        });
+      } else if (ev.phase === 'done') return ev as unknown as T;
       else if (ev.phase === 'error') throw new Error(ev.error ?? 'stream failed');
     }
   }

@@ -722,6 +722,37 @@ select.field {
   }
 }
 
+/* ---------- 下载进度条 ---------- */
+/* 有确切百分比时是确定型（宽度 = 百分比）；拿不到百分比时是不定型滑动条，
+   只表达「还在下」，绝不拿动画冒充真实比例 */
+.progress {
+  position: relative;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--c-surface-3);
+  overflow: hidden;
+}
+.progress__bar {
+  height: 100%;
+  width: 0;
+  border-radius: var(--r-full);
+  background: var(--c-accent);
+  transition: width var(--dur-150) var(--ease);
+}
+.progress--indeterminate .progress__bar {
+  width: 35%;
+  transition: none;
+  animation: progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(286%);
+  }
+}
+
 .loading-wrap {
   display: flex;
   flex-direction: column;

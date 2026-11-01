@@ -72,13 +72,14 @@ export async function ensureSourceClone(url: string, id: string, onOutput?: (chu
   const noPrompt = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
   // 已有克隆：复用并顺手 fetch（失败不阻断，沿用本地副本，交由登记后的「检查更新 / 同步」再处理）
   if (fs.existsSync(path.join(dest, '.git'))) {
-    const f = await gitRun(dest, ['fetch', '--quiet'], 30000, noPrompt, onOutput);
+    // --progress：stderr 非 TTY 时 git 默认完全静默，加上它才有 `Receiving objects: 45%` 这类真实进度
+    const f = await gitRun(dest, ['fetch', '--progress'], 30000, noPrompt, onOutput);
     log.info('source-clone', 'Reuse existing clone', { dir: dest, fetched: f.status === 0 });
     return { ok: true, path: dest, cloned: false, message: '' };
   }
   fs.mkdirSync(sourcesDir(), { recursive: true });
   const existedBefore = fs.existsSync(dest);
-  const r = await gitExec(['clone', '--', url, dest], { timeout: 120000, env: noPrompt, onOutput });
+  const r = await gitExec(['clone', '--progress', '--', url, dest], { timeout: 120000, env: noPrompt, onOutput });
   if (r.timedOut || r.status !== 0) {
     // 只清理本次新建的半成品目录；目标本就存在（非空 / 非 git）时不删，交由报错原文提示
     if (!existedBefore) { try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* 半成品清理失败不阻断报错 */ } }

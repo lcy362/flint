@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, streamApi, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type GitCloneResult, type NpxInstallResult } from '../api/types';
+import { api, streamApi, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type GitCloneResult, type NpxInstallResult, type StreamProgress } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
 import SkillDistributeModal from '../components/skill/SkillDistributeModal';
@@ -986,18 +986,65 @@ function StreamStatus({ busy, elapsed, runningText }: Readonly<{ busy: boolean; 
   );
 }
 
+/** 字节 → 人类可读（B / KB / MB / GB） */
+function fmtBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '—';
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+  return `${v.toFixed(1)} ${units[i]}`;
+}
+
 /**
- * 跑一个 SSE 流式任务：聚合日志行、计时，resolve 出 done 载荷。
+ * 下载进度条：两种形态——
+ * - 有确切百分比（git 自带进度）：确定型进度条 + 百分比数字；
+ * - 只有已下载体积（npm 非 TTY 不给百分比）：不定型动画条 + 体积文本，不伪造百分比。
+ */
+function ProgressBar({ progress }: Readonly<{ progress: StreamProgress | undefined }>) {
+  const { t } = useI18n();
+  if (!progress) return null;
+  const { percent, received, total, stage } = progress;
+  const determinate = typeof percent === 'number' && Number.isFinite(percent);
+  const sizeText = received !== undefined
+    ? `${fmtBytes(received)}${total !== undefined && total > 0 ? ` / ${fmtBytes(total)}` : ''}`
+    : undefined;
+  const label = determinate ? `${Math.round(percent)}%` : sizeText;
+  // git 的阶段名（Receiving objects 等）是技术术语，原样展示；npm 侧统一叫「正在下载」
+  const stageText = stage && stage !== 'download' ? stage : t('stream.progress');
+  if (!label && !stageText) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
+      <div
+        className={determinate ? 'progress' : 'progress progress--indeterminate'}
+        role="progressbar"
+        aria-valuenow={determinate ? Math.round(percent) : undefined}
+      >
+        <div className="progress__bar" style={determinate ? { width: `${Math.min(100, Math.max(0, percent))}%` } : undefined} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-2)', fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
+        <span>{stageText}</span>
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 跑一个 SSE 流式任务：聚合日志行、计时、收集下载进度，resolve 出 done 载荷。
  * 每个调用方（导入 / 安装 / 更新弹窗）各持一份实例，互不干扰。
  */
 function useStreamRunner() {
   const [lines, setLines] = useState<string[]>([]);
+  const [progress, setProgress] = useState<StreamProgress | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timer = useRef<number | null>(null);
   useEffect(() => () => { if (timer.current !== null) window.clearInterval(timer.current); }, []);
   const exec = useCallback(async <T,>(path: string, body: unknown): Promise<T> => {
     setLines([]);
+    setProgress(undefined);
     setElapsed(0);
     setBusy(true);
     const started = Date.now();
@@ -1005,6 +1052,7 @@ function useStreamRunner() {
     try {
       return await streamApi<T>(path, body, {
         onLog: (line) => setLines((prev) => [...prev, line].slice(-LOG_KEEP)),
+        onProgress: (p) => setProgress(p),
       });
     } finally {
       if (timer.current !== null) window.clearInterval(timer.current);
@@ -1012,7 +1060,7 @@ function useStreamRunner() {
       setBusy(false);
     }
   }, []);
-  return { exec, lines, busy, elapsed };
+  return { exec, lines, progress, busy, elapsed };
 }
 
 /**
@@ -1027,7 +1075,7 @@ function GitImportModal({
 }: Readonly<{ open: boolean; onClose: () => void; onPulled: (path: string) => void }>) {
   const { t } = useI18n();
   const toast = useToast();
-  const { exec, lines, busy, elapsed } = useStreamRunner();
+  const { exec, lines, progress, busy, elapsed } = useStreamRunner();
   const [url, setUrl] = useState('');
   const [wasOpen, setWasOpen] = useState(false);
   if (open !== wasOpen) { setWasOpen(open); if (open) setUrl(''); }
@@ -1063,9 +1111,10 @@ function GitImportModal({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
-        {(busy || lines.length > 0) && (
+        {(busy || lines.length > 0 || progress) && (
           <>
             <StreamStatus busy={busy} elapsed={elapsed} runningText={t('repo.gitPhase')} />
+            <ProgressBar progress={progress} />
             <LogPanel lines={lines} />
           </>
         )}
@@ -1106,7 +1155,7 @@ function NpxImportModal({
 }>) {
   const { t } = useI18n();
   const toast = useToast();
-  const { exec, lines, busy, elapsed } = useStreamRunner();
+  const { exec, lines, progress, busy, elapsed } = useStreamRunner();
   const [cmd, setCmd] = useState('');
   const [wasOpen, setWasOpen] = useState(false);
   if (open !== wasOpen) { setWasOpen(open); if (open) setCmd(''); }
@@ -1174,9 +1223,10 @@ function NpxImportModal({
           {specLine('③', t('repo.npxSpecVerify'))}
           <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{t('repo.npxTestedNote')}</div>
         </div>
-        {(busy || lines.length > 0) && (
+        {(busy || lines.length > 0 || progress) && (
           <>
             <StreamStatus busy={busy} elapsed={elapsed} runningText={t('repo.npxPhase')} />
+            <ProgressBar progress={progress} />
             <LogPanel lines={lines} />
           </>
         )}
@@ -1203,7 +1253,7 @@ function NpxUpdateModal({
 }>) {
   const { t } = useI18n();
   const toast = useToast();
-  const { exec, lines, busy, elapsed } = useStreamRunner();
+  const { exec, lines, progress, busy, elapsed } = useStreamRunner();
   const started = useRef(false);
 
   useEffect(() => {
@@ -1243,6 +1293,7 @@ function NpxUpdateModal({
           {t('repo.npxUpdateAuto', { pkg: source?.installer?.pkg ?? '' })}
         </div>
         <StreamStatus busy={busy} elapsed={elapsed} runningText={t('repo.npxPhase')} />
+        <ProgressBar progress={progress} />
         <LogPanel lines={lines} />
       </div>
     </Modal>

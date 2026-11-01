@@ -47,8 +47,9 @@ node bin/flint.mjs --no-open    # 按 npm 包的方式启一次（后台驻留�
 server/src/
 ├─ index.ts         # 入口：装配 ConfigStore / Router，resync（供自动化任务按需调用）
 ├─ api/routes.ts    # 全部 REST 路由（唯一 HTTP 出口）
+├─ api/sse.ts       # SSE 流式协议（start / log / progress / done / error）+ 行规整与进度节流
 ├─ config/          # types.ts（数据模型）/ store.ts（加载·迁移·保存）/ defaults.ts
-├─ core/            # 领域逻辑：scan / sync / agents / tags / collect / takeover / projects / diagnose / fix / security / validate ...
+├─ core/            # 领域逻辑：scan / sync / agents / tags / collect / takeover / projects / diagnose / fix / security / validate / progress（下载进度解析） ...
 ├─ rules/           # 安全扫描规则快照（F1）：security/*.yaml → 构建期生成 core/security-rules.generated.ts
 ├─ domain/cards.ts  # 领域行 → 前端展示契约（SkillCardView）
 └─ infra/           # logger / picker / config-store 适配

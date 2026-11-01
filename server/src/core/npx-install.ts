@@ -6,6 +6,7 @@ import { hasSkill } from './skill.js';
 import { sourcesDir } from './source-clone.js';
 import { gitRun } from './git.js';
 import { idIssue } from './register.js';
+import { watchNpxDownload, type ProgressInfo } from './progress.js';
 import { log } from '../infra/logger.js';
 import { t } from '../i18n/index.js';
 
@@ -154,8 +155,17 @@ export interface NpxRunResult {
 }
 
 /** 在指定目录里执行 `npx --yes <pkg> <args...>`；异步、带超时、超时杀进程组。
- *  onOutput：实时转发子进程输出块（供 SSE 进度展示）。 */
-export function runNpx(pkg: string, args: string[], dir: string, timeoutMs = NPX_TIMEOUT_MS, onOutput?: (chunk: string) => void): Promise<NpxRunResult> {
+ *  onOutput：实时转发子进程输出块（供 SSE 进度展示）。
+ *  onProgress：下载进度回调——npm 非 TTY 下不渲染进度条，这里用 npx 缓存目录的
+ *  实际增长量做「已下载多少」的真实指标（不给伪造的百分比）。 */
+export function runNpx(
+  pkg: string,
+  args: string[],
+  dir: string,
+  timeoutMs = NPX_TIMEOUT_MS,
+  onOutput?: (chunk: string) => void,
+  onProgress?: (p: ProgressInfo) => void,
+): Promise<NpxRunResult> {
   return new Promise((resolve) => {
     const child = spawn(npxBin(), ['--yes', pkg, ...args], {
       cwd: dir,
@@ -166,10 +176,13 @@ export function runNpx(pkg: string, args: string[], dir: string, timeoutMs = NPX
     let out = '';
     let done = false;
     let timedOut = false;
+    // 下载进度：盯 npx 缓存目录体积增长（npm 自己不给百分比）
+    const stopWatch = onProgress ? watchNpxDownload(Date.now(), onProgress) : undefined;
     const finish = (code: number | null) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
+      stopWatch?.();
       const tail = out.length > LOG_TAIL ? `…${out.slice(-LOG_TAIL)}` : out;
       resolve({ ok: code === 0, code, timedOut, log: tail.trim() });
     };
@@ -279,6 +292,8 @@ export interface NpxInstallInput {
   dir?: string;
   /** 实时输出回调（供 SSE 进度展示） */
   onOutput?: (chunk: string) => void;
+  /** 下载进度回调（供 SSE 进度条展示） */
+  onProgress?: (p: ProgressInfo) => void;
 }
 
 export interface NpxInstallResult {
@@ -315,7 +330,7 @@ export async function npxInstall(input: NpxInstallInput): Promise<NpxInstallResu
   await gitCommitAll(dir, 'flint: baseline before npx install');
   log.info('npx-install', 'Running npx install', { pkg: input.pkg, args, dir });
 
-  const r = await runNpx(input.pkg, args, dir, NPX_TIMEOUT_MS, input.onOutput);
+  const r = await runNpx(input.pkg, args, dir, NPX_TIMEOUT_MS, input.onOutput, input.onProgress);
   if (!r.ok) {
     const message = r.timedOut ? t('register.npxInstallTimeout') : t('register.npxInstallFailed');
     log.info('npx-install', 'npx install failed', { pkg: input.pkg, dir, code: r.code, timedOut: r.timedOut });
@@ -335,6 +350,8 @@ export interface NpxUpdateInput {
   updateArgs?: string[];
   /** 实时输出回调（供 SSE 进度展示） */
   onOutput?: (chunk: string) => void;
+  /** 下载进度回调（供 SSE 进度条展示） */
+  onProgress?: (p: ProgressInfo) => void;
 }
 
 export interface NpxUpdateResult {
@@ -406,7 +423,7 @@ export async function npxUpdate(input: NpxUpdateInput): Promise<NpxUpdateResult>
   await gitCommitAll(input.dir, 'flint: snapshot before npx update');
   log.info('npx-install', 'Running npx update', { pkg: input.pkg, args: usedArgs, dir: input.dir });
 
-  const r = await runNpx(input.pkg, usedArgs, input.dir, NPX_TIMEOUT_MS, input.onOutput);
+  const r = await runNpx(input.pkg, usedArgs, input.dir, NPX_TIMEOUT_MS, input.onOutput, input.onProgress);
   if (!r.ok) {
     const message = r.timedOut ? t('register.npxInstallTimeout') : t('register.npxInstallFailed');
     log.info('npx-install', 'npx update failed', { pkg: input.pkg, dir: input.dir, code: r.code, timedOut: r.timedOut });

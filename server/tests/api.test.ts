@@ -299,7 +299,7 @@ describe('仓库与来源', () => {
     expect(typeof bad.body.error).toBe('string');
   });
 
-  it('SSE：/sources/clone 流式克隆本地仓库 → done 带 path', async () => {
+  it('SSE：/sources/clone 流式克隆本地仓库 → done 带 path，并带真实下载进度', async () => {
     const v = await gitExec(['--version'], { timeout: 5000 });
     if (v.status !== 0) return;
     const origin = tmpDir('flint-api-origin-');
@@ -312,6 +312,11 @@ describe('仓库与来源', () => {
     expect(r.events[0].phase).toBe('start');
     expect(r.events.at(-1).phase).toBe('done');
     expect(String(r.events.at(-1).path)).toContain('sources');
+    // git 自己的进度行（--progress 强制开启）→ progress 事件带真实百分比
+    const prog = r.events.filter((e: any) => e.phase === 'progress');
+    expect(prog.length).toBeGreaterThan(0);
+    expect(typeof prog.at(-1).percent).toBe('number');
+    expect(prog.at(-1).percent).toBeGreaterThanOrEqual(0);
   });
 
   it('SSE：/repos/:id/npx-update 对未知来源 404；对 npx 来源流式更新', async () => {
