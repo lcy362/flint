@@ -39,6 +39,76 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/* ---------- SSE 流式请求（耗时操作的实时进度） ---------- */
+
+/** 流式事件：start（开始）/ log（一行输出）/ done（成功，余下字段即结果载荷）/ error（失败） */
+export interface StreamEvent {
+  phase: 'start' | 'log' | 'done' | 'error';
+  line?: string;
+  error?: string;
+  log?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 切分 SSE 文本：完整帧（`data: {...}` 开头）与残余半帧。
+ * 纯函数——流式边读边切，单测直接覆盖。
+ */
+export function splitSseFrames(buffer: string): { frames: string[]; rest: string } {
+  const parts = buffer.split('\n\n');
+  const rest = parts.pop() ?? '';
+  return { frames: parts.filter((f) => f.startsWith('data: ')), rest };
+}
+
+export interface StreamHandlers {
+  /** 每来一行输出回调一次（已规整：限长、按 \r / \n 切分） */
+  onLog?: (line: string) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * POST 一个 SSE 流式接口：实时回调 log 行，resolve 出 done 事件的载荷。
+ * error 事件 / 流异常 / 非 2xx 均 reject（参数校验错误发生在开流前，走普通 JSON error）。
+ */
+export async function streamApi<T>(path: string, body: unknown, handlers: StreamHandlers = {}): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`/api${assertApiPath(path)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept-Language': getLang() },
+      body: JSON.stringify(body),
+      signal: handlers.signal,
+    });
+  } catch (e) {
+    log.error('api', `Stream request failed: ${(e as Error).message}`, { path });
+    throw e;
+  }
+  if (!res.ok || !res.body) {
+    const errBody = await res.json().catch(() => ({}));
+    const message = (errBody as any)?.error ?? `HTTP ${res.status}`;
+    log.error('api', 'Stream request failed', { path, status: res.status, message });
+    throw new Error(message);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const { frames, rest } = splitSseFrames(buffer);
+    buffer = rest;
+    for (const frame of frames) {
+      let ev: StreamEvent;
+      try { ev = JSON.parse(frame.slice('data: '.length)) as StreamEvent; } catch { continue; }
+      if (ev.phase === 'log' && ev.line) handlers.onLog?.(ev.line);
+      else if (ev.phase === 'done') return ev as unknown as T;
+      else if (ev.phase === 'error') throw new Error(ev.error ?? 'stream failed');
+    }
+  }
+  throw new Error('stream ended unexpectedly');
+}
+
 /* ---------- 基础数据契约 ---------- */
 /** 内容体检摘要（F1/F2）：仅自有仓库技能、且存在问题时才有值 */
 export interface SkillHealth { error: number; warn: number }

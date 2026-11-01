@@ -297,8 +297,9 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | POST | `/repos/scan/:id` | 扫描单仓库 |
 | POST | `/repos/detect` | 探测目录布局 |
 | POST | `/repos/preview` | 登记预览（只扫描不落库） |
-| POST | `/sources/clone` | 「从 Git 仓库导入」：按 Git 地址克隆代码到托管目录（`<flint 数据目录>/sources/<仓库名>`），返回本地路径供随后走登记流程 |
-| POST | `/sources/npx` | 「从 npx 命令安装」：在托管目录 `<flint 数据目录>/sources/<id>` 内执行 `npx --yes <pkg> <args>`（笼子 + 非交互 env + git 快照），返回落地路径与推断出的技能扫描根，供随后走登记流程；`installer` 信息随登记落库（EK-07） |
+| POST | `/sources/clone` | 「从 Git 仓库导入」：按 Git 地址克隆代码到托管目录（`<flint 数据目录>/sources/<仓库名>`）。**SSE 流式**：`start / log / done / error` 事件，log 实时转发 clone / fetch 输出；done 带本地路径供随后走登记流程 |
+| POST | `/sources/npx` | 「从 npx 命令安装」：在托管目录 `<flint 数据目录>/sources/<id>` 内执行 `npx --yes <pkg> <args>`（笼子 + 非交互 env + git 快照）。**SSE 流式**：done 带落地路径与推断出的技能扫描根，供随后走登记流程；`installer` 信息随登记落库（EK-07）。参数校验错误发生在开流前，走普通 4xx |
+| POST | `/repos/:id/npx-update` | npx 来源更新（EK-07）：**SSE 流式**在托管目录重跑安装器（`updateArgs` 优先，否则重跑安装命令），done 带 `updated`（产物是否有变化）与 `diff`（git --stat）。与 `/repos/:id/sync`（git pull，JSON 契约不变）分工 |
 | POST | `/repos/:id/tags-migrate` | 标签迁移到 frontmatter |
 | GET | `/repos/:id/collect/preview` | 归集预览 |
 | POST | `/repos/:id/collect` | 归集 |
@@ -431,7 +432,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 - **C14 标签落在生态共识位置**：优先 `SKILL.md` frontmatter 顶层 `tags`（社区 40+ 工具原生读取、随 git 版本化）；本工具对暂未回写的标签以 `skillMeta` 暂存并提供迁移。
 - **C15 多布局宽容读取**：外部源支持 flat / nested / 带索引清单；**自有仓库恒为扁平**（只认根下的 `SKILL.md`，分类子目录里的技能由诊断报出、不静默丢弃）。发现一律**以 `SKILL.md` 存在为准**，不以目录深度为准；单 skill 仓库（根自身含 `SKILL.md`，如 patent-disclosure-skill）整体识别为一个 skill，`skills/` 下的子技能不单独列出。
-- **C19 npx 安装器笼子（EK-07）**：第三方包的安装命令只在托管目录 `<flint 数据目录>/sources/<id>` 内执行——cwd 隔离 + 非交互 env（`CI` / `GIT_TERMINAL_PROMPT` / `npm_config_yes`）+ 异步 spawn 带超时（禁 `spawnSync`、禁 shell 拼接、argv 传参）+ 目录自动 `git init`（安装 / 更新前后各存快照提交，可 diff 可回滚；同时保证「从 cwd 向上探测项目根」的安装器收敛在笼内）。flint 不认识任何具体包：跑什么、落下什么、登记什么，全凭用户给的参数与安装后的扫描结果；预览 0 技能即拒绝登记。安装器绕过笼子写入真实 Agent 目录时**不自动清理**（只动自己的，C13 的自动边界在此同样适用），出路是手动删除或归集 + 接管收编。npx 来源的更新 = 在笼内重跑安装命令（`installer.updateArgs` 优先，否则重跑安装命令），不走 git pull。
+- **C19 npx 安装器笼子（EK-07）**：第三方包的安装命令只在托管目录 `<flint 数据目录>/sources/<id>` 内执行——cwd 隔离 + 非交互 env（`CI` / `GIT_TERMINAL_PROMPT` / `npm_config_yes`）+ 异步 spawn 带超时（禁 `spawnSync`、禁 shell 拼接、argv 传参）+ 目录自动 `git init`（安装 / 更新前后各存快照提交，可 diff 可回滚；同时保证「从 cwd 向上探测项目根」的安装器收敛在笼内）。flint 不认识任何具体包：跑什么、落下什么、登记什么，全凭用户给的参数与安装后的扫描结果；预览 0 技能即拒绝登记。安装器绕过笼子写入真实 Agent 目录时**不自动清理**（只动自己的，C13 的自动边界在此同样适用），出路是手动删除或归集 + 接管收编。npx 来源的更新 = 在笼内重跑安装命令（`installer.updateArgs` 优先，否则重跑安装命令），不走 git pull。**长任务一律 SSE 流式**（`/sources/clone`、`/sources/npx`、`/repos/:id/npx-update`）：子进程输出按 `\r` / `\n` 规整成行、限长 + 120ms 合流限流后以 `start / log / done / error` 事件实时下发，前端日志面板自动滚底、只留最近 300 行；参数校验错误发生在开流之前，仍走普通 JSON + 4xx。
 
 ### 边界类
 

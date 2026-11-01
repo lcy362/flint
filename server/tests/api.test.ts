@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { makeRouter } from '../src/api/routes.js';
 import type { ConfigStore } from '../src/infra/config-store.js';
 import { makeStore, tmpDir, writeSkill } from './helpers.js';
+import { gitExec, gitRun } from '../src/core/git.js';
 
 // 选择器会调起系统原生对话框，单测里换成固定返回值，避免真的弹窗
 vi.mock('../src/infra/picker.js', () => ({
@@ -75,6 +76,55 @@ async function call(method: string, url: string, body?: unknown): Promise<{ stat
   let parsed: unknown = text;
   try { parsed = JSON.parse(text); } catch { /* 非 JSON（如 res.download）保持原文 */ }
   return { status: res.status, body: parsed };
+}
+
+/** 读一个 SSE 流式接口：小输出一次读完，返回全部事件（data: 帧解析后） */
+async function callStream(method: string, url: string, body?: unknown): Promise<{ status: number; events: any[] }> {
+  const res = await fetch(api + url, {
+    method,
+    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  const events = text
+    .split('\n\n')
+    .filter((f) => f.startsWith('data: '))
+    .map((f) => { try { return JSON.parse(f.slice('data: '.length)); } catch { return null; } })
+    .filter(Boolean);
+  return { status: res.status, events };
+}
+
+/** 本地假 npx 安装器（不联网）：rest 含 noop 不写文件、含 fail 退出 1，否则往 cwd 写技能 */
+function writeNpxStub(): string {
+  const stub = path.join(tmpDir('flint-api-stub-'), 'npx');
+  fs.writeFileSync(
+    stub,
+    [
+      '#!/usr/bin/env node',
+      "const fs = require('node:fs');",
+      "const path = require('node:path');",
+      'const rest = process.argv.slice(4);',
+      "if (rest.includes('fail')) { console.error('boom'); process.exit(1); }",
+      "if (rest.includes('noop')) { console.log('noop'); process.exit(0); }",
+      "const dir = path.join(process.cwd(), '.claude', 'skills', 'fake');",
+      "fs.mkdirSync(dir, { recursive: true });",
+      "fs.writeFileSync(path.join(dir, 'SKILL.md'), '---\\nname: fake\\ndescription: stub\\n---\\nBody\\n');",
+      "console.log('installed via stub');",
+    ].join('\n'),
+    'utf-8',
+  );
+  fs.chmodSync(stub, 0o755);
+  return stub;
+}
+
+/** 在测试期间把 FLINT_NPX_BIN 指向桩，返回恢复函数 */
+function useNpxStub(): () => void {
+  const prev = process.env.FLINT_NPX_BIN;
+  process.env.FLINT_NPX_BIN = writeNpxStub();
+  return () => {
+    if (prev === undefined) delete process.env.FLINT_NPX_BIN;
+    else process.env.FLINT_NPX_BIN = prev;
+  };
 }
 
 beforeAll(async () => {
@@ -207,6 +257,76 @@ describe('仓库与来源', () => {
     expect(asRepo.body.repos.map((r: any) => r.id)).toContain('extra');
     expect(asRepo.body.sources.map((s: any) => s.id)).not.toContain('extra');
     await call('DELETE', '/repos/extra');
+  });
+
+  it('SSE：/sources/npx 流式安装（桩安装器）——start / log / done 事件齐全', async () => {
+    const restore = useNpxStub();
+    try {
+      const r = await callStream('POST', '/sources/npx', { pkg: 'impeccable', args: 'install -y' });
+      expect(r.status).toBe(200);
+      const phases = r.events.map((e: any) => e.phase);
+      expect(phases[0]).toBe('start');
+      expect(phases.at(-1)).toBe('done');
+      const done = r.events.at(-1);
+      expect(done.ok).toBe(true);
+      // 建议根指向装出技能的目录，登记流程可直接用
+      expect(String(done.suggestedRoot)).toContain('.claude');
+      // 安装器输出以 log 事件实时到过界面
+      expect(r.events.some((e: any) => e.phase === 'log' && /installed/.test(String(e.line)))).toBe(true);
+    } finally { restore(); }
+  });
+
+  it('SSE：/sources/npx 安装失败 → error 事件带可读文案', async () => {
+    const restore = useNpxStub();
+    try {
+      const r = await callStream('POST', '/sources/npx', { pkg: 'impeccable', args: 'install fail' });
+      expect(r.status).toBe(200); // 流已开：错误以事件给出，不是 HTTP 错误
+      const last = r.events.at(-1);
+      expect(last.phase).toBe('error');
+      expect(typeof last.error).toBe('string');
+    } finally { restore(); }
+  });
+
+  it('SSE：/sources/npx 参数不合法走普通 4xx（不开流）', async () => {
+    const bad = await call('POST', '/sources/npx', { pkg: 'Foo' });
+    expect(bad.status).toBe(400);
+    expect(typeof bad.body.error).toBe('string');
+  });
+
+  it('SSE：/sources/clone 流式克隆本地仓库 → done 带 path', async () => {
+    const v = await gitExec(['--version'], { timeout: 5000 });
+    if (v.status !== 0) return;
+    const origin = tmpDir('flint-api-origin-');
+    writeSkill(origin, 'alpha');
+    await gitRun(origin, ['init', '-q']);
+    await gitRun(origin, ['add', '-A']);
+    await gitRun(origin, ['-c', 'user.email=t@e.com', '-c', 'user.name=t', 'commit', '-m', 'init']);
+    const r = await callStream('POST', '/sources/clone', { url: `file://${origin}` });
+    expect(r.status).toBe(200);
+    expect(r.events[0].phase).toBe('start');
+    expect(r.events.at(-1).phase).toBe('done');
+    expect(String(r.events.at(-1).path)).toContain('sources');
+  });
+
+  it('SSE：/repos/:id/npx-update 对未知来源 404；对 npx 来源流式更新', async () => {
+    expect((await call('POST', '/repos/nope/npx-update', {})).status).toBe(404);
+    expect((await call('POST', '/repos/default/npx-update', {})).status).toBe(404); // 非 npx 来源
+    const added = await call('POST', '/sources', {
+      id: 'npx-src', name: 'npx-src', path: ctx.sourceDir, layout: 'flat', linked: true,
+      installer: { kind: 'npx', pkg: 'impeccable', args: 'install -y' },
+    });
+    expect(added.status).toBe(200);
+    const restore = useNpxStub();
+    try {
+      const r = await callStream('POST', '/repos/npx-src/npx-update', {});
+      expect(r.status).toBe(200);
+      expect(r.events[0].phase).toBe('start');
+      expect(r.events.at(-1).phase).toBe('done');
+      // 一键更新 = 重跑安装命令：桩装出新技能 → 有文件变化
+      expect(r.events.at(-1).updated).toBe(true);
+      expect(String(r.events.at(-1).diff)).toContain('SKILL.md');
+    } finally { restore(); }
+    await call('DELETE', '/sources/npx-src');
   });
 
   it('POST /repos/:id/tags-migrate 把旧标签搬进 SKILL.md', async () => {

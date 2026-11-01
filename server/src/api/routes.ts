@@ -13,7 +13,8 @@ import {
 import { scanAll, detectLayoutAbs } from '../core/scanner.js';
 import { previewRegister, idIssue, type RegisterPreviewInput } from '../core/register.js';
 import { cloneSourceRepo, gitUrlIssue } from '../core/source-clone.js';
-import { npxInstall, npxUpdate, npxPkgIssue, normalizeInstaller } from '../core/npx-install.js';
+import { npxInstall, npxUpdate, npxPkgIssue, normalizeInstaller, parseArgs } from '../core/npx-install.js';
+import { sseHead, sseSend, sseEnd, createLineEmitter } from './sse.js';
 import * as presets from '../core/presets.js';
 import * as active from '../core/active.js';
 import { syncActive, diffSync, deployOne, copySkill } from '../core/sync.js';
@@ -350,6 +351,34 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     touch();
     res.json(out);
   });
+  // npx 来源更新（SSE 流式）：在托管目录里重跑安装器（updateArgs 优先，否则重跑安装命令）。
+  // 与 /repos/:id/sync 分开：那边保持 git pull 的 JSON 契约，这边专服「跑安装器」的长任务。
+  r.post('/repos/:id/npx-update', async (req, res) => {
+    const target = cfg.data.foreignSources.find((x) => x.id === req.params.id);
+    if (!target?.installer || target.installer.kind !== 'npx') {
+      return res.status(404).json({ error: 'npx source not found' });
+    }
+    const inst = target.installer;
+    const emit = createLineEmitter(res);
+    sseHead(res);
+    sseSend(res, { phase: 'start', pkg: inst.pkg, args: inst.updateArgs?.length ? inst.updateArgs : inst.args });
+    try {
+      const out = await npxUpdate({ dir: target.path, pkg: inst.pkg, args: inst.args, updateArgs: inst.updateArgs, onOutput: emit });
+      if (!out.ok) {
+        sseSend(res, { phase: 'error', error: out.message || t('register.npxInstallFailed'), log: out.log });
+        return sseEnd(res);
+      }
+      if (out.updated) {
+        inst.at = new Date().toISOString();
+        cfg.save();
+      }
+      touch();
+      sseSend(res, { phase: 'done', ...out });
+    } catch (e) {
+      sseSend(res, { phase: 'error', error: (e as Error).message });
+    }
+    sseEnd(res);
+  });
   // 编辑自有仓库：改名称 / 路径 / 布局 / root；kind='source' 时转为第三方仓库。
   // 转换保持 id 不变，故 skill 标识 name@id 与标签、preset、项目引用均不受影响。
   // 注意：两类仓库扫描根不同（自有 = root ?? <path>/skills，第三方 = path），
@@ -463,18 +492,27 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
 
   // ---- foreign sources ----
   r.get('/sources', (_req, res) => res.json(cfg.data.foreignSources));
-  // 从 Git 地址拉取第三方仓库代码到托管目录（只拉代码、不改 config）：
-  // 返回本地路径，前端随后用它走既有的登记流程（预览 → 落库）。
+  // 从 Git 地址拉取第三方仓库代码到托管目录（SSE 流式：实时转发 clone / fetch 输出）。
+  // 只拉代码、不改 config；完成后前端用返回的 path 走既有的登记流程（预览 → 落库）。
   r.post('/sources/clone', async (req, res) => {
     const url = typeof (req.body as { url?: unknown })?.url === 'string' ? String((req.body as { url: string }).url).trim() : '';
     if (!url) return res.status(400).json({ error: 'url required' });
     const issue = gitUrlIssue(url);
     if (issue) return res.status(400).json({ error: issue });
-    try { res.json(await cloneSourceRepo(url)); }
-    catch (e) { res.status(500).json({ error: (e as Error).message }); }
+    const emit = createLineEmitter(res);
+    sseHead(res);
+    sseSend(res, { phase: 'start', url });
+    try {
+      const r = await cloneSourceRepo(url, emit);
+      sseSend(res, { phase: 'done', ...r });
+    } catch (e) {
+      sseSend(res, { phase: 'error', error: (e as Error).message });
+    }
+    sseEnd(res);
   });
-  // 从 npx 命令安装：在托管目录里跑第三方包的安装命令（笼子 + 非交互 env + 快照），
-  // 成功后把目录（含建议的技能扫描根）交给既有登记流程。此步不改 config。
+  // 从 npx 命令安装（SSE 流式）：在托管目录里跑第三方包的安装命令（笼子 + 非交互 env +
+  // git 快照），实时转发安装器输出；成功后把目录（含建议的技能扫描根）交给既有登记流程。
+  // 此步不改 config。
   r.post('/sources/npx', async (req, res) => {
     const body = (req.body ?? {}) as { pkg?: unknown; args?: unknown; id?: unknown };
     const pkg = typeof body.pkg === 'string' ? body.pkg.trim() : '';
@@ -482,11 +520,23 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     if (issue) return res.status(400).json({ error: issue });
     const id = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
     if (id && idIssue(id)) return res.status(400).json({ error: idIssue(id) });
+    // 参数校验放在开流之前：非法参数走普通 4xx，不进流
+    let args: string[] | undefined;
+    try { args = parseArgs(body.args as string | string[] | undefined); } catch (e) { return res.status(400).json({ error: (e as Error).message }); }
+    const emit = createLineEmitter(res);
+    sseHead(res);
+    sseSend(res, { phase: 'start', pkg, args });
     try {
-      const r = await npxInstall({ pkg, args: body.args as string | string[] | undefined, id });
-      if (!r.ok) return res.status(500).json({ error: r.message, log: r.log });
-      res.json(r);
-    } catch (e) { res.status(500).json({ error: (e as Error).message }); }
+      const r = await npxInstall({ pkg, args, id, onOutput: emit });
+      if (!r.ok) {
+        sseSend(res, { phase: 'error', error: r.message, log: r.log });
+        return sseEnd(res);
+      }
+      sseSend(res, { phase: 'done', ...r });
+    } catch (e) {
+      sseSend(res, { phase: 'error', error: (e as Error).message });
+    }
+    sseEnd(res);
   });
   r.post('/sources', (req, res) => {
     const body = req.body as ForeignSource;

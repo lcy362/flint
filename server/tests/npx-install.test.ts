@@ -213,6 +213,16 @@ describe('npxInstall / npxUpdate（笼子内执行与快照）', () => {
     expect(r.log).toContain('boom');
   });
 
+  it('onOutput：安装过程实时收到子进程输出（SSE 进度的数据源）', async () => {
+    if (!(await hasGit())) return;
+    const dir = path.join(tmpDir('flint-npx-out-'), 'impeccable');
+    const chunks: string[] = [];
+    const r = await npxInstall({ pkg: 'impeccable', args: ['install', '-y'], dir, onOutput: (c) => chunks.push(c) });
+    expect(r.ok).toBe(true);
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.join('')).toContain('installed v1');
+  });
+
   it('非法包名 / 非法 id 直接拒绝，不动文件系统', async () => {
     const bad = await npxInstall({ pkg: 'Foo', args: [], dir: path.join(tmpDir('flint-npx-badpkg-'), 'x') });
     expect(bad.ok).toBe(false);

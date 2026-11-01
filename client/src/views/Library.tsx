@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type GitCloneResult, type NpxInstallResult } from '../api/types';
+import { api, streamApi, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type GitCloneResult, type NpxInstallResult } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
 import SkillDistributeModal from '../components/skill/SkillDistributeModal';
@@ -278,6 +278,8 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
   // 「从 npx 命令安装」：安装成功后的目录（预设路径）+ 安装器信息（登记时落库）
   const [npxOpen, setNpxOpen] = useState(false);
   const [presetInstaller, setPresetInstaller] = useState<{ pkg: string; args: string } | null>(null);
+  // npx 来源的「更新」弹窗（打开即一键重跑安装器，SSE 流式展示）
+  const [updateTarget, setUpdateTarget] = useState<SourceView | null>(null);
   const [editTarget, setEditTarget] = useState<WarehouseTarget | null>(null);
 
   /**
@@ -324,26 +326,14 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
     } finally { setChecking(null); }
   };
 
-  // 仓库同步：git pull 后重拉状态与目录列表。
-  // npx 安装的来源（foreignSources.installer）由后端重跑安装器，updated = 产物有变化。
+  // 仓库同步：git pull 后重拉状态与目录列表（git 来源）。
+  // npx 安装的来源不走这里——「更新」按钮打开 NpxUpdateModal 走 SSE 流式重跑安装器。
   const [syncing, setSyncing] = useState<string | null>(null);
   const syncRepo = async (id: string) => {
     setSyncing(id);
     try {
-      const out = await api<{ updated: boolean; diff?: string }>(`/repos/${encodeURIComponent(id)}/sync`, { method: 'POST' });
-      const npx = sources.find((s) => s.id === id)?.installer?.kind === 'npx';
-      if (npx) {
-        if (out.updated) {
-          // git diff --stat 的末行是汇总（N files changed, ...），放进 toast 即可
-          const summary = out.diff ? out.diff.split('\n').filter(Boolean).pop() : undefined;
-          toast.push(summary ? t('repo.npxUpdatedDiff', { summary }) : t('repo.npxUpdated'), 'good');
-          toast.push(t('repo.npxCopyHint'), 'info');
-        } else {
-          toast.push(t('repo.npxNoChange'), 'info');
-        }
-      } else {
-        toast.push(out.updated ? t('repo.synced') : t('repo.alreadyUpToDate'), out.updated ? 'good' : 'info');
-      }
+      const out = await api<{ updated: boolean }>(`/repos/${encodeURIComponent(id)}/sync`, { method: 'POST' });
+      toast.push(out.updated ? t('repo.synced') : t('repo.alreadyUpToDate'), out.updated ? 'good' : 'info');
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
     } finally {
@@ -437,7 +427,7 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
         actions: (
           <>
             {npx && (
-              <Button size="sm" variant="ghost" loading={syncing === s.id} onClick={() => syncRepo(s.id)} title={t('repo.npxUpdateHint')}>
+              <Button size="sm" variant="ghost" onClick={() => setUpdateTarget(s)} title={t('repo.npxUpdateHint')}>
                 {t('repo.npxUpdate')}
               </Button>
             )}
@@ -488,6 +478,12 @@ function ReposAndSources({ repos, sources, reload }: Readonly<{ repos: RepoView[
           setPresetInstaller({ pkg: r.pkg, args: r.args });
           setCreateOpen(true);
         }}
+      />
+      <NpxUpdateModal
+        open={!!updateTarget}
+        source={updateTarget}
+        onClose={() => setUpdateTarget(null)}
+        onDone={() => { setUpdateTarget(null); reload(); }}
       />
       <WarehouseModal
         open={createOpen || !!editTarget}
@@ -947,9 +943,82 @@ function draftFrom(target: WarehouseTarget | null | undefined, presetPath?: stri
   return { kind: 'repo', id: target.id, name: target.name ?? '', path: target.path, layout: 'auto', root: target.root ?? '', updateArgs: '' };
 }
 
+/** 流式执行日志面板：等宽、自动滚到底、只保留最近 N 行（进度行可能很多） */
+const LOG_KEEP = 300;
+
+function LogPanel({ lines }: Readonly<{ lines: string[] }>) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [lines.length]);
+  return (
+    <div
+      ref={boxRef}
+      className="mono"
+      style={{
+        border: '1px solid var(--c-line)',
+        borderRadius: 'var(--rd-md)',
+        padding: 'var(--sp-2) var(--sp-3)',
+        maxHeight: 180,
+        overflowY: 'auto',
+        fontSize: 'var(--fs-12)',
+        lineHeight: 1.6,
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-all',
+        color: 'var(--c-ink-2)',
+        background: 'var(--c-surface-2)',
+      }}
+    >
+      {lines.length === 0 ? '…' : lines.join('\n')}
+    </div>
+  );
+}
+
+/** 执行阶段 + 耗时的一行说明（流式任务进行中展示） */
+function StreamStatus({ busy, elapsed, runningText }: Readonly<{ busy: boolean; elapsed: number; runningText: string }>) {
+  const { t } = useI18n();
+  if (!busy && elapsed === 0) return null;
+  return (
+    <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
+      {busy ? runningText : t('stream.done')} · {t('stream.elapsed', { s: elapsed })}
+    </div>
+  );
+}
+
+/**
+ * 跑一个 SSE 流式任务：聚合日志行、计时，resolve 出 done 载荷。
+ * 每个调用方（导入 / 安装 / 更新弹窗）各持一份实例，互不干扰。
+ */
+function useStreamRunner() {
+  const [lines, setLines] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const timer = useRef<number | null>(null);
+  useEffect(() => () => { if (timer.current !== null) window.clearInterval(timer.current); }, []);
+  const exec = useCallback(async <T,>(path: string, body: unknown): Promise<T> => {
+    setLines([]);
+    setElapsed(0);
+    setBusy(true);
+    const started = Date.now();
+    timer.current = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    try {
+      return await streamApi<T>(path, body, {
+        onLog: (line) => setLines((prev) => [...prev, line].slice(-LOG_KEEP)),
+      });
+    } finally {
+      if (timer.current !== null) window.clearInterval(timer.current);
+      timer.current = null;
+      setBusy(false);
+    }
+  }, []);
+  return { exec, lines, busy, elapsed };
+}
+
 /**
  * 从 Git 仓库导入：只负责把代码拉取到本工具托管目录，成功后把该目录交给既有登记流程
  * （登记弹窗以预设路径打开，用户确认布局 → 预览 → 落库）。此步不改 config。
+ * 拉取过程走 SSE 流式：实时展示 clone / fetch 输出与耗时。
  */
 function GitImportModal({
   open,
@@ -958,21 +1027,20 @@ function GitImportModal({
 }: Readonly<{ open: boolean; onClose: () => void; onPulled: (path: string) => void }>) {
   const { t } = useI18n();
   const toast = useToast();
+  const { exec, lines, busy, elapsed } = useStreamRunner();
   const [url, setUrl] = useState('');
-  const [busy, setBusy] = useState(false);
   const [wasOpen, setWasOpen] = useState(false);
   if (open !== wasOpen) { setWasOpen(open); if (open) setUrl(''); }
 
   const pull = async () => {
     if (!url.trim()) return;
-    setBusy(true);
     try {
-      const r = await api<GitCloneResult>('/sources/clone', { method: 'POST', body: JSON.stringify({ url: url.trim() }) });
+      const r = await exec<GitCloneResult>('/sources/clone', { url: url.trim() });
       toast.push(t('repo.gitImportDone', { path: r.path }), 'good');
       onPulled(r.path);
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
-    } finally { setBusy(false); }
+    }
   };
 
   return (
@@ -987,13 +1055,21 @@ function GitImportModal({
         </>
       }
     >
-      <FieldInput
-        label={t('repo.gitImportUrl')}
-        placeholder="https://github.com/owner/repo.git"
-        hint={t('repo.gitImportHint')}
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+        <FieldInput
+          label={t('repo.gitImportUrl')}
+          placeholder="https://github.com/owner/repo.git"
+          hint={t('repo.gitImportHint')}
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        {(busy || lines.length > 0) && (
+          <>
+            <StreamStatus busy={busy} elapsed={elapsed} runningText={t('repo.gitPhase')} />
+            <LogPanel lines={lines} />
+          </>
+        )}
+      </div>
     </Modal>
   );
 }
@@ -1016,9 +1092,9 @@ function NpxImportModal({
 }>) {
   const { t } = useI18n();
   const toast = useToast();
+  const { exec, lines, busy, elapsed } = useStreamRunner();
   const [pkg, setPkg] = useState('');
   const [args, setArgs] = useState('');
-  const [busy, setBusy] = useState(false);
   const [wasOpen, setWasOpen] = useState(false);
   if (open !== wasOpen) { setWasOpen(open); if (open) { setPkg(''); setArgs(''); } }
 
@@ -1031,17 +1107,13 @@ function NpxImportModal({
 
   const run = async () => {
     if (!pkg.trim()) return;
-    setBusy(true);
     try {
-      const r = await api<NpxInstallResult>('/sources/npx', {
-        method: 'POST',
-        body: JSON.stringify({ pkg: pkg.trim(), args }),
-      });
+      const r = await exec<NpxInstallResult>('/sources/npx', { pkg: pkg.trim(), args });
       toast.push(t('repo.npxImportDone', { path: r.suggestedRoot ?? r.path }), 'good');
       onInstalled({ path: r.suggestedRoot ?? r.path, pkg: pkg.trim(), args });
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
-    } finally { setBusy(false); }
+    }
   };
 
   return (
@@ -1087,7 +1159,76 @@ function NpxImportModal({
           {specLine('③', t('repo.npxSpecVerify'))}
           <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{t('repo.npxTestedNote')}</div>
         </div>
+        {(busy || lines.length > 0) && (
+          <>
+            <StreamStatus busy={busy} elapsed={elapsed} runningText={t('repo.npxPhase')} />
+            <LogPanel lines={lines} />
+          </>
+        )}
         {busy && <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>{t('repo.npxImportRunning')}</div>}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * npx 来源更新弹窗：打开即自动执行（一键更新）——SSE 流式展示安装器输出与耗时，
+ * 完成后由调用方刷新列表并toast。关闭不打断执行（内容仍会落盘，刷新后可重新扫描）。
+ */
+function NpxUpdateModal({
+  open,
+  source,
+  onClose,
+  onDone,
+}: Readonly<{
+  open: boolean;
+  source: SourceView | null;
+  onClose: () => void;
+  onDone: () => void;
+}>) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const { exec, lines, busy, elapsed } = useStreamRunner();
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (!open || !source) { started.current = false; return; }
+    if (started.current) return;
+    started.current = true;
+    void (async () => {
+      try {
+        const out = await exec<{ ok: boolean; updated: boolean; diff?: string }>(
+          `/repos/${encodeURIComponent(source.id)}/npx-update`,
+          {},
+        );
+        if (out.updated) {
+          // git diff --stat 的末行是汇总（N files changed, ...），放进 toast 即可
+          const summary = out.diff ? out.diff.split('\n').filter(Boolean).pop() : undefined;
+          toast.push(summary ? t('repo.npxUpdatedDiff', { summary }) : t('repo.npxUpdated'), 'good');
+          toast.push(t('repo.npxCopyHint'), 'info');
+        } else {
+          toast.push(t('repo.npxNoChange'), 'info');
+        }
+        onDone();
+      } catch (e) {
+        toast.push(e instanceof Error ? e.message : String(e), 'bad');
+      }
+    })();
+  }, [open, source, exec]);
+
+  return (
+    <Modal
+      open={open}
+      title={t('repo.npxUpdateTitle')}
+      onClose={onClose}
+      footer={<Button variant="ghost" onClick={onClose}>{t('common.close')}</Button>}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+        <div style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)', lineHeight: 1.7 }}>
+          {t('repo.npxUpdateAuto', { pkg: source?.installer?.pkg ?? '' })}
+        </div>
+        <StreamStatus busy={busy} elapsed={elapsed} runningText={t('repo.npxPhase')} />
+        <LogPanel lines={lines} />
       </div>
     </Modal>
   );

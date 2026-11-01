@@ -100,8 +100,9 @@ export interface NpxRunResult {
   log: string;
 }
 
-/** 在指定目录里执行 `npx --yes <pkg> <args...>`；异步、带超时、超时杀进程组 */
-export function runNpx(pkg: string, args: string[], dir: string, timeoutMs = NPX_TIMEOUT_MS): Promise<NpxRunResult> {
+/** 在指定目录里执行 `npx --yes <pkg> <args...>`；异步、带超时、超时杀进程组。
+ *  onOutput：实时转发子进程输出块（供 SSE 进度展示）。 */
+export function runNpx(pkg: string, args: string[], dir: string, timeoutMs = NPX_TIMEOUT_MS, onOutput?: (chunk: string) => void): Promise<NpxRunResult> {
   return new Promise((resolve) => {
     const child = spawn(npxBin(), ['--yes', pkg, ...args], {
       cwd: dir,
@@ -125,8 +126,8 @@ export function runNpx(pkg: string, args: string[], dir: string, timeoutMs = NPX
       try { child.kill('SIGKILL'); } catch { /* ignore */ }
       finish(null); // 不等 close，立即返回
     }, timeoutMs);
-    child.stdout.on('data', (d) => { out += d; });
-    child.stderr.on('data', (d) => { out += d; });
+    child.stdout.on('data', (d) => { out += d; onOutput?.(String(d)); });
+    child.stderr.on('data', (d) => { out += d; onOutput?.(String(d)); });
     child.on('error', (e) => { out += `\n${String(e)}`; finish(null); });
     child.on('close', (code) => finish(code));
   });
@@ -223,6 +224,8 @@ export interface NpxInstallInput {
   id?: string;
   /** 缺省 stagingDirFor(id)；调用方（测试）可显式指定 */
   dir?: string;
+  /** 实时输出回调（供 SSE 进度展示） */
+  onOutput?: (chunk: string) => void;
 }
 
 export interface NpxInstallResult {
@@ -255,7 +258,7 @@ export async function npxInstall(input: NpxInstallInput): Promise<NpxInstallResu
   await gitCommitAll(dir, 'flint: baseline before npx install');
   log.info('npx-install', 'Running npx install', { pkg: input.pkg, args, dir });
 
-  const r = await runNpx(input.pkg, args, dir);
+  const r = await runNpx(input.pkg, args, dir, NPX_TIMEOUT_MS, input.onOutput);
   if (!r.ok) {
     const message = r.timedOut ? t('register.npxInstallTimeout') : t('register.npxInstallFailed');
     log.info('npx-install', 'npx install failed', { pkg: input.pkg, dir, code: r.code, timedOut: r.timedOut });
@@ -273,6 +276,8 @@ export interface NpxUpdateInput {
   args: string[];
   /** 专用的更新命令；缺省重跑安装命令（一键更新的默认形态） */
   updateArgs?: string[];
+  /** 实时输出回调（供 SSE 进度展示） */
+  onOutput?: (chunk: string) => void;
 }
 
 export interface NpxUpdateResult {
@@ -337,7 +342,7 @@ export async function npxUpdate(input: NpxUpdateInput): Promise<NpxUpdateResult>
   await gitCommitAll(input.dir, 'flint: snapshot before npx update');
   log.info('npx-install', 'Running npx update', { pkg: input.pkg, args: usedArgs, dir: input.dir });
 
-  const r = await runNpx(input.pkg, usedArgs, input.dir);
+  const r = await runNpx(input.pkg, usedArgs, input.dir, NPX_TIMEOUT_MS, input.onOutput);
   if (!r.ok) {
     const message = r.timedOut ? t('register.npxInstallTimeout') : t('register.npxInstallFailed');
     log.info('npx-install', 'npx update failed', { pkg: input.pkg, dir: input.dir, code: r.code, timedOut: r.timedOut });

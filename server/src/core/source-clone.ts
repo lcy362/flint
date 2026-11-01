@@ -64,20 +64,21 @@ export interface CloneOutcome {
 /**
  * 确保 <托管目录>/<id> 处有一份该地址的克隆：已存在则复用并 fetch，否则新建克隆。
  * 失败时清理本次新建的半成品目录，避免留下"看着像仓库其实残缺"的状态。
+ * onOutput：实时转发 clone / fetch 的输出（供 SSE 进度展示）。
  */
-export async function ensureSourceClone(url: string, id: string): Promise<CloneOutcome> {
+export async function ensureSourceClone(url: string, id: string, onOutput?: (chunk: string) => void): Promise<CloneOutcome> {
   const dest = path.join(sourcesDir(), id);
   // 一律不弹交互口令：私库 / 缺凭证时直接失败，避免请求挂到超时
   const noPrompt = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
   // 已有克隆：复用并顺手 fetch（失败不阻断，沿用本地副本，交由登记后的「检查更新 / 同步」再处理）
   if (fs.existsSync(path.join(dest, '.git'))) {
-    const f = await gitRun(dest, ['fetch', '--quiet'], 30000, noPrompt);
+    const f = await gitRun(dest, ['fetch', '--quiet'], 30000, noPrompt, onOutput);
     log.info('source-clone', 'Reuse existing clone', { dir: dest, fetched: f.status === 0 });
     return { ok: true, path: dest, cloned: false, message: '' };
   }
   fs.mkdirSync(sourcesDir(), { recursive: true });
   const existedBefore = fs.existsSync(dest);
-  const r = await gitExec(['clone', '--', url, dest], { timeout: 120000, env: noPrompt });
+  const r = await gitExec(['clone', '--', url, dest], { timeout: 120000, env: noPrompt, onOutput });
   if (r.timedOut || r.status !== 0) {
     // 只清理本次新建的半成品目录；目标本就存在（非空 / 非 git）时不删，交由报错原文提示
     if (!existedBefore) { try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* 半成品清理失败不阻断报错 */ } }
@@ -95,12 +96,12 @@ export interface GitImportResult {
   cloned: boolean;
 }
 
-/** 按 Git 地址拉取代码到托管目录，返回随后登记要用的路径 */
-export async function cloneSourceRepo(urlRaw: string): Promise<GitImportResult> {
+/** 按 Git 地址拉取代码到托管目录，返回随后登记要用的路径。onOutput 实时转发拉取输出 */
+export async function cloneSourceRepo(urlRaw: string, onOutput?: (chunk: string) => void): Promise<GitImportResult> {
   const url = urlRaw.trim();
   const issue = gitUrlIssue(url);
   if (issue) throw new Error(issue);
-  const out = await ensureSourceClone(url, dirNameFromUrl(url));
+  const out = await ensureSourceClone(url, dirNameFromUrl(url), onOutput);
   if (!out.ok) throw new Error(out.message);
   return { path: out.path, cloned: out.cloned };
 }

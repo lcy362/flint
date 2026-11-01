@@ -31,6 +31,8 @@ export interface GitRunOpts {
   timeout?: number;
   /** 覆盖子进程环境（如 clone 需要 GIT_TERMINAL_PROMPT=0 防止私库挂起等口令输入） */
   env?: NodeJS.ProcessEnv;
+  /** 输出回调：实时转发子进程 stdout/stderr 块（供 SSE 进度展示） */
+  onOutput?: (chunk: string) => void;
 }
 
 /** 底层执行 git；超时则杀整个进程组并立即 resolve，绝不阻塞主进程 */
@@ -56,16 +58,16 @@ function runGit(argv: string[], opts: GitRunOpts = {}): Promise<GitOut> {
       try { child.kill('SIGKILL'); } catch { /* ignore */ }
       finish(null); // 不等 close，立即返回
     }, timeout);
-    child.stdout.on('data', (d) => { out += d; });
-    child.stderr.on('data', (d) => { err += d; });
+    child.stdout.on('data', (d) => { out += d; opts.onOutput?.(String(d)); });
+    child.stderr.on('data', (d) => { err += d; opts.onOutput?.(String(d)); });
     child.on('error', () => finish(null));
     child.on('close', (code) => finish(code));
   });
 }
 
-/** 在已有目录内执行 git（自动注入 -C dir）；env 可覆盖子进程环境 */
-export function gitRun(dir: string, args: string[], timeout = 8000, env?: NodeJS.ProcessEnv): Promise<GitOut> {
-  return runGit(['-C', dir, ...args], { timeout, env });
+/** 在已有目录内执行 git（自动注入 -C dir）；env 可覆盖子进程环境，onOutput 实时转发输出 */
+export function gitRun(dir: string, args: string[], timeout = 8000, env?: NodeJS.ProcessEnv, onOutput?: (chunk: string) => void): Promise<GitOut> {
+  return runGit(['-C', dir, ...args], { timeout, env, onOutput });
 }
 
 /** 在没有本地目录时执行 git（如 clone 到尚不存在的目标目录）；同样异步、带超时、杀进程组 */
