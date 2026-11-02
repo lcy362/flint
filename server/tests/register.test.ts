@@ -54,6 +54,15 @@ describe('previewRegister（登记预览：只扫描不落库）', () => {
     expect(p.skillCount).toBe(1);
   });
 
+  it('root 填绝对路径时直接采用（不能被拼到 path 后面）', () => {
+    const base = tmpDir('flint-reg-abs-');
+    const abs = path.join(base, 'elsewhere', 'skills');
+    writeSkill(abs, 'solo');
+    const p = previewRegister(makeStore(), { kind: 'repo', path: base, root: abs });
+    expect(p.scanRoot).toBe(abs);
+    expect(p.skillCount).toBe(1);
+  });
+
   it('第三方来源 auto：单 skill 仓库识别为根技能一份（skills/ 为子技能不单列）', () => {
     const root = tmpDir('flint-reg-');
     fs.writeFileSync(path.join(root, 'SKILL.md'), '---\nname: solo\n---\nBody\n', 'utf-8');

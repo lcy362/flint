@@ -135,6 +135,22 @@ describe('suggestScanRoot（安装产物推断技能扫描根）', () => {
     expect(suggestScanRoot(base)).toBe(base);
   });
 
+  it('同名副本（安装器给每个 harness 各装一份）→ 取其中一份所在的 skills 根', () => {
+    const base = tmpDir('flint-npx-multi-');
+    const hosts = ['.claude', '.agents', '.grok'];
+    for (const h of hosts) writeSkill(path.join(base, h, 'skills'), 'impeccable');
+    // 不能退回到笼根本身（那儿没有直接的 <name>/SKILL.md，扫描会得到 0）
+    const got = suggestScanRoot(base);
+    expect(hosts.map((h) => path.join(base, h, 'skills'))).toContain(got);
+  });
+
+  it('不同名的多个技能散落 → 仍取公共祖先（分类布局）', () => {
+    const base = tmpDir('flint-npx-spread-');
+    writeSkill(path.join(base, 'cat-a', 'alpha'), 'alpha');
+    writeSkill(path.join(base, 'cat-b', 'beta'), 'beta');
+    expect(suggestScanRoot(base)).toBe(base);
+  });
+
   it('空目录 / 只有 .git → undefined（预览会显示 0，交由用户改路径）', () => {
     const base = tmpDir('flint-npx-empty-');
     expect(suggestScanRoot(base)).toBeUndefined();

@@ -316,6 +316,11 @@ function findSkillDirs(dir: string, depth: number): string[] {
  * 从安装产物里推断「技能扫描根」：技能目录的公共父目录。
  * impeccable 装出 `.claude/skills/impeccable/` → 建议根 `.claude/skills`（flat，1 个技能）；
  * 根自身即技能 → 根自己；什么都找不到 → undefined（预览会显示 0，用户自行改路径）。
+ *
+ * 多份同名副本（安装器给每个 harness 各装一份：`.claude/skills/impeccable`、
+ * `.grok/skills/impeccable` …）取**第一份所在的 skills 根**——它们是同一个技能的
+ * 重复落地，取公共祖先会退回到笼根本身（那儿没有直接的 `<name>/SKILL.md`，
+ * 扫描结果会是 0，导入流程就被自己的 0 技能校验挡住了）。
  */
 export function suggestScanRoot(dir: string): string | undefined {
   if (hasSkill(dir)) return dir;
@@ -324,6 +329,9 @@ export function suggestScanRoot(dir: string): string | undefined {
   const parents = skillDirs.map((d) => path.dirname(d));
   const first = parents[0];
   if (parents.every((p) => p === first)) return first;
+  // 同名副本：内容相同的一堆落点，取第一份的 skills 根（不取公共祖先）
+  const names = skillDirs.map((d) => path.basename(d));
+  if (names.every((n) => n === names[0])) return first;
   // 多个技能散落不同深度：取公共祖先，布局交给登记时的 auto 检测
   const segs = skillDirs.map((d) => d.split(path.sep));
   const common: string[] = [];

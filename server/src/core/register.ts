@@ -60,8 +60,13 @@ export interface RegisterPreview {
 export function previewRegister(cfg: ConfigStore, input: RegisterPreviewInput): RegisterPreview {
   const kind = input.kind === 'source' ? 'source' : 'repo';
   const abs = expandTilde(input.path.trim());
+  // root 允许填绝对路径：直接用（与 repoSkillRoot 的换算口径一致），
+  // 只有相对路径才拼在 path 之后——否则 path.join('/a', '/b') 会拼成 '/a/b'。
+  const rootRaw = input.root?.trim();
   const scanRoot = kind === 'repo'
-    ? (input.root?.trim() ? path.join(abs, input.root.trim()) : path.join(abs, 'skills'))
+    ? (rootRaw
+      ? (path.isAbsolute(rootRaw) ? expandTilde(rootRaw) : path.join(abs, rootRaw))
+      : path.join(abs, 'skills'))
     : abs;
   const layoutReq: Layout = kind === 'source' ? (input.layout ?? 'auto') : 'flat';
   const exists = fs.existsSync(scanRoot);
