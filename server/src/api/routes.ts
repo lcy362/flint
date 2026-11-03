@@ -37,6 +37,42 @@ import { agentCards, projectCards } from '../domain/cards.js';
 import { t } from '../i18n/index.js';
 import type { MsgKey } from '../i18n/en.js';
 
+/** 把第三方来源的可编辑字段写回去；installer 不合法时返回文案，调用方应 400 且不落库 */
+function editForeignSource(cfg: ConfigStore, src: ForeignSource, body: Record<string, unknown>): string | undefined {
+  const { name, path: p, layout, linked, kind, root, installer } = body;
+  if (name !== undefined) src.name = (typeof name === 'string' && name) || src.id;
+  if (typeof p === 'string' && p) src.path = p;
+  if (layout) src.layout = layout as ForeignSource['layout'];
+  if (linked !== undefined) src.linked = linked === true;
+  if ('installer' in body) {
+    const issue = assignSourceInstaller(src, installer);
+    if (issue) return issue;
+  }
+  if (kind === 'repo') moveSourceToRepo(cfg, src, root);
+  return undefined;
+}
+
+function assignSourceInstaller(src: ForeignSource, installer: unknown): string | undefined {
+  if (installer === null) {
+    delete src.installer;
+    return undefined;
+  }
+  const norm = normalizeInstaller(installer, { knownPkg: src.installer?.pkg });
+  if (norm.issue) return norm.issue;
+  if (norm.installer) src.installer = norm.installer;
+  return undefined;
+}
+
+function moveSourceToRepo(cfg: ConfigStore, src: ForeignSource, root: unknown): void {
+  cfg.data.foreignSources = cfg.data.foreignSources.filter((x) => x.id !== src.id);
+  cfg.data.repos.push({
+    id: src.id,
+    name: src.name && src.name !== src.id ? src.name : undefined,
+    path: src.path,
+    root: typeof root === 'string' && root ? root : undefined,
+  });
+}
+
 /** server 版本号，/api/logs 上报给用户用于 issue 定位（优先 cwd，兼容 dev 的 src 路径） */
 const SERVER_VERSION = (() => {
   const candidates = [
@@ -355,7 +391,7 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   // 与 /repos/:id/sync 分开：那边保持 git pull 的 JSON 契约，这边专服「跑安装器」的长任务。
   r.post('/repos/:id/npx-update', async (req, res) => {
     const target = cfg.data.foreignSources.find((x) => x.id === req.params.id);
-    if (!target?.installer || target.installer.kind !== 'npx') {
+    if (target?.installer?.kind !== 'npx') {
       return res.status(404).json({ error: 'npx source not found' });
     }
     const inst = target.installer;
@@ -605,32 +641,8 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
   r.put('/sources/:id', (req, res) => {
     const src = cfg.data.foreignSources.find((x) => x.id === req.params.id);
     if (!src) return res.status(404).json({ error: 'source not found' });
-    const { name, path: p, layout, linked, kind, root, installer } = req.body ?? {};
-    if (name !== undefined) src.name = name || src.id;
-    if (p) src.path = p;
-    if (layout) src.layout = layout;
-    if (linked !== undefined) src.linked = linked === true;
-
-    if ('installer' in (req.body ?? {})) {
-      if (installer === null) {
-        delete src.installer;
-      } else {
-        // 已知包名用于消歧：用户填的更新命令可带 `npx <pkg>` 前缀
-        const norm = normalizeInstaller(installer, { knownPkg: src.installer?.pkg });
-        if (norm.issue) return res.status(400).json({ error: norm.issue });
-        if (norm.installer) src.installer = norm.installer;
-      }
-    }
-
-    if (kind === 'repo') {
-      cfg.data.foreignSources = cfg.data.foreignSources.filter((x) => x.id !== src.id);
-      cfg.data.repos.push({
-        id: src.id,
-        name: src.name && src.name !== src.id ? src.name : undefined,
-        path: src.path,
-        root: root || undefined,
-      });
-    }
+    const issue = editForeignSource(cfg, src, (req.body ?? {}) as Record<string, unknown>);
+    if (issue) return res.status(400).json({ error: issue });
     cfg.save();
     touch();
     res.json(warehouses());

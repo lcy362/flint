@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, streamApi, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type GitCloneResult, type NpxInstallResult, type StreamProgress } from '../api/types';
+import { api, streamApi, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type SkillSecurityFinding, type GitCloneResult, type NpxInstallResult, type StreamProgress } from '../api/types';
 import { skillViewToCard } from '../components/skill/adapters';
 import SkillList from '../components/skill/SkillList';
 import SkillDistributeModal from '../components/skill/SkillDistributeModal';
@@ -176,22 +176,16 @@ export default function Library() {
       />
 
       {detailId !== null ? (
-        detailTarget ? (
-          <SkillDetail
-            key={detailTarget.id}
-            skill={detailTarget}
-            allTags={allTags}
-            onBack={closeDetail}
-            onChanged={reload}
-          />
-        ) : (
-          <LoadingBoundary
-            state={{ loading, error, data }}
-            empty={{ title: t('library.notFound.title'), hint: t('library.notFound.hint', { id: detailId }), icon: '◈' }}
-          >
-            {() => null}
-          </LoadingBoundary>
-        )
+        <LibraryDetailGate
+          detailId={detailId}
+          skill={detailTarget}
+          loading={loading}
+          error={error}
+          data={data}
+          allTags={allTags}
+          onBack={closeDetail}
+          onChanged={reload}
+        />
       ) : (
         <>
           <div className="panel">
@@ -931,11 +925,40 @@ function baseNameOf(p: string): string {
   return i >= 0 ? trimmed.slice(i + 1) : trimmed;
 }
 
+function isSlugChar(ch: string): boolean {
+  const c = ch.charCodeAt(0);
+  const digit = c >= 48 && c <= 57;
+  const upper = c >= 65 && c <= 90;
+  const lower = c >= 97 && c <= 122;
+  return digit || upper || lower || ch === '.' || ch === '_' || ch === '-';
+}
+
+function stripPkgVersion(pkg: string): string {
+  const at = pkg.lastIndexOf('@');
+  if (at <= 0) return pkg;
+  if (pkg.slice(at + 1).includes('/')) return pkg;
+  return pkg.slice(0, at);
+}
+
+function toSlug(raw: string): string {
+  let slug = '';
+  for (const ch of raw) slug += isSlugChar(ch) ? ch : '-';
+  let start = 0;
+  let end = slug.length;
+  while (start < end && slug[start] === '-') start += 1;
+  while (end > start && slug[end - 1] === '-') end -= 1;
+  return slug.slice(start, end);
+}
+
 /** npm 包名 → 合法登记 ID（@scope/name → scope-name，与服务端 defaultIdFromPkg 同口径） */
 function idFromPkg(pkg: string): string {
-  const slug = pkg.trim().replace(/@[^@/]+$/, '').replace(/^@/, '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  const noVer = stripPkgVersion(pkg.trim());
+  const noScope = noVer.startsWith('@') ? noVer.slice(1) : noVer;
+  const slug = toSlug(noScope);
   if (!slug) return '';
-  return /^[A-Za-z0-9]/.test(slug) ? slug : `s-${slug}`;
+  const head = slug.charCodeAt(0);
+  const alnum = (head >= 48 && head <= 57) || (head >= 65 && head <= 90) || (head >= 97 && head <= 122);
+  return alnum ? slug : `s-${slug}`;
 }
 
 function draftFrom(target: WarehouseTarget | null | undefined, presetPath?: string, pkg?: string): WarehouseDraft {
@@ -997,10 +1020,16 @@ function LogPanel({ lines }: Readonly<{ lines: string[] }>) {
 }
 
 /** 执行阶段 + 耗时的一行说明（流式任务进行中展示） */
+function streamStatusLabel(status: 'running' | 'done' | 'failed', runningText: string, t: TFunc): string {
+  if (status === 'running') return runningText;
+  if (status === 'failed') return t('stream.failed');
+  return t('stream.done');
+}
+
 function StreamStatus({ status, elapsed, runningText }: Readonly<{ status: 'idle' | 'running' | 'done' | 'failed'; elapsed: number; runningText: string }>) {
   const { t } = useI18n();
   if (status === 'idle') return null;
-  const label = status === 'running' ? runningText : status === 'failed' ? t('stream.failed') : t('stream.done');
+  const label = streamStatusLabel(status, runningText, t);
   return (
     <div style={{ fontSize: 'var(--fs-12)', color: status === 'failed' ? 'var(--c-bad)' : 'var(--c-ink-3)' }}>
       {label} · {t('stream.elapsed', { s: elapsed })}
@@ -1024,29 +1053,38 @@ function fmtBytes(n: number): string {
  * - 有确切百分比（git 自带进度）：确定型进度条 + 百分比数字；
  * - 只有已下载体积（npm 非 TTY 不给百分比）：不定型动画条 + 体积文本，不伪造百分比。
  */
+function progressSizeText(received?: number, total?: number): string | undefined {
+  if (received === undefined || received <= 0) return undefined;
+  const got = fmtBytes(received);
+  if (total !== undefined && total > 0) return `${got} / ${fmtBytes(total)}`;
+  return got;
+}
+
+function progressStageText(stage: string | undefined, t: TFunc): string {
+  if (stage === 'install') return t('stream.installing');
+  if (stage && stage !== 'download') return stage;
+  return t('stream.progress');
+}
+
 function ProgressBar({ progress }: Readonly<{ progress: StreamProgress | undefined }>) {
   const { t } = useI18n();
   if (!progress) return null;
   const { percent, received, total, stage } = progress;
   const determinate = typeof percent === 'number' && Number.isFinite(percent);
-  const sizeText = received !== undefined && received > 0
-    ? `${fmtBytes(received)}${total !== undefined && total > 0 ? ` / ${fmtBytes(total)}` : ''}`
-    : undefined;
+  const sizeText = progressSizeText(received, total);
   const label = determinate ? `${Math.round(percent)}%` : sizeText;
   // git 的阶段名（Receiving objects 等）是技术术语，原样展示；npm 侧区分「下载中 / 安装中」
-  const stageText = stage === 'install'
-    ? t('stream.installing')
-    : stage && stage !== 'download' ? stage : t('stream.progress');
+  const stageText = progressStageText(stage, t);
   if (!label && !stageText) return null;
+  const meter = determinate ? { value: Math.min(100, Math.max(0, percent)) } : {};
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
-      <div
+      <progress
         className={determinate ? 'progress' : 'progress progress--indeterminate'}
-        role="progressbar"
-        aria-valuenow={determinate ? Math.round(percent) : undefined}
-      >
-        <div className="progress__bar" style={determinate ? { width: `${Math.min(100, Math.max(0, percent))}%` } : undefined} />
-      </div>
+        max={100}
+        aria-label={stageText}
+        {...meter}
+      />
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-2)', fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
         <span>{stageText}</span>
         <span>{label}</span>
@@ -1282,6 +1320,32 @@ function NpxImportModal({
  * npx 来源更新弹窗：打开即自动执行（一键更新）——SSE 流式展示安装器输出与耗时，
  * 完成后由调用方刷新列表并toast。关闭不打断执行（内容仍会落盘，刷新后可重新扫描）。
  */
+function lastNonEmptyLine(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  const lines = text.split('\n');
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (lines[i]) return lines[i];
+  }
+  return undefined;
+}
+
+function npxUpdateNotes(
+  t: TFunc,
+  out: { updated: boolean; diff?: string; escaped?: string[] },
+): Array<[string, 'good' | 'bad' | 'info']> {
+  const notes: Array<[string, 'good' | 'bad' | 'info']> = [];
+  const escaped = out.escaped ?? [];
+  if (escaped.length > 0) notes.push([t('repo.importEscaped', { paths: escaped.join('、') }), 'bad']);
+  if (!out.updated) {
+    notes.push([t('repo.npxNoChange'), 'info']);
+    return notes;
+  }
+  const summary = lastNonEmptyLine(out.diff);
+  const updated = summary ? t('repo.npxUpdatedDiff', { summary }) : t('repo.npxUpdated');
+  notes.push([updated, 'good'], [t('repo.npxCopyHint'), 'info']);
+  return notes;
+}
+
 function NpxUpdateModal({
   open,
   source,
@@ -1295,7 +1359,7 @@ function NpxUpdateModal({
 }>) {
   const { t } = useI18n();
   const toast = useToast();
-  const { exec, lines, progress, status, busy, elapsed } = useStreamRunner();
+  const { exec, lines, progress, status, elapsed } = useStreamRunner();
   const started = useRef(false);
 
   useEffect(() => {
@@ -1308,17 +1372,7 @@ function NpxUpdateModal({
           `/repos/${encodeURIComponent(source.id)}/npx-update`,
           {},
         );
-        if ((out.escaped ?? []).length > 0) {
-          toast.push(t('repo.importEscaped', { paths: (out.escaped ?? []).join('、') }), 'bad');
-        }
-        if (out.updated) {
-          // git diff --stat 的末行是汇总（N files changed, ...），放进 toast 即可
-          const summary = out.diff ? out.diff.split('\n').filter(Boolean).pop() : undefined;
-          toast.push(summary ? t('repo.npxUpdatedDiff', { summary }) : t('repo.npxUpdated'), 'good');
-          toast.push(t('repo.npxCopyHint'), 'info');
-        } else {
-          toast.push(t('repo.npxNoChange'), 'info');
-        }
+        for (const [text, kind] of npxUpdateNotes(t, out)) toast.push(text, kind);
         onDone();
       } catch (e) {
         toast.push(e instanceof Error ? e.message : String(e), 'bad');
@@ -1361,6 +1415,182 @@ function NpxUpdateModal({
  * presetInstaller：npx 安装来源的安装器信息——登记落库时一并写入，
  * 之后该来源的「更新」= 在托管目录重跑安装命令（可配专用更新命令）。
  */
+function warehouseId(d: WarehouseDraft, editing: boolean, preview: RegisterPreview | null): string {
+  const typed = d.id.trim();
+  if (typed) return typed;
+  if (editing) return '';
+  return preview?.id ?? '';
+}
+
+function warehouseDoneText(t: TFunc, editing: boolean, kind: 'repo' | 'source', id: string): string {
+  if (editing) return t('repo.updated');
+  const key = kind === 'repo' ? 'repo.registered.own' : 'repo.registered.third';
+  return t(key, { id });
+}
+
+async function saveOwnWarehouse(id: string, d: WarehouseDraft, editing: boolean): Promise<void> {
+  const body = { name: d.name.trim() || undefined, path: d.path.trim(), root: d.root.trim() || undefined };
+  if (editing) {
+    await api(`/repos/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ ...body, kind: 'repo' }) });
+    return;
+  }
+  await api('/repos', { method: 'POST', body: JSON.stringify({ id, ...body }) });
+}
+
+async function saveThirdPartyWarehouse(opts: {
+  id: string;
+  d: WarehouseDraft;
+  editing: boolean;
+  target?: WarehouseTarget | null;
+  presetInstaller?: { pkg: string; args: string[] };
+  importFlow: boolean;
+}): Promise<void> {
+  const { id, d, editing, target, presetInstaller, importFlow } = opts;
+  const name = d.name.trim() || id;
+  const path = d.path.trim();
+  if (editing) {
+    const body: Record<string, unknown> = { name, path, layout: d.layout, root: d.root.trim() || undefined, kind: 'source' };
+    const inst = target?.kind === 'source' ? target.installer : undefined;
+    if (inst?.kind === 'npx') {
+      body.installer = { kind: 'npx', pkg: inst.pkg, args: inst.args, updateCmd: d.updateCmd.trim() || undefined };
+    }
+    await api(`/sources/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) });
+    return;
+  }
+  const body: Record<string, unknown> = { id, name, path, layout: d.layout };
+  if (presetInstaller) body.installer = { kind: 'npx', pkg: presetInstaller.pkg, args: presetInstaller.args };
+  if (importFlow) body.requireSkills = true;
+  await api('/sources', { method: 'POST', body: JSON.stringify(body) });
+}
+
+function WarehouseFooter({
+  editing, preview, busy, previewBusy, canSave, canPreview, previewBlocked, onClose, onSubmit, onPreview, onBack,
+}: Readonly<{
+  editing: boolean;
+  preview: RegisterPreview | null;
+  busy: boolean;
+  previewBusy: boolean;
+  canSave: boolean;
+  canPreview: boolean;
+  previewBlocked: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+  onPreview: () => void;
+  onBack: () => void;
+}>) {
+  const { t } = useI18n();
+  if (editing) {
+    return (
+      <>
+        <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="primary" loading={busy} disabled={!canSave} onClick={onSubmit}>{t('common.save')}</Button>
+      </>
+    );
+  }
+  if (preview) {
+    return (
+      <>
+        <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="ghost" onClick={onBack}>{t('repo.preview.back')}</Button>
+        <Button variant="primary" loading={busy} disabled={previewBlocked} onClick={onSubmit}>{t('repo.preview.confirm')}</Button>
+      </>
+    );
+  }
+  return (
+    <>
+      <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+      <Button variant="primary" loading={previewBusy} disabled={!canPreview} onClick={onPreview}>{t('repo.preview')}</Button>
+    </>
+  );
+}
+
+function PreviewIdNote({ preview }: Readonly<{ preview: RegisterPreview }>) {
+  const { t } = useI18n();
+  if (preview.idIssue) {
+    return (
+      <>
+        <span style={{ color: 'var(--c-bad)' }}>{preview.idIssue}</span>
+        <span style={{ color: 'var(--c-ink-3)' }}> {t('repo.preview.needId')}</span>
+      </>
+    );
+  }
+  if (preview.idTaken) return <span style={{ color: 'var(--c-bad)' }}>{t('repo.preview.idTaken', { id: preview.id })}</span>;
+  if (preview.idFromDir) return <span style={{ color: 'var(--c-ink-3)' }}>{t('repo.preview.idFromDir', { id: preview.id })}</span>;
+  return <span>{t('repo.preview.id', { id: preview.id })}</span>;
+}
+
+function LibraryDetailGate({
+  detailId, skill, loading, error, data, allTags, onBack, onChanged,
+}: Readonly<{
+  detailId: string;
+  skill: StateView['skills'][number] | undefined;
+  loading: boolean;
+  error: string | null;
+  data: StateView | null;
+  allTags: string[];
+  onBack: () => void;
+  onChanged: () => void;
+}>) {
+  const { t } = useI18n();
+  if (skill) {
+    return <SkillDetail key={skill.id} skill={skill} allTags={allTags} onBack={onBack} onChanged={onChanged} />;
+  }
+  return (
+    <LoadingBoundary
+      state={{ loading, error, data }}
+      empty={{ title: t('library.notFound.title'), hint: t('library.notFound.hint', { id: detailId }), icon: '◈' }}
+    >
+      {() => null}
+    </LoadingBoundary>
+  );
+}
+
+function severityTone(sev: string): 'bad' | 'warn' | 'neutral' {
+  if (sev === 'error') return 'bad';
+  if (sev === 'warn') return 'warn';
+  return 'neutral';
+}
+
+function severityText(sev: string, t: TFunc): string {
+  if (sev === 'error') return t('health.status.error');
+  if (sev === 'warn') return t('health.status.warn');
+  return 'INFO';
+}
+
+function findingKey(f: SkillSecurityFinding): string {
+  return `${f.file}:${f.line ?? ''}:${f.ruleId}:${f.excerpt}`;
+}
+
+function SecurityHitList({
+  findings, issues,
+}: Readonly<{ findings: SkillSecurityFinding[]; issues: { kind: string; message: string }[] }>) {
+  const { t } = useI18n();
+  return (
+    <div className="diag-group" style={{ padding: 0 }}>
+      {findings.map((f) => (
+        <div key={findingKey(f)} className="diag-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 'var(--sp-1)' }}>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <Badge tone={severityTone(f.severity)}>{severityText(f.severity, t)}</Badge>
+            <span className="diag-row__msg">{f.rule}</span>
+            <span className="mono" style={{ color: 'var(--c-ink-3)', fontSize: 'var(--fs-12)' }}>
+              {f.line ? `${f.file}:${f.line}` : f.file}
+            </span>
+          </span>
+          {f.excerpt && (
+            <pre className="mono" style={{ margin: 0, padding: 'var(--sp-2) var(--sp-3)', background: 'var(--c-bg-2)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)', fontSize: 'var(--fs-12)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--c-ink-2)' }}>{f.excerpt}</pre>
+          )}
+        </div>
+      ))}
+      {issues.map((it) => (
+        <div key={`${it.kind}:${it.message}`} className="diag-row">
+          <Badge tone="warn">{t('health.status.warn')}</Badge>
+          <span className="diag-row__msg">{it.message}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function WarehouseModal({
   open,
   target,
@@ -1453,48 +1683,20 @@ function WarehouseModal({
   // 把真实扫描根摊开给用户看，避免「改了定位却扫不到技能」
   const scanRoot = d.kind === 'repo' ? (d.root.trim() || skillsRootOf(d.path) || '—') : (d.path.trim() || '—');
 
+  // 导入流程（Git 克隆 / npx 安装带路径进来）：扫不到技能就不许登记（PRD EK-07）；
+  // 手动登记是用户的明确选择，允许先登记后补内容。
+  const importFlow = !editing && !!presetPath;
+  const previewBlocked = !editing && !!preview
+    && (!!preview.idIssue || !!preview.idTaken || (importFlow && preview.skillCount === 0));
+
   const submit = async () => {
     setBusy(true);
     try {
-      // 登记时允许 id 缺省取目录名（预览已校验合法性与重名）；编辑必须显式 id
-      const id = d.id.trim() || (editing ? '' : preview?.id || '');
+      const id = warehouseId(d, editing, preview);
       if (!id || !d.path.trim()) throw new Error(t('repo.idPathRequired'));
-      if (d.kind === 'repo') {
-        // 自有仓库不接受 layout：恒为扁平，按分类组织请走第三方来源或标签
-        const body = { name: d.name.trim() || undefined, path: d.path.trim(), root: d.root.trim() || undefined };
-        if (editing) {
-          await api(`/repos/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ ...body, kind: 'repo' }) });
-        } else {
-          await api('/repos', { method: 'POST', body: JSON.stringify({ id, ...body }) });
-        }
-      } else {
-        const name = d.name.trim() || id;
-        const path = d.path.trim();
-        if (editing) {
-          const body: Record<string, unknown> = { name, path, layout: d.layout, root: d.root.trim() || undefined, kind: 'source' };
-          // npx 安装的来源：更新命令可改（原始命令，可带 npx 前缀）；普通来源不碰 installer
-          const inst = target?.kind === 'source' ? target.installer : undefined;
-          if (inst?.kind === 'npx') {
-            body.installer = {
-              kind: 'npx',
-              pkg: inst.pkg,
-              args: inst.args,
-              updateCmd: d.updateCmd.trim() || undefined,
-            };
-          }
-          await api(`/sources/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) });
-        } else {
-          const body: Record<string, unknown> = { id, name, path, layout: d.layout };
-          // npx 安装流程带入的安装器信息：登记即落库，之后该来源的「更新」重跑安装命令
-          if (presetInstaller) body.installer = { kind: 'npx', pkg: presetInstaller.pkg, args: presetInstaller.args };
-          // 导入流程：服务端据此拒绝「扫不到技能」的登记（手动登记不拦）
-          if (importFlow) body.requireSkills = true;
-          await api('/sources', { method: 'POST', body: JSON.stringify(body) });
-        }
-      }
-      const registeredKey = d.kind === 'repo' ? 'repo.registered.own' : 'repo.registered.third';
-      const doneMsg = editing ? t('repo.updated') : t(registeredKey, { id });
-      toast.push(doneMsg, 'good');
+      if (d.kind === 'repo') await saveOwnWarehouse(id, d, editing);
+      else await saveThirdPartyWarehouse({ id, d, editing, target, presetInstaller, importFlow });
+      toast.push(warehouseDoneText(t, editing, d.kind, id), 'good');
       onDone();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'bad');
@@ -1502,13 +1704,6 @@ function WarehouseModal({
       setBusy(false);
     }
   };
-
-  // 导入流程（Git 克隆 / npx 安装带路径进来）：扫不到技能就不许登记（PRD EK-07）；
-  // 手动登记是用户的明确选择，允许先登记后补内容。
-  const importFlow = !editing && !!presetPath;
-  // 登记阻塞：id 不合法 / 重名 /（导入流程）扫不到技能时必须先解决；编辑不受预览约束
-  const previewBlocked = !editing && !!preview
-    && (!!preview.idIssue || !!preview.idTaken || (importFlow && preview.skillCount === 0));
 
   const kindLabel = (k: 'repo' | 'source') => (k === 'repo' ? t('repo.kind.own') : t('repo.kind.third'));
 
@@ -1518,31 +1713,19 @@ function WarehouseModal({
       title={editing ? t('repo.editTitle') : t('repo.registerTitle')}
       onClose={onClose}
       footer={
-        editing ? (
-          <>
-            <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
-            <Button variant="primary" loading={busy} disabled={!d.id.trim() || !d.path.trim()} onClick={submit}>
-              {t('common.save')}
-            </Button>
-          </>
-        ) : preview ? (
-          // 第二步：预览确认后才能登记
-          <>
-            <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
-            <Button variant="ghost" onClick={() => setPreview(null)}>{t('repo.preview.back')}</Button>
-            <Button variant="primary" loading={busy} disabled={previewBlocked} onClick={submit}>
-              {t('repo.preview.confirm')}
-            </Button>
-          </>
-        ) : (
-          // 第一步：只预览不落库
-          <>
-            <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
-            <Button variant="primary" loading={previewBusy} disabled={!d.path.trim()} onClick={() => runPreview()}>
-              {t('repo.preview')}
-            </Button>
-          </>
-        )
+        <WarehouseFooter
+          editing={editing}
+          preview={preview}
+          busy={busy}
+          previewBusy={previewBusy}
+          canSave={!!d.id.trim() && !!d.path.trim()}
+          canPreview={!!d.path.trim()}
+          previewBlocked={previewBlocked}
+          onClose={onClose}
+          onSubmit={submit}
+          onPreview={() => { void runPreview(); }}
+          onBack={() => setPreview(null)}
+        />
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
@@ -1689,18 +1872,7 @@ function WarehouseModal({
               </div>
             )}
             <div style={{ fontSize: 'var(--fs-12)', lineHeight: 1.6 }}>
-              {preview.idIssue ? (
-                <>
-                  <span style={{ color: 'var(--c-bad)' }}>{preview.idIssue}</span>
-                  <span style={{ color: 'var(--c-ink-3)' }}> {t('repo.preview.needId')}</span>
-                </>
-              ) : preview.idTaken ? (
-                <span style={{ color: 'var(--c-bad)' }}>{t('repo.preview.idTaken', { id: preview.id })}</span>
-              ) : preview.idFromDir ? (
-                <span style={{ color: 'var(--c-ink-3)' }}>{t('repo.preview.idFromDir', { id: preview.id })}</span>
-              ) : (
-                <span>{t('repo.preview.id', { id: preview.id })}</span>
-              )}
+              <PreviewIdNote preview={preview} />
             </div>
           </div>
         )}
@@ -1886,31 +2058,7 @@ function SkillDetail({
               {security?.own && (riskCount === 0 ? (
                 <Badge tone="good" dot="good">{t('skillDetail.security.clean')}</Badge>
               ) : (
-                <div className="diag-group" style={{ padding: 0 }}>
-                  {findings.map((f, i) => (
-                    // 每条命中分两行：上行是规则与位置，下行把「命中行的原文」贴出来供人工复核
-                    <div key={`f${i}`} className="diag-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 'var(--sp-1)' }}>
-                      <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                        <Badge tone={f.severity === 'error' ? 'bad' : f.severity === 'warn' ? 'warn' : 'neutral'}>
-                          {f.severity === 'error' ? t('health.status.error') : f.severity === 'warn' ? t('health.status.warn') : 'INFO'}
-                        </Badge>
-                        <span className="diag-row__msg">{f.rule}</span>
-                        <span className="mono" style={{ color: 'var(--c-ink-3)', fontSize: 'var(--fs-12)' }}>
-                          {f.line ? `${f.file}:${f.line}` : f.file}
-                        </span>
-                      </span>
-                      {f.excerpt && (
-                        <pre className="mono" style={{ margin: 0, padding: 'var(--sp-2) var(--sp-3)', background: 'var(--c-bg-2)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)', fontSize: 'var(--fs-12)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--c-ink-2)' }}>{f.excerpt}</pre>
-                      )}
-                    </div>
-                  ))}
-                  {security.issues.map((it, i) => (
-                    <div key={`i${i}`} className="diag-row">
-                      <Badge tone="warn">{t('health.status.warn')}</Badge>
-                      <span className="diag-row__msg">{it.message}</span>
-                    </div>
-                  ))}
-                </div>
+                <SecurityHitList findings={findings} issues={security.issues} />
               ))}
             </>
           )}

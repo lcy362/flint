@@ -18,11 +18,25 @@ export function idIssue(id: string): string | undefined {
   return undefined;
 }
 
+/** 去掉结尾的 `/` 与 `\`，避免 basename 把空段当成目录名 */
+function stripTrailingSeps(p: string): string {
+  let end = p.length;
+  while (end > 0 && (p[end - 1] === '/' || p[end - 1] === '\\')) end -= 1;
+  return p.slice(0, end);
+}
+
 /** 目录名推导缺省 id：目录名本身合法才可作为缺省，否则返回 undefined（必须由用户输入） */
 export function defaultIdFromPath(p: string): string | undefined {
   const real = expandTilde(p.trim());
-  const base = path.basename(real.replace(/[\\/]+$/, ''));
+  const base = path.basename(stripTrailingSeps(real));
   return idIssue(base) ? undefined : base;
+}
+
+/** 自有仓库的扫描根：绝对 root 直接用，相对 root 拼在仓库路径后，缺省 `<path>/skills` */
+function repoScanRoot(abs: string, rootRaw: string | undefined): string {
+  if (!rootRaw) return path.join(abs, 'skills');
+  if (path.isAbsolute(rootRaw)) return expandTilde(rootRaw);
+  return path.join(abs, rootRaw);
 }
 
 export interface RegisterPreviewInput {
@@ -63,11 +77,7 @@ export function previewRegister(cfg: ConfigStore, input: RegisterPreviewInput): 
   // root 允许填绝对路径：直接用（与 repoSkillRoot 的换算口径一致），
   // 只有相对路径才拼在 path 之后——否则 path.join('/a', '/b') 会拼成 '/a/b'。
   const rootRaw = input.root?.trim();
-  const scanRoot = kind === 'repo'
-    ? (rootRaw
-      ? (path.isAbsolute(rootRaw) ? expandTilde(rootRaw) : path.join(abs, rootRaw))
-      : path.join(abs, 'skills'))
-    : abs;
+  const scanRoot = kind === 'repo' ? repoScanRoot(abs, rootRaw) : abs;
   const layoutReq: Layout = kind === 'source' ? (input.layout ?? 'auto') : 'flat';
   const exists = fs.existsSync(scanRoot);
   const resolved = resolveLayout(scanRoot, layoutReq);

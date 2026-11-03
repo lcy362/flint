@@ -219,8 +219,8 @@ describe('npxInstall / npxUpdate（笼子内执行与快照）', () => {
     else process.env.FLINT_NPX_BIN = prevBin;
   });
 
-  it('安装：内容落笼子、git 快照、建议根正确', async () => {
-    if (!(await hasGit())) return;
+  it('安装：内容落笼子、git 快照、建议根正确', async (ctx) => {
+    if (!(await hasGit())) ctx.skip();
     const dir = path.join(tmpDir('flint-npx-install-'), 'impeccable');
     const r = await npxInstall({ pkg: 'impeccable', args: ['install', '-y', '--project'], dir });
     expect(r.ok).toBe(true);
@@ -233,8 +233,8 @@ describe('npxInstall / npxUpdate（笼子内执行与快照）', () => {
     expect(r.suggestedRoot).toBe(path.join(dir, '.claude', 'skills'));
   });
 
-  it('更新：默认重跑安装命令，产物有变化即 updated', async () => {
-    if (!(await hasGit())) return;
+  it('更新：默认重跑安装命令，产物有变化即 updated', async (ctx) => {
+    if (!(await hasGit())) ctx.skip();
     const dir = path.join(tmpDir('flint-npx-update-'), 'impeccable');
     await npxInstall({ pkg: 'impeccable', args: ['install', '-y'], dir });
     const u = await npxUpdate({ dir, pkg: 'impeccable', args: ['install', '-y'] });
@@ -244,8 +244,8 @@ describe('npxInstall / npxUpdate（笼子内执行与快照）', () => {
     expect(u.diff).toContain('SKILL.md');
   });
 
-  it('更新：updateArgs 优先；无文件变化时 updated=false', async () => {
-    if (!(await hasGit())) return;
+  it('更新：updateArgs 优先；无文件变化时 updated=false', async (ctx) => {
+    if (!(await hasGit())) ctx.skip();
     const dir = path.join(tmpDir('flint-npx-noop-'), 'impeccable');
     await npxInstall({ pkg: 'impeccable', args: ['install', '-y'], dir });
     const u = await npxUpdate({ dir, pkg: 'impeccable', args: ['install', '-y'], updateArgs: ['noop'] });
@@ -263,8 +263,8 @@ describe('npxInstall / npxUpdate（笼子内执行与快照）', () => {
     expect(r.log).toContain('boom');
   });
 
-  it('onOutput：安装过程实时收到子进程输出（SSE 进度的数据源）', async () => {
-    if (!(await hasGit())) return;
+  it('onOutput：安装过程实时收到子进程输出（SSE 进度的数据源）', async (ctx) => {
+    if (!(await hasGit())) ctx.skip();
     const dir = path.join(tmpDir('flint-npx-out-'), 'impeccable');
     const chunks: string[] = [];
     const r = await npxInstall({ pkg: 'impeccable', args: ['install', '-y'], dir, onOutput: (c) => chunks.push(c) });

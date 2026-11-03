@@ -85,10 +85,8 @@ pre {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
+  :root {
+    --dur-150: 0ms;
+    --dur-250: 0ms;
   }
 }

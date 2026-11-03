@@ -84,6 +84,52 @@ export interface StreamHandlers {
   signal?: AbortSignal;
 }
 
+async function streamError(res: Response, path: string): Promise<never> {
+  const errBody = await res.json().catch(() => ({}));
+  const message = (errBody as { error?: string })?.error ?? `HTTP ${res.status}`;
+  log.error('api', 'Stream request failed', { path, status: res.status, message });
+  throw new Error(message);
+}
+
+/** 处理 log / progress / error；done 由调用方返回载荷 */
+function dispatchStreamEvent(ev: StreamEvent, handlers: StreamHandlers): void {
+  if (ev.phase === 'log' && ev.line) {
+    handlers.onLog?.(ev.line);
+    return;
+  }
+  if (ev.phase === 'progress') {
+    handlers.onProgress?.({
+      percent: ev.percent,
+      received: ev.received,
+      total: ev.total,
+      stage: ev.stage,
+    });
+    return;
+  }
+  if (ev.phase !== 'error') return;
+  const err = new Error(ev.error ?? 'stream failed') as Error & { event?: StreamEvent };
+  err.event = ev;
+  throw err;
+}
+
+function parseStreamFrame(frame: string): StreamEvent | undefined {
+  try {
+    return JSON.parse(frame.slice('data: '.length)) as StreamEvent;
+  } catch {
+    return undefined;
+  }
+}
+
+function takeStreamResult<T>(frames: string[], handlers: StreamHandlers): T | undefined {
+  for (const frame of frames) {
+    const ev = parseStreamFrame(frame);
+    if (!ev) continue;
+    if (ev.phase === 'done') return ev as unknown as T;
+    dispatchStreamEvent(ev, handlers);
+  }
+  return undefined;
+}
+
 /**
  * POST 一个 SSE 流式接口：实时回调 log 行，resolve 出 done 事件的载荷。
  * error 事件 / 流异常 / 非 2xx 均 reject（参数校验错误发生在开流前，走普通 JSON error）。
@@ -101,12 +147,7 @@ export async function streamApi<T>(path: string, body: unknown, handlers: Stream
     log.error('api', `Stream request failed: ${(e as Error).message}`, { path });
     throw e;
   }
-  if (!res.ok || !res.body) {
-    const errBody = await res.json().catch(() => ({}));
-    const message = (errBody as any)?.error ?? `HTTP ${res.status}`;
-    log.error('api', 'Stream request failed', { path, status: res.status, message });
-    throw new Error(message);
-  }
+  if (!res.ok || !res.body) return streamError(res, path);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -114,27 +155,10 @@ export async function streamApi<T>(path: string, body: unknown, handlers: Stream
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const { frames, rest } = splitSseFrames(buffer);
-    buffer = rest;
-    for (const frame of frames) {
-      let ev: StreamEvent;
-      try { ev = JSON.parse(frame.slice('data: '.length)) as StreamEvent; } catch { continue; }
-      if (ev.phase === 'log' && ev.line) handlers.onLog?.(ev.line);
-      else if (ev.phase === 'progress') {
-        handlers.onProgress?.({
-          percent: ev.percent,
-          received: ev.received,
-          total: ev.total,
-          stage: ev.stage,
-        });
-      } else if (ev.phase === 'done') return ev as unknown as T;
-      else if (ev.phase === 'error') {
-        // 失败事件也带上下文（如笼外写入清单）——挂在 error 上，调用方可取用
-        const err = new Error(ev.error ?? 'stream failed') as Error & { event?: StreamEvent };
-        err.event = ev;
-        throw err;
-      }
-    }
+    const split = splitSseFrames(buffer);
+    buffer = split.rest;
+    const result = takeStreamResult<T>(split.frames, handlers);
+    if (result !== undefined) return result;
   }
   throw new Error('stream ended unexpectedly');
 }

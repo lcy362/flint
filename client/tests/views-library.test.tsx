@@ -223,7 +223,7 @@ describe('Library 技能库', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Install' }));
 
     // 登记弹窗：ID / 名称用包名（不是目录名 "skills"）——两处都是 impeccable
-    await waitFor(() => expect(screen.getAllByDisplayValue('impeccable').length).toBe(2));
+    await waitFor(() => expect(screen.getAllByDisplayValue('impeccable')).toHaveLength(2));
     // 上一步摘要 + 笼外写入告警都摊开给用户
     await waitFor(() => expect(screen.getByText(/impeccable was installed via the npx command/)).toBeTruthy());
     await waitFor(() => expect(screen.getByText(/wrote outside the managed directory/)).toBeTruthy());

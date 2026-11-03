@@ -37,10 +37,42 @@ const SCRIPT_EXT = new Set([
   '.py', '.rb', '.pl', '.php', '.js', '.mjs', '.cjs', '.ts',
 ]);
 
-/** 占位符/示例值：命中即视为误报丢弃（凭据类规则专用） */
-const PLACEHOLDER_RE = /(your[-_]?(api[-_]?key|token|secret|password)|example|sample|dummy|placeholder|redacted|changeme|xxxx+|<[a-z0-9_-]+>)/i;
+/** 占位符/示例值：命中即视为误报丢弃（凭据类规则专用）。拆开写，避免单条正则复杂度超标 */
+const PLACEHOLDER_RES = [
+  /your[-_]?api[-_]?key/i,
+  /your[-_]?token/i,
+  /your[-_]?secret/i,
+  /your[-_]?password/i,
+  /example/i,
+  /sample/i,
+  /dummy/i,
+  /placeholder/i,
+  /redacted/i,
+  /changeme/i,
+  /x{4,}/i,
+  /<[a-z0-9_-]+>/i,
+];
 /** 说明性提及：命中即把严重级降一档（文档里举例 `curl | sh` 不该报 error） */
-const DEMOTE_RE = /(never\s+use|do\s+not\s+(use|run)|don'?t\s+run|不要(使用|执行)|禁止|示例|例如|仅供说明|e\.g\.|for\s+example|not\s+recommended)/i;
+const DEMOTE_RES = [
+  /never\s+use/i,
+  /do\s+not\s+use/i,
+  /do\s+not\s+run/i,
+  /don't\s+run/i,
+  /dont\s+run/i,
+  /不要使用/,
+  /不要执行/,
+  /禁止/,
+  /示例/,
+  /例如/,
+  /仅供说明/,
+  /e\.g\./i,
+  /for\s+example/i,
+  /not\s+recommended/i,
+];
+
+function matchesAny(res: RegExp[], text: string): boolean {
+  return res.some((re) => re.test(text));
+}
 
 /** 规则 → 编译后的全局正则（惰性、进程内复用；matchAll 不会污染 lastIndex） */
 const COMPILED = new Map<string, RegExp>();
@@ -114,6 +146,14 @@ function skillFiles(dir: string): { rel: string; abs: string }[] {
   return out;
 }
 
+/** 凭据类示例值、或熵不够的泛化赋值，都不当成真命中 */
+function dropMatch(rule: SecRule, matchText: string): boolean {
+  if (rule.category === 'secret' && matchesAny(PLACEHOLDER_RES, matchText)) return true;
+  if (rule.minEntropy === undefined) return false;
+  const value = matchText.replace(/^[^:=]*[:=]\s*/, '').replace(/^["']|["']$/g, '');
+  return shannonEntropy(value) < rule.minEntropy;
+}
+
 /** 对一段文本跑全部规则，产出命中（含误报过滤与严重级降档） */
 function scanText(skill: Skill, rel: string, text: string): SecFinding[] {
   const lines = text.split('\n');
@@ -124,15 +164,7 @@ function scanText(skill: Skill, rel: string, text: string): SecFinding[] {
       const line = text.slice(0, idx).split('\n').length;
       const excerpt = (lines[line - 1] ?? '').trim().slice(0, EXCERPT_MAX);
       const matchText = m[0];
-
-      // 凭据类：示例值 / 占位符直接丢弃，避免 README 里 `sk-xxx` 之类的噪音
-      if (rule.category === 'secret' && PLACEHOLDER_RE.test(matchText)) continue;
-      // 泛化赋值：值必须达到最小熵，才可能像真密钥（password=123456789012 不该报）
-      if (rule.minEntropy !== undefined) {
-        const value = matchText.replace(/^[^:=]*[:=]\s*/, '').replace(/^["']|["']$/g, '');
-        if (shannonEntropy(value) < rule.minEntropy) continue;
-      }
-
+      if (dropMatch(rule, matchText)) continue;
       out.push({
         skillId: skill.id,
         skillName: skill.name,
@@ -142,7 +174,7 @@ function scanText(skill: Skill, rel: string, text: string): SecFinding[] {
         ruleId: rule.id,
         category: rule.category,
         // 说明性提及降档：文档里举例说明危险命令，不该当成真风险
-        severity: DEMOTE_RE.test(excerpt) ? demote(rule.severity) : rule.severity,
+        severity: matchesAny(DEMOTE_RES, excerpt) ? demote(rule.severity) : rule.severity,
         titleKey: rule.titleKey,
         excerpt,
       });

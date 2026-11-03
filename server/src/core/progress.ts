@@ -27,20 +27,81 @@ export interface ProgressInfo {
  */
 const GIT_PROGRESS_RE =
   /^(Receiving objects|Resolving deltas|Compressing objects|Counting objects|Writing objects|Enumerating objects):\s+(\d+)%(?:\s+\(([^)]*)\))?/;
-/**
- * 字节对：`1.20/2.70 MiB`（单位只写在后一个数后面）或 `1.20 MiB/2.70 MiB`。
- * 必须带单位才算字节——`(3/3)` 那种对象计数不是字节，不能当下载量。
- */
-const BYTES_RE = /([\d.]+)\s*(B|KiB|MiB|GiB)?\s*\/\s*([\d.]+)\s*(B|KiB|MiB|GiB)/;
-const SPEED_RE = /([\d.]+\s*(?:B|KiB|MiB|GiB)\/s)/;
+const BYTE_MUL: Record<string, number> = { b: 1, kib: 1024, mib: 1024 ** 2, gib: 1024 ** 3 };
+const BYTE_UNITS = ['GiB', 'MiB', 'KiB', 'B'];
 
 /** 单位 → 字节 */
 function toBytes(value: string, unit?: string): number | undefined {
   const n = Number(value);
   if (!Number.isFinite(n)) return undefined;
-  const u = (unit ?? 'B').toLowerCase();
-  const mul = u === 'b' ? 1 : u === 'kib' ? 1024 : u === 'mib' ? 1024 ** 2 : u === 'gib' ? 1024 ** 3 : 1;
+  const mul = BYTE_MUL[(unit ?? 'B').toLowerCase()] ?? 1;
   return Math.round(n * mul);
+}
+
+function skipSpaces(s: string, i: number): number {
+  let j = i;
+  while (s[j] === ' ') j += 1;
+  return j;
+}
+
+/** 读一段数字（允许小数点）；对不上返回 undefined */
+function readAmount(s: string, i: number): { raw: string; next: number } | undefined {
+  const start = skipSpaces(s, i);
+  let j = start;
+  while (j < s.length && ((s[j] >= '0' && s[j] <= '9') || s[j] === '.')) j += 1;
+  if (j === start) return undefined;
+  return { raw: s.slice(start, j), next: j };
+}
+
+function readUnit(s: string, i: number): { unit?: string; next: number } {
+  const j = skipSpaces(s, i);
+  const unit = BYTE_UNITS.find((u) => s.startsWith(u, j));
+  return unit ? { unit, next: j + unit.length } : { next: j };
+}
+
+/**
+ * 字节对：`1.20/2.70 MiB`（单位只写在后一个数后面）或 `1.20 MiB/2.70 MiB`。
+ * 必须带单位才算字节——`(3/3)` 那种对象计数不是字节，不能当下载量。
+ * 用手写扫描代替正则，避免 `[\d.]+` 与可选空白叠出超线性回溯。
+ */
+function parseBytesPair(detail: string): { received: number; total: number } | undefined {
+  for (let i = 0; i < detail.length; i += 1) {
+    const ch = detail[i];
+    if (ch < '0' || ch > '9') continue;
+    const prev = detail[i - 1];
+    if (prev === '.' || (prev >= '0' && prev <= '9')) continue;
+    const left = readAmount(detail, i);
+    if (!left) continue;
+    const leftUnit = readUnit(detail, left.next);
+    const slash = skipSpaces(detail, leftUnit.next);
+    if (detail[slash] !== '/') continue;
+    const right = readAmount(detail, slash + 1);
+    if (!right) continue;
+    const rightUnit = readUnit(detail, right.next);
+    const unit = rightUnit.unit ?? leftUnit.unit;
+    if (!unit) continue;
+    const received = toBytes(left.raw, unit);
+    const total = toBytes(right.raw, unit);
+    if (received === undefined || total === undefined) continue;
+    return { received, total };
+  }
+  return undefined;
+}
+
+/** 速度片段，如 `3.40 MiB/s`；找不到返回 undefined */
+function parseSpeed(detail: string): string | undefined {
+  for (let i = 0; i < detail.length; i += 1) {
+    const ch = detail[i];
+    if (ch < '0' || ch > '9') continue;
+    const prev = detail[i - 1];
+    if (prev === '.' || (prev >= '0' && prev <= '9')) continue;
+    const num = readAmount(detail, i);
+    if (!num) continue;
+    const unit = readUnit(detail, num.next);
+    if (!unit.unit) continue;
+    if (detail[unit.next] === '/' && detail[unit.next + 1] === 's') return detail.slice(i, unit.next + 2);
+  }
+  return undefined;
 }
 
 /** ANSI 终端控制序列：git 可能按用户配置着色，进度行要先剥掉颜色码 */
@@ -61,15 +122,13 @@ export function parseGitProgress(line: string): ProgressInfo | undefined {
     percent: Number.isFinite(percent) ? percent : undefined,
     stage: m[1],
   };
-  const bytes = BYTES_RE.exec(detail);
+  const bytes = parseBytesPair(detail);
   if (bytes) {
-    // 单位只写在后一个数后面时（`1.20/2.70 MiB`）两个数共用它
-    const unit = bytes[4] ?? bytes[2];
-    info.received = toBytes(bytes[1], unit);
-    info.total = toBytes(bytes[3], unit);
+    info.received = bytes.received;
+    info.total = bytes.total;
   }
-  const speed = SPEED_RE.exec(detail);
-  if (speed) info.stage = `${m[1]} · ${speed[1]}`;
+  const speed = parseSpeed(detail);
+  if (speed) info.stage = `${m[1]} · ${speed}`;
   return info;
 }
 

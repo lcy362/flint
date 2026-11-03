@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { CONFIG_PATH } from '../config/defaults.js';
 import { hasSkill } from './skill.js';
 import { sourcesDir } from './source-clone.js';
 import { gitRun } from './git.js';
@@ -82,7 +81,7 @@ export function npxPkgIssue(pkg: string): string | undefined {
   if (!p) return t('register.npxPkgEmpty');
   if (p.length > 214) return t('register.npxPkgInvalid', { pkg: p });
   // `-` 开头会被 npm 当作选项；`::` 是 ext:: 类 helper 的载体；空白 / 控制字符一律拒绝
-  if (p.startsWith('-') || p.includes('::') || /[\s\u0000-\u001f]/.test(p)) {
+  if (p.startsWith('-') || p.includes('::') || hasControlOrWhitespace(p)) {
     return t('register.npxPkgInvalid', { pkg: p });
   }
   const re = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*(@[^\s@]+)?$/;
@@ -90,8 +89,19 @@ export function npxPkgIssue(pkg: string): string | undefined {
   return undefined;
 }
 
+/** 控制字符或空白：安装器参数 / 包名里出现即拒绝 */
+function hasControlOrWhitespace(s: string): boolean {
+  for (let i = 0; i < s.length; i += 1) {
+    if (s.charCodeAt(i) <= 0x1f) return true;
+  }
+  return /\s/.test(s);
+}
+
+/** 安装参数：整串按空白切，或调用方已切好的数组 */
+export type NpxArgInput = string | string[] | undefined;
+
 /** 安装参数按空白切分（前端传整串；数组原样透传）。空段丢弃，控制字符拒绝 */
-export function parseArgs(input: string | string[] | undefined): string[] {
+export function parseArgs(input: NpxArgInput): string[] {
   const list = Array.isArray(input) ? input.map(String) : String(input ?? '').split(/\s+/);
   const out = list.map((s) => s.trim()).filter(Boolean);
   if (out.some((a) => /[\u0000-\u001f]/.test(a))) throw new Error(t('register.npxArgsInvalid'));
@@ -155,11 +165,38 @@ export function parseNpxCommand(cmd: string, opts: { knownPkg?: string } = {}): 
  * 由包名推导托管目录名 / 缺省 id：@scope/name → scope-name，去掉 @version 后缀，
  * 非法字符净化成 `-`。结果一定是合法 id（与 dirNameFromUrl 同款保证）。
  */
+function isSlugChar(ch: string): boolean {
+  const c = ch.charCodeAt(0);
+  const digit = c >= 48 && c <= 57;
+  const upper = c >= 65 && c <= 90;
+  const lower = c >= 97 && c <= 122;
+  return digit || upper || lower || ch === '.' || ch === '_' || ch === '-';
+}
+
+/** 去掉末尾 `@version`（`@scope/name` 的 scope 前缀不动） */
+function stripPkgVersion(pkg: string): string {
+  const at = pkg.lastIndexOf('@');
+  if (at <= 0) return pkg;
+  if (pkg.slice(at + 1).includes('/')) return pkg;
+  return pkg.slice(0, at);
+}
+
+function toSlug(raw: string): string {
+  let slug = '';
+  for (const ch of raw) slug += isSlugChar(ch) ? ch : '-';
+  let start = 0;
+  let end = slug.length;
+  while (start < end && slug[start] === '-') start += 1;
+  while (end > start && slug[end - 1] === '-') end -= 1;
+  return slug.slice(start, end);
+}
+
 export function defaultIdFromPkg(pkg: string): string {
-  const noVer = pkg.trim().replace(/@[^@/]+$/, '');
-  const slug = noVer.replace(/^@/, '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  const noVer = stripPkgVersion(pkg.trim());
+  const noScope = noVer.startsWith('@') ? noVer.slice(1) : noVer;
+  const slug = toSlug(noScope);
   if (!slug) return 'npx-source';
-  return /^[A-Za-z0-9]/.test(slug) ? slug : `s-${slug}`;
+  return isSlugChar(slug[0]) && slug[0] !== '.' && slug[0] !== '_' && slug[0] !== '-' ? slug : `s-${slug}`;
 }
 
 /** npx 来源的托管目录：与 git 克隆同根（`<flint 数据目录>/sources/<id>`） */
@@ -401,9 +438,7 @@ export async function npxInstall(input: NpxInstallInput): Promise<NpxInstallResu
   // 笼外写入检测：安装器可能通过 HOME 探测到真实 Agent 目录并写入（C19 的已知边界）
   const escaped = detectEscapedWrites(startedAt, dir, r.declared ?? []);
   if (!r.ok) {
-    const message = r.timedOut
-      ? t('register.npxInstallTimeout')
-      : r.idleTimedOut ? t('register.npxInstallIdle') : t('register.npxInstallFailed');
+    const message = npxFailMessage(r);
     // 失败清理半成品：只在本次新建的笼子上清（已有来源的目录不动，避免毁掉用户已装好的内容）
     if (!reused) cleanupPartialInstall(dir);
     log.info('npx-install', 'npx install failed', { pkg: input.pkg, dir, code: r.code, timedOut: r.timedOut, escaped: escaped.length });
@@ -441,6 +476,17 @@ export interface NpxUpdateResult {
   message?: string;
 }
 
+/** 失败原因：超时、无输出卡住、或安装器非零退出 */
+function npxFailMessage(r: { timedOut: boolean; idleTimedOut: boolean }): string {
+  if (r.timedOut) return t('register.npxInstallTimeout');
+  if (r.idleTimedOut) return t('register.npxInstallIdle');
+  return t('register.npxInstallFailed');
+}
+
+/** 把未知包名字段收成可读字符串；对象不用默认的 [object Object] */
+function pkgLabel(pkg: unknown): string {
+  return typeof pkg === 'string' ? pkg : '';
+}
 /** 落库的安装器信息（与 config/types.ts 中 ForeignSource.installer 同构） */
 export interface NpxInstaller {
   kind: 'npx';
@@ -459,18 +505,18 @@ export function normalizeInstaller(raw: unknown, opts: { knownPkg?: string } = {
   if (raw === undefined || raw === null) return {};
   const o = raw as Record<string, unknown>;
   if (o.kind !== 'npx' || typeof o.pkg !== 'string') {
-    return { issue: t('register.npxPkgInvalid', { pkg: String(o.pkg ?? '') }) };
+    return { issue: t('register.npxPkgInvalid', { pkg: pkgLabel(o.pkg) }) };
   }
   const issue = npxPkgIssue(o.pkg);
   if (issue) return { issue };
   try {
-    const args = parseArgs(o.args as string | string[] | undefined);
+    const args = parseArgs(o.args as NpxArgInput);
     const known = opts.knownPkg ?? o.pkg.trim();
     let updateArgs: string[] = [];
     if (typeof o.updateCmd === 'string' && o.updateCmd.trim()) {
       updateArgs = parseNpxCommand(o.updateCmd, { knownPkg: known }).args;
     } else {
-      updateArgs = parseArgs(o.updateArgs as string | string[] | undefined);
+      updateArgs = parseArgs(o.updateArgs as NpxArgInput);
     }
     const at = typeof o.at === 'string' ? o.at : undefined;
     return {
@@ -502,9 +548,7 @@ export async function npxUpdate(input: NpxUpdateInput): Promise<NpxUpdateResult>
   const r = await runNpx(input.pkg, usedArgs, input.dir, NPX_TIMEOUT_MS, input.onOutput, input.onProgress);
   const escaped = detectEscapedWrites(startedAt, input.dir, r.declared ?? []);
   if (!r.ok) {
-    const message = r.timedOut
-      ? t('register.npxInstallTimeout')
-      : r.idleTimedOut ? t('register.npxInstallIdle') : t('register.npxInstallFailed');
+    const message = npxFailMessage(r);
     log.info('npx-install', 'npx update failed', { pkg: input.pkg, dir: input.dir, code: r.code, timedOut: r.timedOut, escaped: escaped.length });
     return { ok: false, updated: false, usedArgs, diff: '', escaped, log: r.log, message };
   }

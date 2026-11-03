@@ -50,24 +50,25 @@ export function detectOutsideWrites(startedAt: number, exclude: string): string[
 
   const isUnder = (p: string) => p === excluded || p.startsWith(`${excluded}${path.sep}`);
   const inHome = (p: string) => p.startsWith(`${home}${path.sep}`);
+  const note = (p: string) => { if (mtimeOf(p) >= startedAt) hits.add(p); };
+
+  const visitChild = (dir: string, e: fs.Dirent, depth: number) => {
+    if (e.name.startsWith('.') && SKIP_DIRS.has(e.name)) return;
+    const child = path.join(dir, e.name);
+    note(child);
+    if (e.isDirectory() && depth + 1 < MAX_DEPTH) checkDir(child, depth + 1);
+  };
 
   const checkDir = (dir: string, depth: number) => {
     if (isUnder(dir) || !inHome(dir)) return;
-    if (mtimeOf(dir) >= startedAt) hits.add(dir);
+    note(dir);
     if (depth >= MAX_DEPTH) return;
     let entries: fs.Dirent[];
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     let n = 0;
     for (const e of entries) {
       if (n++ > MAX_ENTRIES) return;
-      if (e.name.startsWith('.') && SKIP_DIRS.has(e.name)) continue;
-      const child = path.join(dir, e.name);
-      if (e.isDirectory()) {
-        if (mtimeOf(child) >= startedAt) hits.add(child);
-        if (depth + 1 < MAX_DEPTH) checkDir(child, depth + 1);
-      } else if (mtimeOf(child) >= startedAt) {
-        hits.add(child);
-      }
+      visitChild(dir, e, depth);
     }
   };
 
@@ -88,22 +89,67 @@ export function detectOutsideWrites(startedAt: number, exclude: string): string[
     checkDir(path.join(cfgDir, e.name), 1);
   }
 
-  return [...hits].map(abbrevHome).sort();
+  return [...hits].map(abbrevHome).sort((a, b) => a.localeCompare(b));
+}
+
+/** 路径段字符：与原先 `[\w.@+-]` 一致，避免嵌套量词的回溯 */
+function isHomeSegChar(ch: string): boolean {
+  const c = ch.charCodeAt(0);
+  const digit = c >= 48 && c <= 57;
+  const upper = c >= 65 && c <= 90;
+  const lower = c >= 97 && c <= 122;
+  return digit || upper || lower || ch === '_' || ch === '.' || ch === '@' || ch === '+' || ch === '-';
+}
+
+/** 从 at 起读 `~/.a/b` 这种相对家目录路径；对不上返回 undefined */
+function readTildePath(text: string, at: number): { value: string; next: number } | undefined {
+  if (text[at] !== '~' || text[at + 1] !== '/') return undefined;
+  let j = at + 1;
+  let consumed = false;
+  while (text[j] === '/') {
+    let k = j + 1;
+    while (k < text.length && isHomeSegChar(text[k])) k += 1;
+    if (k === j + 1) break;
+    consumed = true;
+    j = k;
+  }
+  if (!consumed) return undefined;
+  return { value: text.slice(at, j), next: j };
+}
+
+/** 从 at 起读家目录下的绝对路径，并压成 `~` 前缀 */
+function readAbsHomePath(text: string, home: string, at: number): { value: string; next: number } | undefined {
+  const prefix = `${home}/`;
+  if (!text.startsWith(prefix, at)) return undefined;
+  let j = at + home.length;
+  let consumed = false;
+  while (text[j] === '/') {
+    let k = j + 1;
+    while (k < text.length && isHomeSegChar(text[k])) k += 1;
+    if (k === j + 1) break;
+    consumed = true;
+    j = k;
+  }
+  if (!consumed) return undefined;
+  return { value: abbrevHome(text.slice(at, j)), next: j };
 }
 
 /** 从安装器输出里解析它声明要写入的家目录位置（如 `Claude Code  ~/.claude`） */
 export function parseDeclaredHomePaths(text: string): string[] {
   const home = os.homedir();
   const out = new Set<string>();
-  // 家目录相对写法：~/.claude、~/.config/opencode
-  for (const m of text.matchAll(/~(?:\/[\w.@+-]+)+/g)) {
-    const p = m[0].replace(/\/+$/, '');
-    if (p && p !== '~') out.add(p);
-  }
-  // 绝对写法：/Users/xxx/.claude → 压成 ~/.claude
-  for (const m of text.matchAll(new RegExp(`${home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/[\\w.@+-]+(?:/[\\w.@+-]+)*`, 'g'))) {
-    const abs = m[0].replace(/\/+$/, '');
-    out.add(abbrevHome(abs));
+  for (let i = 0; i < text.length; i += 1) {
+    const tilde = text[i] === '~' ? readTildePath(text, i) : undefined;
+    if (tilde && tilde.value !== '~') {
+      out.add(tilde.value);
+      i = tilde.next - 1;
+      continue;
+    }
+    const abs = text.startsWith(home, i) ? readAbsHomePath(text, home, i) : undefined;
+    if (abs) {
+      out.add(abs.value);
+      i = abs.next - 1;
+    }
   }
   // 去掉被其它路径包含的（~/.claude 已在时不再单列 ~/.claude/skills）
   const list = [...out].sort((a, b) => a.length - b.length);

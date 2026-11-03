@@ -32,11 +32,55 @@ export function gitUrlIssue(url: string): string | undefined {
   if (!u) return t('register.gitUrlEmpty');
   if (u.length > 2000) return t('register.gitUrlInvalid', { url: `${u.slice(0, 120)}…` });
   // `-` 开头会被 git 当作选项；`::` 是 ext:: 等远程 helper 的载体，一律拒绝
-  if (u.startsWith('-') || u.includes('::') || /[\u0000-\u001f\s]/.test(u)) {
+  if (u.startsWith('-') || u.includes('::') || hasControlOrWhitespace(u)) {
     return t('register.gitUrlInvalid', { url: u });
   }
   if (GIT_URL_SCHEME.test(u) || GIT_URL_SCP.test(u)) return undefined;
   return t('register.gitUrlInvalid', { url: u });
+}
+
+/** 控制字符或空白：Git 地址里出现即拒绝 */
+function hasControlOrWhitespace(s: string): boolean {
+  for (let i = 0; i < s.length; i += 1) {
+    if (s.charCodeAt(i) <= 0x1f) return true;
+  }
+  return /\s/.test(s);
+}
+
+/** 去掉结尾 `/` */
+function stripTrailingSlash(s: string): string {
+  let end = s.length;
+  while (end > 0 && s[end - 1] === '/') end -= 1;
+  return s.slice(0, end);
+}
+
+/** 取 `/` 或 `:` 之后的最后一段 */
+function lastUrlSegment(s: string): string {
+  let i = s.length - 1;
+  while (i >= 0 && s[i] !== '/' && s[i] !== ':') i -= 1;
+  return s.slice(i + 1);
+}
+
+function stripGitSuffix(s: string): string {
+  return s.length >= 4 && s.slice(-4).toLowerCase() === '.git' ? s.slice(0, -4) : s;
+}
+
+function isSlugChar(ch: string): boolean {
+  const c = ch.charCodeAt(0);
+  const digit = c >= 48 && c <= 57;
+  const upper = c >= 65 && c <= 90;
+  const lower = c >= 97 && c <= 122;
+  return digit || upper || lower || ch === '.' || ch === '_' || ch === '-';
+}
+
+function toSlug(raw: string): string {
+  let slug = '';
+  for (const ch of raw) slug += isSlugChar(ch) ? ch : '-';
+  let start = 0;
+  let end = slug.length;
+  while (start < end && slug[start] === '-') start += 1;
+  while (end > start && slug[end - 1] === '-') end -= 1;
+  return slug.slice(start, end);
 }
 
 /**
@@ -44,12 +88,12 @@ export function gitUrlIssue(url: string): string | undefined {
  * 保证结果一定是一个合法 id（以字母或数字开头，只含字母数字与 . _ -）。
  */
 export function dirNameFromUrl(url: string): string {
-  const cleaned = url.trim().replace(/\/+$/, '');
-  const tail = cleaned.split(/[/:]/).pop() ?? '';
-  const base = tail.replace(/\.git$/i, '');
-  const slug = base.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  const base = stripGitSuffix(lastUrlSegment(stripTrailingSlash(url.trim())));
+  const slug = toSlug(base);
   if (!slug) return 'git-source';
-  return /^[A-Za-z0-9]/.test(slug) ? slug : `s-${slug}`;
+  const head = slug.charCodeAt(0);
+  const alnum = (head >= 48 && head <= 57) || (head >= 65 && head <= 90) || (head >= 97 && head <= 122);
+  return alnum ? slug : `s-${slug}`;
 }
 
 export interface CloneOutcome {
