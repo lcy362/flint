@@ -11,6 +11,7 @@ import { useToast } from '../components/ui/Toast';
 import { AddAgentModal } from '../components/agent/AddAgentModal';
 import { useAsync } from '../state/useAsync';
 import { LANG_OPTIONS, useI18n } from '../i18n';
+import PathText from '../components/ui/PathText';
 
 /**
  * 设置：界面语言、默认同步策略、自定义 Agent、日志。
@@ -124,7 +125,7 @@ export default function Settings() {
         </LoadingBoundary>
       </div>
 
-      <div className="panel">
+      <div className="listing">
         <EntityList
           title={t('settings.section.custom')}
           toolbar={<Button size="sm" onClick={() => setAddOpen(true)}>{t('settings.custom.add')}</Button>}
@@ -134,7 +135,17 @@ export default function Settings() {
             id: c.key,
             title: c.name,
             sub: <span className="mono">{c.key}</span>,
-            desc: <span className="mono">{c.globalDir}{c.projectDir ? ` · ${c.projectDir}` : ''}</span>,
+            desc: (
+              <span className="mono entity-card__path">
+                <PathText path={c.globalDir} />
+                {c.projectDir ? (
+                  <>
+                    {' · '}
+                    <PathText path={c.projectDir} />
+                  </>
+                ) : null}
+              </span>
+            ),
             status: c.recursive ? <Badge tone="info">{t('settings.custom.recursive')}</Badge> : undefined,
             actions: (
               <Button size="sm" variant="danger" onClick={async () => {

@@ -94,14 +94,16 @@ export default function Agents() {
 
   return (
     <>
-      <PageHeader
-        title={t('nav.agents')}
-        sub={data ? t('agents.subtitle', { dirs: groups.length, agents: data.length }) : undefined}
-        actions={<>
-          <Button variant="ghost" onClick={reload}>{t('common.refresh')}</Button>
-          <Button onClick={() => setAddOpen(true)} title={t('agents.addCustom.title')}>{t('agents.addCustom')}</Button>
-        </>}
-      />
+      {!(selectedKey !== null && selected) && (
+        <PageHeader
+          title={t('nav.agents')}
+          sub={data ? t('agents.subtitle', { dirs: groups.length, agents: data.length }) : undefined}
+          actions={<>
+            <Button variant="ghost" onClick={reload}>{t('common.refresh')}</Button>
+            <Button onClick={() => setAddOpen(true)} title={t('agents.addCustom.title')}>{t('agents.addCustom')}</Button>
+          </>}
+        />
+      )}
       {selectedKey !== null && (selected ? (
           <AgentDetail agent={selected} siblings={siblings} onBack={backToList} onChanged={reload} />
         ) : (
@@ -135,11 +137,13 @@ export default function Agents() {
             empty={{ title: t('agents.empty.title'), hint: t('agents.empty.hint'), icon: '◉' }}
           >
             {() => (
-              <EntityList
-                items={items}
-                title={`${filtered ? t('list.filtered') : t('list.allSkillDirs')} · ${items.length}${filtered ? ' / ' + groups.length : ''}`}
-                hideToggle
-              />
+              <div className="listing">
+                <EntityList
+                  items={items}
+                  title={`${filtered ? t('list.filtered') : t('list.allSkillDirs')} · ${items.length}${filtered ? ' / ' + groups.length : ''}`}
+                  hideToggle
+                />
+              </div>
             )}
           </LoadingBoundary>
         </>
@@ -401,7 +405,7 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: Readonly<{
         <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
         {/* 推荐目录就是这个页面的主体：标题写「开源生态推荐目录」（带 info 说明），
             使用它的 Agent 退到副行当「代表」——与列表卡片同一套说法 */}
-        <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>
+        <h1 className="detail-head__title">
           {readsAgents ? (
             <OpenStandardTitle
               label={t('agents.openStandard.title')}
@@ -410,7 +414,7 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: Readonly<{
           ) : (
             <AgentNamesTitle agents={titleMembers} />
           )}
-        </h2>
+        </h1>
         {readsAgents && (
           <span className="detail-head__context">
             <span className="mono">{shortDir(agent.globalDir)}</span>
@@ -458,29 +462,31 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: Readonly<{
       )}
 
       <section className="detail-section">
-        <h3 className="section-head section-head--quiet">
+        <h2 className="section-head section-head--quiet">
           <span className="section-head__label">{t('agents.currentSkills')}</span>
           <span className="section-head__rule" aria-hidden="true" />
           <span className="section-head__note">{t('agents.currentSkills.note')}</span>
-        </h3>
+        </h2>
 
         <div className="panel panel--quiet">
-          <div className="panel__hint" style={{ marginBottom: 'var(--sp-3)', display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
-            <span title={t('agents.skillDirs.title')}>
-              {t('agents.skillDirs')}{' '}
+          <div className="agent-dirs" title={t('agents.skillDirs.title')}>
+            <span className="agent-dirs__label">{t('agents.skillDirs')}</span>
+            <span className="agent-dirs__vals">
               {[agent.globalDir, ...(sharedDir ? [sharedDir] : [])].map((d, i) => (
-                <span key={d}>
-                  {i > 0 && <span className="mono">{lang === 'zh' ? '、' : ', '}</span>}
-                  <span className="mono">{shortDir(d)}</span>
+                <span key={d} className="agent-dirs__val">
+                  {i > 0 && <span className="agent-dirs__sep">{lang === 'zh' ? '、' : ', '}</span>}
+                  <span className="mono" title={d}>
+                    {shortDir(d)}
+                  </span>
                   {/* 「开源生态推荐目录」只标在 `~/.agents/skills` 这个目录本身 */}
-                  {readsAgents && d === agent.sharedDir ? (
-                    <span style={{ marginLeft: 'var(--sp-1)' }}>{openStandardBadge(t)}</span>
-                  ) : null}
+                  {readsAgents && d === agent.sharedDir ? openStandardBadge(t) : null}
                 </span>
               ))}
             </span>
-            {agent.project && <span className="mono">{t('agents.project', { path: agent.project })}</span>}
-            {agent.alsoUsedBy?.length ? <span>{t('agents.alsoUsedBy', { names: joinList(agent.alsoUsedBy) })}</span> : null}
+            {agent.project && <span className="mono agent-dirs__meta">{t('agents.project', { path: agent.project })}</span>}
+            {agent.alsoUsedBy?.length ? (
+              <span className="agent-dirs__meta">{t('agents.alsoUsedBy', { names: joinList(agent.alsoUsedBy) })}</span>
+            ) : null}
           </div>
           <LoadingBoundary state={{ loading, error, data }} empty={{ title: t('agents.noSkills'), icon: '○' }}>
             {(resp) => (
@@ -502,11 +508,11 @@ function AgentDetail({ agent, siblings, onBack, onChanged }: Readonly<{
       </section>
 
       <section className="detail-section">
-        <h3 className="section-head">
+        <h2 className="section-head">
           <span className="section-head__label">{t('agents.section.control')}</span>
           <span className="section-head__rule" aria-hidden="true" />
           <span className="section-head__note">{t('agents.section.control.note')}</span>
-        </h3>
+        </h2>
 
         <div className="panel">
           <div className="panel__head">

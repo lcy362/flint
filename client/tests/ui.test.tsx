@@ -213,7 +213,7 @@ describe('Modal', () => {
     expect(container.querySelector('.modal')).toBeTruthy();
     expect(screen.getByText('底部')).toBeTruthy();
 
-    await userEvent.click(screen.getByRole('button', { name: '✕' }));
+    await userEvent.click(screen.getByRole('button', { name: /关闭|Close/ }));
     expect(onClose).toHaveBeenCalledTimes(1);
 
     // Esc 关闭
@@ -233,7 +233,7 @@ describe('Modal', () => {
 
   it('未提供 onClose 时不渲染关闭按钮，也不响应 Esc', () => {
     const { container } = render(wrap(<Modal open title="t">c</Modal>));
-    expect(screen.queryByRole('button', { name: '✕' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /关闭|Close/ })).toBeNull();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(container.querySelector('.modal')).toBeTruthy();
   });

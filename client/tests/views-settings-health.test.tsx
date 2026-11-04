@@ -62,9 +62,10 @@ describe('Settings 视图', () => {
   }
 
   it('渲染语言、同步策略、自定义 Agent 与日志四块', async () => {
-    setup();
+    const { container } = setup();
     await waitFor(() => expect(screen.getByText('My Agent')).toBeTruthy());
-    expect(screen.getByText('/g/skills · proj')).toBeTruthy();
+    // 路径按 `/` 切成多段（wbr 换行点），整串文本仍可用 textContent 断言
+    expect(container.querySelector('.entity-card__path')?.textContent).toBe('/g/skills · proj');
     expect(screen.getByText('Recursive scan')).toBeTruthy();
     expect(screen.getByText(/\/tmp\/app\.log/)).toBeTruthy();
     expect(screen.getByText(/line-1/)).toBeTruthy();

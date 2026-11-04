@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Segment from '../ui/Segment';
 import Tag from '../ui/Tag';
 import EmptyState from '../ui/EmptyState';
+import Icon from '../ui/Icon';
 import { useViewMode, useViewModeOptions, type ViewMode } from '../../state/viewMode';
 import { useCollapsed } from '../../state/collapse';
 import { useI18n } from '../../i18n';
@@ -100,11 +101,14 @@ export function EntityCard({ item }: Readonly<{ item: EntityItem }>) {
           ))}
         </span>
       )}
-      <div className="entity-card__foot">
-        <span className="entity-card__meta">{item.meta}</span>
-        {item.toggle}
-        <span className="entity-row__actions">{item.actions}</span>
-      </div>
+      {(item.meta || item.toggle || item.actions) && (
+        <div className="entity-card__foot">
+          {/* 有操作时把来源让给操作：来源已在上面的标本标签行里，不再挤占按钮的宽度 */}
+          {!item.actions && <span className="entity-card__meta">{item.meta}</span>}
+          {item.toggle}
+          <span className="entity-row__actions">{item.actions}</span>
+        </div>
+      )}
     </article>
   );
 }
@@ -197,9 +201,7 @@ export default function EntityList({
       title={collapsed ? t('entity.expand') : t('entity.collapse')}
       onClick={toggleCollapsed}
     >
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      <Icon name="chevron-down" size={14} />
     </button>
   ) : undefined;
 
@@ -257,7 +259,7 @@ function EntityToolbar({
   return (
     <div className="entity-toolbar">
       {collapse}
-      {title && <span className="entity-toolbar__title">{title}</span>}
+      {title && <h2 className="entity-toolbar__title">{title}</h2>}
       {toolbar}
       <span style={{ flex: 1 }} />
       {toggle}

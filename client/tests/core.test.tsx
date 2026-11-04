@@ -153,7 +153,8 @@ describe('全局 bus 与主题', () => {
 
   it('主题读写', () => {
     localStorage.removeItem('lsh-theme');
-    expect(getStoredTheme()).toBe('light');
+    // 首次打开跟随系统；jsdom 没有系统偏好，落到深色
+    expect(getStoredTheme()).toBe('dark');
     storeTheme('dark');
     expect(getStoredTheme()).toBe('dark');
   });

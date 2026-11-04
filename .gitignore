@@ -3,3 +3,6 @@ dist/
 coverage/
 *.log
 .DS_Store
+
+# 设计评审过程产物（impeccable 生成的截图 / 缓存）
+.impeccable/

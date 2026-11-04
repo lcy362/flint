@@ -4,6 +4,7 @@ import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import EmptyState from '../components/ui/EmptyState';
+import Icon from '../components/ui/Icon';
 import LoadingBoundary from '../components/ui/LoadingBoundary';
 import Modal from '../components/ui/Modal';
 import { useAsync } from '../state/useAsync';
@@ -185,10 +186,11 @@ export default function Health() {
                 {Object.entries(diag.summary).map(([k, s]) => (
                   <div key={k} style={{ flex: 1, minWidth: 120, display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
                     <span className="field-label">{t(DIM_MSG_KEY[k] ?? k as MsgKey)}</span>
-                    <span style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-                      <Badge tone="good">{s.ok}</Badge>
-                      <Badge tone="warn">{s.warn}</Badge>
-                      <Badge tone="bad">{s.error}</Badge>
+                    {/* 计数不靠颜色区分：三枚徽标各自带状态名（复用既有文案），读屏与色觉障碍下同样可读 */}
+                    <span style={{ display: 'flex', gap: 'var(--sp-1)', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <Badge tone="good"><Icon name="check" size={10} />{s.ok}</Badge>
+                      <Badge tone="warn"><Icon name="alert" size={10} />{s.warn}</Badge>
+                      <Badge tone="bad"><Icon name="cross" size={10} />{s.error}</Badge>
                     </span>
                   </div>
                 ))}
@@ -200,9 +202,9 @@ export default function Health() {
             ) : (
               Object.entries(diag.groups).map(([group, items]) => (
                 <div key={group} className="panel" style={{ padding: 0 }}>
-                  <div style={{ padding: 'var(--sp-4) var(--sp-6)', borderBottom: '1px solid var(--c-line)' }}>
-                    <span className="page-head__title" style={{ fontSize: 'var(--fs-16)' }}>{t(DIM_MSG_KEY[group] ?? group as MsgKey)}</span>
-                    <span className="mono" style={{ color: 'var(--c-ink-3)', marginLeft: 'var(--sp-2)' }}>{items.length}</span>
+                  <div style={{ padding: 'var(--sp-3) var(--sp-6)', borderBottom: '1px solid var(--c-line)', display: 'flex', alignItems: 'baseline', gap: 'var(--sp-2)' }}>
+                    <h2 className="panel__title" style={{ margin: 0 }}>{t(DIM_MSG_KEY[group] ?? group as MsgKey)}</h2>
+                    <span className="mono" style={{ color: 'var(--c-ink-3)', fontSize: 'var(--fs-11)' }}>{items.length}</span>
                   </div>
                   {items.length === 0 && <div style={{ padding: 'var(--sp-4) var(--sp-6)' }}><EmptyState title={t('health.noneInGroup')} /></div>}
                   <div className="diag-group" style={{ padding: 'var(--sp-2) var(--sp-6)' }}>

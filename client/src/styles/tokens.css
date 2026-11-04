@@ -1,45 +1,59 @@
-/* ============ Design Tokens ============ */
+/* ============ Design Tokens · 矿物标本柜 ============
+ * 世界：燧石 / 矿物标本柜。石灰岩纸底 + 玄武岩侧轨，朱砂是唯一的暖色「火花」。
+ * 状态色取矿物颜料（玉 / 赭 / 赤 / 石青 / 紫晶），只承担语义，不做装饰。
+ * 所有正文与次要文字均 ≥ 4.5:1（浅色与深色两套各自实测）。
+ */
 :root {
-  /* color scheme / semantic surfaces */
-  --c-bg: #f5f6fa;
-  --c-surface: #ffffff;
-  --c-surface-2: #eef0f6;
-  --c-surface-3: #e4e7f0;
+  /* ---- 矿物底色 ---- */
+  --c-bg: #eceee9;
+  --c-surface: #f9faf7;
+  --c-surface-2: #e4e6e0;
+  --c-surface-3: #d8dbd3;
+  /* 代码 / 日志块的凹底 */
+  --c-bg-2: #e7e9e3;
 
-  /* ink (text) levels */
-  --c-ink-1: #1b1e2a;
-  --c-ink-2: #4a4f61;
-  --c-ink-3: #8b90a5;
+  /* ---- 墨（文字层级）---- */
+  --c-ink-1: #14181a;
+  --c-ink-2: #3f484a;
+  --c-ink-3: #5c6567;
 
-  /* accent */
-  --c-accent: #4f6df0;
-  --c-accent-hover: #3d5be0;
-  --c-accent-active: #3348c0;
-  --c-accent-soft: rgba(79, 109, 240, 0.12);
-  --c-on-accent: #ffffff;
+  /* ---- 玄武岩侧轨（浅色主题下也保持深色：方位由它承担）---- */
+  --c-rail: #16191a;
+  --c-rail-2: #1f2425;
+  --c-rail-ink: #e9ece6;
+  --c-rail-ink-dim: #9da59e;
+  --c-rail-line: #2b3132;
 
-  /* status */
-  --c-good: #2f9e63;
-  --c-good-soft: rgba(47, 158, 99, 0.14);
-  --c-warn: #d69a2b;
-  --c-warn-soft: rgba(214, 154, 43, 0.16);
-  --c-bad: #d9504b;
-  --c-bad-soft: rgba(217, 80, 75, 0.14);
-  --c-info: #2e86de;
-  --c-info-soft: rgba(46, 134, 222, 0.14);
-  /* 开源生态推荐目录专用强调色：与 accent 蓝、good 绿、warn 黄都拉开距离，
-     只用于「这个目录被生态广泛推荐」这一件事，不参与活跃 / 非活跃状态表达 */
-  --c-standard: #7c53e8;
-  --c-standard-soft: rgba(124, 83, 232, 0.12);
+  /* ---- 朱砂：唯一的「火花」强调 ---- */
+  --c-accent: #ad3a09;
+  --c-accent-hover: #963208;
+  --c-accent-active: #7f2a06;
+  --c-accent-soft: rgba(173, 58, 9, 0.1);
+  --c-accent-line: rgba(173, 58, 9, 0.36);
+  --c-on-accent: #fffdfa;
 
-  /* line / border */
-  --c-line: #e3e6ee;
-  --c-line-strong: #cdd2df;
+  /* ---- 状态：矿物颜料 ---- */
+  --c-good: #096046;
+  --c-good-soft: rgba(9, 96, 70, 0.12);
+  --c-warn: #7d5708;
+  --c-warn-soft: rgba(160, 110, 10, 0.14);
+  --c-bad: #a32016;
+  --c-bad-soft: rgba(163, 32, 22, 0.1);
+  --c-info: #1c5b8a;
+  --c-info-soft: rgba(28, 91, 138, 0.1);
+  /* 开源生态推荐目录专用：与上面五色都拉开距离 */
+  --c-standard: #5b3aa8;
+  --c-standard-soft: rgba(91, 58, 168, 0.1);
 
-  /* focus */
-  --c-focus-ring: rgba(79, 109, 240, 0.34);
+  /* ---- 线：发丝级 ---- */
+  --c-line: #d5d8d0;
+  --c-line-strong: #b7bcb2;
 
-  /* space (4px base) */
+  /* ---- 焦点 ---- */
+  --c-focus: #ad3a09;
+  --c-focus-ring: rgba(173, 58, 9, 0.3);
+
+  /* ---- 间距（4px 基线）---- */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -47,79 +61,98 @@
   --sp-5: 20px;
   --sp-6: 24px;
   --sp-7: 32px;
+  --sp-8: 48px;
 
-  /* radius */
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 16px;
+  /* ---- 圆角：石头切口，不用胶囊化面板 ---- */
+  --r-sm: 3px;
+  --r-md: 6px;
+  --r-lg: 8px;
   --r-full: 999px;
+  /* 凿口切角尺寸（主按钮 / 激活项的标记性缺角） */
+  --notch: 7px;
 
-  /* shadow */
-  --sh-1: 0 1px 2px rgba(20, 24, 40, 0.05), 0 1px 6px rgba(20, 24, 40, 0.04);
-  --sh-2: 0 6px 18px rgba(20, 24, 40, 0.09);
-  --sh-3: 0 18px 48px rgba(20, 24, 40, 0.16);
+  /* ---- 阴影：只给真正的抬升（弹窗 / 浮层）---- */
+  --sh-1: 0 1px 1px rgba(16, 20, 20, 0.04);
+  --sh-2: 0 10px 26px rgba(14, 18, 18, 0.12);
+  --sh-3: 0 26px 64px rgba(8, 11, 11, 0.28);
 
-  /* type */
+  /* ---- 字体 ---- */
+  --fs-11: 11px;
   --fs-12: 12px;
   --fs-13: 13px;
   --fs-14: 14px;
+  --fs-15: 15px;
   --fs-16: 16px;
   --fs-18: 18px;
   --fs-20: 20px;
   --fs-24: 24px;
+  --fs-26: 26px;
+  --fw-normal: 400;
   --fw-medium: 500;
   --fw-semibold: 600;
   --fw-bold: 700;
-  --ff-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  /* 标题用几何无衬线，与正文 Inter 形成配对（字体已在 index.html 加载） */
-  --ff-display: "Space Grotesk", var(--ff-sans);
+  --ff-sans: "Archivo", "Helvetica Neue", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* 标题沿用同一族：靠字重 / 字号 / 紧字距分层，不引入第二种无衬线 */
+  --ff-display: var(--ff-sans);
+  /* 等宽只用于路径、计数、目录行这些真正需要对齐的数据 */
   --ff-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* motion */
+  /* ---- 动效 ---- */
+  --dur-100: 100ms;
   --dur-150: 150ms;
   --dur-250: 250ms;
-  --ease: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* app chrome */
-  --rail-w: 224px;
-  --topbar-h: 60px;
-  /* 工具条内输入框 / 下拉 / 开关 / 按钮的统一高度，保证同行控件严格对齐 */
-  --control-h: 38px;
+  /* ---- 壳层 ---- */
+  --rail-w: 232px;
+  --topbar-h: 56px;
+  --control-h: 36px;
 }
 
 html[data-theme="dark"] {
-  --c-bg: #151823;
-  --c-surface: #1d212f;
-  --c-surface-2: #242a3a;
-  --c-surface-3: #2e3549;
+  --c-bg: #101314;
+  --c-surface: #171b1c;
+  --c-surface-2: #1e2324;
+  --c-surface-3: #272d2e;
+  --c-bg-2: #121617;
 
-  --c-ink-1: #eef0f7;
-  --c-ink-2: #a8adc0;
-  --c-ink-3: #6f7590;
+  --c-ink-1: #e9ece7;
+  --c-ink-2: #b2bab4;
+  --c-ink-3: #8d958f;
 
-  --c-accent: #6b84ff;
-  --c-accent-hover: #7f96ff;
-  --c-accent-active: #4f6df0;
-  --c-accent-soft: rgba(107, 132, 255, 0.16);
-  --c-on-accent: #ffffff;
+  /* 深色下侧轨比地面更暗：同一块石头，侧轨是背光面 */
+  --c-rail: #0b0e0f;
+  --c-rail-2: #141819;
+  --c-rail-ink: #e9ece6;
+  --c-rail-ink-dim: #9da59e;
+  --c-rail-line: #232829;
 
-  --c-good: #41b57c;
-  --c-good-soft: rgba(65, 181, 124, 0.18);
-  --c-warn: #e0a83c;
-  --c-warn-soft: rgba(224, 168, 60, 0.18);
-  --c-bad: #e56862;
-  --c-bad-soft: rgba(229, 104, 98, 0.18);
-  --c-info: #5aa7e8;
-  --c-info-soft: rgba(90, 167, 232, 0.18);
-  --c-standard: #a48cff;
-  --c-standard-soft: rgba(164, 140, 255, 0.18);
+  --c-accent: #f0743c;
+  --c-accent-hover: #ff8a55;
+  --c-accent-active: #d9612c;
+  --c-accent-soft: rgba(240, 116, 60, 0.14);
+  --c-accent-line: rgba(240, 116, 60, 0.4);
+  --c-on-accent: #14100d;
 
-  --c-line: #2c3243;
-  --c-line-strong: #3a4256;
+  --c-good: #4fbf8f;
+  --c-good-soft: rgba(79, 191, 143, 0.14);
+  --c-warn: #dfa93f;
+  --c-warn-soft: rgba(223, 169, 63, 0.14);
+  --c-bad: #f2766a;
+  --c-bad-soft: rgba(242, 118, 106, 0.14);
+  --c-info: #78b4e0;
+  --c-info-soft: rgba(120, 180, 224, 0.14);
+  --c-standard: #b3a0ff;
+  --c-standard-soft: rgba(179, 160, 255, 0.14);
 
-  --c-focus-ring: rgba(107, 132, 255, 0.4);
+  --c-line: #272d2e;
+  --c-line-strong: #3a4243;
 
-  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 6px rgba(0, 0, 0, 0.22);
-  --sh-2: 0 6px 18px rgba(0, 0, 0, 0.38);
-  --sh-3: 0 18px 48px rgba(0, 0, 0, 0.5);
+  --c-focus: #f0743c;
+  --c-focus-ring: rgba(240, 116, 60, 0.34);
+
+  --sh-1: 0 1px 1px rgba(0, 0, 0, 0.4);
+  --sh-2: 0 10px 26px rgba(0, 0, 0, 0.45);
+  --sh-3: 0 26px 64px rgba(0, 0, 0, 0.6);
 }

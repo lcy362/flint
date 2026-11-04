@@ -170,10 +170,13 @@ export default function Library() {
 
   return (
     <>
-      <PageHeader
-        title={t('nav.library')}
-        sub={data ? t('library.subtitle', { n: data.skills.length }) : undefined}
-      />
+      {/* 详情页不再重复列表标题：页名在顶栏面包屑，本节标题由详情头承担 */}
+      {detailId === null && (
+        <PageHeader
+          title={t('nav.library')}
+          sub={data ? t('library.subtitle', { n: data.skills.length }) : undefined}
+        />
+      )}
 
       {detailId !== null ? (
         <LibraryDetailGate
@@ -223,7 +226,7 @@ export default function Library() {
             />
           </div>
 
-          <div className="panel">
+          <div className="listing">
             <LoadingBoundary
               state={{ loading, error, data }}
               empty={{ title: t('library.empty.title'), hint: t('library.empty.hint'), icon: '◈' }}
@@ -244,7 +247,7 @@ export default function Library() {
           </div>
 
           {data && (
-            <div className="panel">
+            <div className="listing">
               <ReposAndSources repos={data.repos} sources={data.sources} reload={reload} />
             </div>
           )}
@@ -1976,7 +1979,7 @@ function SkillDetail({
     <>
       <div className="detail-head">
         <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
-        <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{skill.name}</h2>
+        <h1 className="detail-head__title">{skill.name}</h1>
         <Badge tone="info">{skill.source}</Badge>
         {skill.version && <Badge tone="neutral">v{skill.version}</Badge>}
         {skill.origin && <Badge tone="accent" title={t('badge.reason.own.title')}>{t('skillDetail.origin', { origin: skill.origin })}</Badge>}

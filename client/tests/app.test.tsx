@@ -60,12 +60,13 @@ describe('App 外壳', () => {
   it('主题切换写入 <html data-theme> 并持久化', async () => {
     render(<I18nProvider><AppWithToasts /></I18nProvider>);
     await waitFor(() => expect(screen.getAllByText('Library').length).toBeGreaterThan(0));
-    expect(document.documentElement.dataset.theme).toBe('light');
-    await userEvent.click(screen.getByRole('button', { name: 'Toggle theme' }));
-    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
-    expect(localStorage.getItem('lsh-theme')).toBe('dark');
-    await userEvent.click(screen.getByRole('button', { name: 'Toggle theme' }));
+    // 无系统偏好时首屏是深色；点一次切到浅色并记住
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    await userEvent.click(screen.getByRole('button', { name: /切换主题|Toggle theme/ }));
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'));
+    expect(localStorage.getItem('lsh-theme')).toBe('light');
+    await userEvent.click(screen.getByRole('button', { name: /切换主题|Toggle theme/ }));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
   });
 
   it('刷新按钮触发全局重新取数', async () => {

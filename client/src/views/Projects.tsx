@@ -15,9 +15,11 @@ import Modal from '../components/ui/Modal';
 import { FieldInput } from '../components/ui/Field';
 import { PathField } from '../components/ui/PathField';
 import { useToast } from '../components/ui/Toast';
+import Icon from '../components/ui/Icon';
 import { useAsync } from '../state/useAsync';
 import { navigate, useRoute } from '../state/router';
 import { joinList, useI18n } from '../i18n';
+import PathText from '../components/ui/PathText';
 
 interface ProjectItem {
   id: number;
@@ -41,19 +43,21 @@ export default function Projects() {
 
   const items: EntityItem[] = (data ?? []).map((p) => ({
     id: String(p.id),
-    title: p.path,
+    title: <PathText className="mono" path={p.path} />,
     sub: p.tags.length ? p.tags.map((tag) => `#${tag}`).join(' ') : t('common.noTags'),
     onClick: () => openProject(p.id),
-    actions: <span style={{ color: 'var(--c-ink-3)' }}>→</span>,
+    actions: <span className="entity-row__chevron"><Icon name="arrow-right" size={14} /></span>,
   }));
 
   return (
     <>
-      <PageHeader
-        title={t('nav.projects')}
-        sub={data ? t('projects.subtitle', { n: data.length }) : undefined}
-        actions={<Button onClick={() => setCreateOpen(true)}>{t('projects.new')}</Button>}
-      />
+      {!(selectedId !== null && selected) && (
+        <PageHeader
+          title={t('nav.projects')}
+          sub={data ? t('projects.subtitle', { n: data.length }) : undefined}
+          actions={<Button onClick={() => setCreateOpen(true)}>{t('projects.new')}</Button>}
+        />
+      )}
       {selectedId !== null && (selected ? (
         <ProjectDetail project={selected} onBack={backToList} onChanged={reload} />
       ) : (
@@ -69,7 +73,11 @@ export default function Projects() {
           state={{ loading, error, data }}
           empty={{ title: t('projects.empty.title'), hint: t('projects.empty.hint'), icon: '❐' }}
         >
-          {() => <EntityList items={items} title={t('list.allProjects')} />}
+          {() => (
+            <div className="listing">
+              <EntityList items={items} title={t('list.allProjects')} />
+            </div>
+          )}
         </LoadingBoundary>
       )}
 
@@ -230,7 +238,7 @@ function ProjectDetail({ project, onBack, onChanged }: Readonly<{ project: Proje
     <>
       <div className="detail-head">
         <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
-        <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{project.path}</h2>
+        <h1 className="detail-head__title detail-head__title--path"><PathText path={project.path} /></h1>
         {project.tags.map((tag) => <Badge key={tag} tone="accent">#{tag}</Badge>)}
         <div className="detail-actions">
           <Button size="sm" variant="ghost" onClick={() => setTagOpen(true)} title={t('projects.tags.button.title')}>{t('projects.tags.button')}</Button>

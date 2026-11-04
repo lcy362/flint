@@ -231,7 +231,7 @@ describe('布局组件', () => {
     const onToggleTheme = vi.fn();
     const onReload = vi.fn();
     const { rerender } = render(
-      wrap(<Topbar title="T" sub="S" theme="light" onToggleTheme={onToggleTheme} onReload={onReload} reloading />),
+      wrap(<Topbar title="T" detail="S" theme="light" onToggleTheme={onToggleTheme} onReload={onReload} reloading />),
     );
     expect(screen.getByText('T')).toBeTruthy();
     expect(screen.getByText('S')).toBeTruthy();
@@ -246,7 +246,8 @@ describe('布局组件', () => {
 
     rerender(wrap(<Topbar title="T" theme="dark" onToggleTheme={onToggleTheme} />));
     expect(screen.queryByTitle('Refresh')).toBeNull();
-    expect(screen.getByText('☾')).toBeTruthy();
+    // 主题按钮是绘制图标，无障碍名来自 aria-label
+    expect(screen.getByRole('button', { name: '切换主题' })).toBeTruthy();
   });
 
   it('AgentNamesTitle 单个直接展示、多个用 / 连接', () => {

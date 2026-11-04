@@ -5,6 +5,7 @@ import AgentNamesTitle from './AgentNamesTitle';
 import OpenStandardTitle from './OpenStandardTitle';
 import { activeBadge, customBadge, notInstalledBadge, presetBadge, readsAgentsDir } from './agentBadges';
 import type { AgentGroup } from './agentGroups';
+import PathText from '../ui/PathText';
 
 /**
  * 该目录是不是开源生态推荐目录（`~/.agents/skills`）：生态里被采纳得最广的共享技能目录。
@@ -53,7 +54,7 @@ export function agentGroupItem(g: AgentGroup, t: TFunc, opts: AgentGroupItemOpti
   const item: EntityItem = {
     id: g.dir,
     ...head,
-    desc: <span className="mono">{g.dir}</span>,
+    desc: <PathText className="mono entity-card__path" path={g.dir} />,
     status: activeBadge(t, { active: g.anyActive }),
     // 一个目录只有一套策略，同目录的 Agent 共用它（系统内存于主 Agent 名下）
     badges: (

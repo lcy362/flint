@@ -104,11 +104,13 @@ export default function Presets() {
 
   return (
     <>
-      <PageHeader
-        title={t('nav.presets')}
-        sub={data ? t('presets.subtitle', { n: presets.length }) : undefined}
-        actions={<Button onClick={() => setCreateOpen(true)}>{t('presets.new')}</Button>}
-      />
+      {!(selectedName && selected) && (
+        <PageHeader
+          title={t('nav.presets')}
+          sub={data ? t('presets.subtitle', { n: presets.length }) : undefined}
+          actions={<Button onClick={() => setCreateOpen(true)}>{t('presets.new')}</Button>}
+        />
+      )}
 
       {selectedName && !selected && (
         <LoadingBoundary
@@ -136,6 +138,7 @@ export default function Presets() {
           empty={{ title: t('presets.empty.title'), hint: t('presets.empty.hint'), icon: '□' }}
         >
           {(state) => (
+            <div className="listing">
             <EntityList
               items={presets.map((p) => {
                 // 主页只暴露最终结果：本预设最终会开启多少个技能（含按标签自动纳入）
@@ -149,6 +152,7 @@ export default function Presets() {
               })}
               title={t('list.allPresets')}
             />
+            </div>
           )}
         </LoadingBoundary>
       )}
@@ -426,7 +430,7 @@ function PresetDetail({
     <>
       <div className="detail-head">
         <Button variant="ghost" size="sm" className="back-btn" onClick={onBack}>{t('common.back')}</Button>
-        <h2 className="page-head__title" style={{ fontSize: 'var(--fs-20)' }}>{preset.name}</h2>
+        <h1 className="detail-head__title">{preset.name}</h1>
         <span style={{ fontSize: 'var(--fs-12)', color: 'var(--c-ink-3)' }}>
           {enabledAuto > 0
             ? t('presets.detail.enabledWithAuto', { n: enabled.length, auto: enabledAuto })
@@ -438,11 +442,11 @@ function PresetDetail({
       </div>
 
       <section className="detail-section">
-        <h3 className="section-head section-head--quiet">
+        <h2 className="section-head section-head--quiet">
           <span className="section-head__label">{t('presets.section.current')}</span>
           <span className="section-head__rule" aria-hidden="true" />
           <span className="section-head__note">{t('presets.section.current.note')}</span>
-        </h3>
+        </h2>
 
         <div className="detail-summary">
           <div className="panel panel--quiet">
@@ -496,11 +500,11 @@ function PresetDetail({
       </section>
 
       <section className="detail-section">
-        <h3 className="section-head">
+        <h2 className="section-head">
           <span className="section-head__label">{t('presets.section.adjust')}</span>
           <span className="section-head__rule" aria-hidden="true" />
           <span className="section-head__note">{t('presets.section.adjust.note')}</span>
-        </h3>
+        </h2>
 
         <div className="panel">
           <div className="panel__head">
