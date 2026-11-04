@@ -23,6 +23,7 @@ import OpenStandardTitle from '../components/agent/OpenStandardTitle';
 import { AddAgentModal } from '../components/agent/AddAgentModal';
 import { groupAgentsByDir } from '../components/agent/agentGroups';
 import { agentGroupItem, isStandardGroup } from '../components/agent/agentGroupItems';
+import StandardDirBlock from '../components/agent/StandardDirBlock';
 import {
   agentBadgeLegend,
   activeBadge,
@@ -70,13 +71,12 @@ export default function Agents() {
         if (!kw) return true;
         return `${g.names.join(' ')} ${g.keys.join(' ')} ${g.dir}`.toLowerCase().includes(kw);
       })
-      // 共享标准目录排在「活跃 / 非活跃」各自分组的第一位；同组其余保持原有顺序
-      .sort(
-        (a, b) =>
-          Number(b.anyActive) - Number(a.anyActive) ||
-          Number(isStandardGroup(b)) - Number(isStandardGroup(a))
-      );
+      // 活跃目录优先，其余保持 groupAgentsByDir 的「已安装、名称序」
+      .sort((a, b) => Number(b.anyActive) - Number(a.anyActive));
   }, [groups, q, onlyInstalled]);
+  // 开源生态推荐目录独立置顶（不参与下面的卡片流）：它一个目录服务多数 Agent
+  const standard = shown.find(isStandardGroup) ?? null;
+  const restShown = standard ? shown.filter((g) => g !== standard) : shown;
   const filtered = !!q.trim() || onlyInstalled;
   const [viewMode, setViewMode] = useViewMode();
 
@@ -85,12 +85,19 @@ export default function Agents() {
     ? (data ?? []).filter((a) => a.globalDir === selected.globalDir && a.key !== selected.key)
     : [];
 
-  const items: EntityItem[] = shown.map((g) => {
+  const items: EntityItem[] = restShown.map((g) => {
     const { primary } = g;
     // 卡片口径集中在 agentGroupItem（技能详情的「分发到智能体」弹窗复用同一份映射）。
     // 整张卡一个入口：同一目录不存在「各自的详情页」，点谁都是同一份内容。
     return agentGroupItem(g, t, { onClick: () => openAgent(primary.key) });
   });
+  const standardFeature = standard ? (
+    <StandardDirBlock
+      item={agentGroupItem(standard, t, { onClick: () => openAgent(standard.primary.key) })}
+      note={t('agents.openStandard.desc')}
+      divider={t('agents.openStandard.divider')}
+    />
+  ) : undefined;
 
   return (
     <>
@@ -140,7 +147,8 @@ export default function Agents() {
               <div className="listing">
                 <EntityList
                   items={items}
-                  title={`${filtered ? t('list.filtered') : t('list.allSkillDirs')} · ${items.length}${filtered ? ' / ' + groups.length : ''}`}
+                  feature={standardFeature}
+                  title={`${filtered ? t('list.filtered') : t('list.allSkillDirs')} · ${shown.length}${filtered ? ' / ' + groups.length : ''}`}
                   hideToggle
                 />
               </div>

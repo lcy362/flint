@@ -399,17 +399,20 @@ export const zh: Record<MsgKey, string> = {
     '本机还没有这个技能目录——通常是这些工具还没装，或它们从未加载过技能；把 Agent 设为活跃并同步后会自动创建。',
   'agentBadge.openStandard': '开源生态推荐目录',
   'agentBadge.openStandard.title':
-    '{dir} 是开源生态里被采纳得最广的共享技能目录：多数 Agent（Codex、Warp、OpenHands、GitHub Copilot、Cursor、OpenCode 等）都会读取它，放一份即对这些工具一并生效。',
+    '{dir} 是开源生态里被采纳得最广的共享技能目录：Codex、DeepSeek Harness、OpenCode、WorkBuddy、Cursor、GitHub Copilot 等主流 Agent 都会读取它，放一份即对这些工具一并生效。',
   'agentBadge.openStandard.legend':
-    '只标记在 ~/.agents/skills 这个目录本身，而不是某个 Agent：它是开源生态里被采纳得最广的共享技能目录，放一份即对多数工具一并生效——正因为绝大多数 Agent 都读它，就不再逐个 Agent 重复标注「另读」。',
+    '只标记在 ~/.agents/skills 这个目录本身，而不是某个 Agent：Codex、DeepSeek Harness、OpenCode、WorkBuddy 等主流 Agent 都读它，放一份即对多数工具一并生效——正因为主流 Agent 都读它，就不再逐个 Agent 重复标注「另读」。',
 
   /* ---------- agents ---------- */
   'agents.subtitle': '共 {dirs} 个技能目录 · {agents} 个 Agent',
   'agents.openStandard.title': '开源生态推荐目录',
+  'agents.openStandard.desc':
+    'Codex、DeepSeek Harness、OpenCode、WorkBuddy 等主流 Agent 都会读取这里：技能放一份，这些工具一并生效。',
+  'agents.openStandard.divider': '只想投给某个特定 Agent？在下面找它自己的目录。',
   'agents.openStandard.tipDetail':
-    '大部分 Agent 都支持读取这个目录，{names} 是当前使用该目录的代表：技能放在这里，对这些工具一并生效。',
+    '{names} 是当前正在使用这一目录的代表：技能放在这里，对所有读取该目录的工具一并生效。',
   'agents.openStandard.tip':
-    '大部分 Agent 都会读取这个目录，推荐优先管理它：技能装在这里，对所有读取该目录的工具一并生效。若只想装给某一个 Agent，用那个 Agent 自己的目录即可。',
+    '这是开源生态里被采纳得最广的共享技能目录：Codex、DeepSeek Harness、OpenCode、WorkBuddy、Cursor、GitHub Copilot 等主流 Agent 都会读取它，技能放一份即对这些工具一并生效。只在需要单独投给某一个 Agent 时，才用它自己的目录。',
   'agents.addCustom': '新增自定义 Agent',
   'agents.addCustom.title': '新增一个内置清单之外的自定义 Agent',
   'agents.notFound.title': '未找到该 Agent',

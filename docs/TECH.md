@@ -380,7 +380,8 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - `components/common/FilterBar.tsx`：搜索 + 维度筛选 + 重置 + 视图切换 + 徽标说明入口。
 - `components/skill/SkillBadges.tsx`：技能徽标（reason / store / state / 已接管 / 目录）与「标签说明」数据源，卡片与列表行共用。
 - `components/agent/agentBadges.tsx`：Agent 徽标（活跃 / 开源生态推荐目录 / 自定义 / 家族 / 未安装 / 预设）与说明数据源。「开源生态推荐目录」只标在 `~/.agents/skills` 这个目录本身（判定用 `readsAgentsDir`，即后端 `shared === 'agents'`），不对每个读取它的 Agent 重复「另读」；`~/.config/agents/skills` 等其它共用目录不做任何标记。
-- `components/agent/OpenStandardTitle.tsx`：`~/.agents/skills` 的主标题（列表卡片与详情页共用）——写明「开源生态推荐目录」，info 按钮在卡片上讲「大部分 Agent 都读这个目录、推荐优先管理，只装给某一个 Agent 请用该 Agent 自己的目录」，在详情页上讲「大部分 Agent 都支持读这个目录，页面这几个是当前使用的代表」。该卡片 `variant: 'standard'` 换用 `--c-standard` 强调色、使用它的 Agent 名退到副标题弱化，并在**活跃 / 非活跃各自分组内排第一位**；非活跃时强调色减弱、边框换虚线（看得出是非活跃推荐目录，仍与普通卡片区分得开）。
+- `components/agent/StandardDirBlock.tsx`：`~/.agents/skills` 的「置顶特写」——固定第一行、独占整行、面积大于普通卡片（标题 18px、正文不截断），正文下方写「主流 Agent 都会读取这里」（文案见 `agents.openStandard.desc`），卡片后面接一条分割线 +「只想投给某个特定 Agent？在下面找它自己的目录」（`agents.openStandard.divider`）。Agent 页与「分发到智能体」弹窗都通过 `EntityList` 的 `feature` 插槽渲染它，普通目录不参与它的排序；预设详情用 `isStandardGroup` 排序置顶。
+- `components/agent/OpenStandardTitle.tsx`：`~/.agents/skills` 的主标题（列表卡片与详情页共用）——写明「开源生态推荐目录」，info 按钮在卡片上列举主流 Agent 并说明「只在需要单独投给某一个 Agent 时，才用那个 Agent 自己的目录」，在详情页上讲「这几个是当前使用该目录的代表」（成员名来自真实数据）。卡片 `variant: 'standard'` 换用 `--c-standard` 强调色；非活跃时强调色减弱、边框换虚线。
 - **详情页的目录口径**（`views/Agents.tsx` 的 `AgentDetail`）：`~/.agents/skills` 的详情页以推荐目录为标题主体（`OpenStandardTitle`，info 说明「这几个是当前使用的代表」），成员退到副行 `<目录> · <成员并列>`；其它目录的标题用 `AgentNamesTitle` 罗列整组成员（主 Agent 在前、其余名称序，与卡片同序）。活跃状态与切换都按**整个目录**处理——`dirActive = members.some(m => m.active)`，切换时整组成员一起加入 / 移出 `activeAgents`，与列表卡片同口径，避免「卡片说活跃、页面说非活跃」。
 - **同目录只有一个详情页**：`AgentNamesTitle` 只做并列展示、不再逐名可点（同一目录不存在「某个 Agent 自己的页」）；地址指向别名（如 `#/agents/openhands`）时前端 `replace` 规范到该目录的主 Agent，避免同一目录出现两个详情页各说一套。
 - `components/agent/agentGroups.ts`：按解析后的目录把 Agent 归并成卡片模型（主 Agent 在前）。

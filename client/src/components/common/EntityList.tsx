@@ -155,6 +155,11 @@ export interface EntityListProps {
   toggle?: boolean;
   /** 空状态 */
   empty?: ReactNode;
+  /**
+   * 置顶特例（如唯一的共享标准目录）：渲染在工具条之后、列表之前，独占整行。
+   * 筛选后即便没有普通条目也要显示，所以它不参与 items 的渲染分支。
+   */
+  feature?: ReactNode;
   /** 强制布局（不跟随全局偏好），用于弹窗等固定形态 */
   mode?: ViewMode;
   /** 视图切换器已上移到筛选条时置 true，避免同一页出现两个切换入口 */
@@ -178,6 +183,7 @@ export default function EntityList({
   toolbar,
   toggle = true,
   empty,
+  feature,
   mode,
   hideToggle = false,
   collapsible = false,
@@ -209,6 +215,7 @@ export default function EntityList({
     return (
       <>
         {title && <EntityToolbar title={title} toolbar={toolbar} collapse={collapseCtrl} />}
+        {!collapsed && feature}
         {!collapsed && (empty ?? <EmptyState title={t('common.empty')} />)}
       </>
     );
@@ -224,8 +231,9 @@ export default function EntityList({
           toggle={showToggle ? <Segment<ViewMode> value={current} onChange={setGlobalMode} options={viewModeOptions} /> : undefined}
         />
       )}
+      {!collapsed && feature && <div className="entity-feature">{feature}</div>}
       {!collapsed && (
-        <div style={{ marginTop: title || toolbar || showToggle ? 'var(--sp-4)' : 0 }}>
+        <div style={{ marginTop: title || toolbar || showToggle || feature ? 'var(--sp-4)' : 0 }}>
           {current === 'card' ? (
             <div className="entity-grid">
               {items.map((item) => (

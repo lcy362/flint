@@ -42,8 +42,10 @@ export function agentGroupItem(g: AgentGroup, t: TFunc, opts: AgentGroupItemOpti
   const head: Pick<EntityItem, 'title' | 'sub' | 'variant'> = isStandardGroup(g)
     ? {
         variant: 'standard',
+        // 卡面只讲「这是什么 + 路径」：读这个目录的 Agent 很多，逐个罗列会把主流的那几个淹掉；
+        // 本机当前实际成员留在详情页（`agents.openStandard.tipDetail` 按真实成员生成）
         title: <OpenStandardTitle label={t('agents.openStandard.title')} tip={t('agents.openStandard.tip')} />,
-        sub: <AgentNamesTitle agents={g.agents} quiet />,
+        sub: <span className="mono">{g.dir}</span>,
       }
     : {
         // 标题罗列使用该目录的全部 Agent —— 它们都是真实的 Agent，不把谁叫「别名」
@@ -54,7 +56,8 @@ export function agentGroupItem(g: AgentGroup, t: TFunc, opts: AgentGroupItemOpti
   const item: EntityItem = {
     id: g.dir,
     ...head,
-    desc: <PathText className="mono entity-card__path" path={g.dir} />,
+    // 推荐目录的路径已经放进副标题，正文留给 StandardDirBlock 的说明文字
+    desc: isStandardGroup(g) ? undefined : <PathText className="mono entity-card__path" path={g.dir} />,
     status: activeBadge(t, { active: g.anyActive }),
     // 一个目录只有一套策略，同目录的 Agent 共用它（系统内存于主 Agent 名下）
     badges: (

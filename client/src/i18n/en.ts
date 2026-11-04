@@ -414,17 +414,20 @@ export const en = {
     'This skill directory does not exist on this machine yet — usually the tool is not installed, or it has never loaded skills. It is created automatically once the agent is active and synced.',
   'agentBadge.openStandard': 'Ecosystem-recommended',
   'agentBadge.openStandard.title':
-    '{dir} is the most widely adopted shared skill directory in the open ecosystem: most agents (Codex, Warp, OpenHands, GitHub Copilot, Cursor, OpenCode and more) read it, so one copy serves them all.',
+    '{dir} is the most widely adopted shared skill directory in the open ecosystem: mainstream agents such as Codex, DeepSeek Harness, OpenCode, WorkBuddy, Cursor and GitHub Copilot read it, so one copy serves them all.',
   'agentBadge.openStandard.legend':
-    'Marks the ~/.agents/skills directory itself rather than a single agent: it is the most widely adopted shared skill directory in the open ecosystem, so one copy serves most tools. Since nearly every agent reads it, "also reads" is no longer annotated per agent.',
+    'Marks the ~/.agents/skills directory itself rather than a single agent: mainstream agents such as Codex, DeepSeek Harness, OpenCode and WorkBuddy read it, so one copy serves most tools. Since mainstream agents read it, "also reads" is no longer annotated per agent.',
 
   /* ---------- agents ---------- */
   'agents.subtitle': '{dirs} skill directories · {agents} agents',
   'agents.openStandard.title': 'Ecosystem-recommended directory',
+  'agents.openStandard.desc':
+    'Codex, DeepSeek Harness, OpenCode, WorkBuddy and other mainstream agents read this directory: one copy of a skill works for all of them.',
+  'agents.openStandard.divider': 'Need it in one specific agent only? Find that agent\u2019s own directory below.',
   'agents.openStandard.tipDetail':
-    'Most agents can read this directory; {names} are the representatives currently using it. A skill placed here works for all of them.',
+    '{names} are the representatives currently using this directory: a skill placed here works for every tool that reads it.',
   'agents.openStandard.tip':
-    'Most agents read this directory, so it is the recommended place to manage skills first: a skill installed here works for every tool that reads it. To install for one specific agent only, use that agent\u2019s own directory.',
+    'This is the most widely adopted shared skill directory in the open ecosystem: Codex, DeepSeek Harness, OpenCode, WorkBuddy, Cursor and GitHub Copilot all read it, so one copy of a skill works for every one of them. Only when you need to target one specific agent, use that agent\u2019s own directory.',
   'agents.addCustom': 'Add custom agent',
   'agents.addCustom.title': 'Add a custom agent outside the built-in list',
   'agents.notFound.title': 'Agent not found',

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type AgentView, type SkillAgentsResp, type SyncResult } from '../../api/types';
 import { groupAgentsByDir, type AgentGroup } from '../agent/agentGroups';
-import { agentGroupItem } from '../agent/agentGroupItems';
+import { agentGroupItem, isStandardGroup } from '../agent/agentGroupItems';
+import StandardDirBlock from '../agent/StandardDirBlock';
 import EntityList, { type EntityItem } from '../common/EntityList';
 import FilterBar from '../common/FilterBar';
 import Badge from '../ui/Badge';
@@ -137,24 +138,42 @@ export default function SkillDistributeModal({
     }
   };
 
-  const items: EntityItem[] = shown.map((row) =>
-    agentGroupItem(row.group, t, {
+  /**
+   * 一行 → 卡片模型。`wide` 用于置顶的共享标准目录：
+   * 那里把开关提到右上角与活跃徽标并列（大卡片里一个孤零零的开关离内容太远）。
+   */
+  const rowItem = (row: DirDeployRow, wide = false): EntityItem => {
+    const sw = (
+      <Switch
+        aria-label={t('skillDetail.distribute.toggleAria', { name: skill.name, agent: row.group.names.join(' / ') })}
+        checked={row.distributed}
+        disabled={busyKey === row.group.primary.key}
+        onChange={(on) => void toggle(row, on)}
+      />
+    );
+    const base = agentGroupItem(row.group, t, {
       // 这个技能与目录的关系是本弹窗的主信息，排在智能体自身徽标之前
       extraBadges: (
         row.distributed
           ? <Badge tone="good">{t('skillDetail.distribute.installed')}</Badge>
           : <Badge tone="neutral">{t('skillDetail.distribute.missing')}</Badge>
       ),
-      toggle: (
-        <Switch
-          aria-label={t('skillDetail.distribute.toggleAria', { name: skill.name, agent: row.group.names.join(' / ') })}
-          checked={row.distributed}
-          disabled={busyKey === row.group.primary.key}
-          onChange={(on) => void toggle(row, on)}
-        />
-      ),
-    })
-  );
+      toggle: wide ? undefined : sw,
+    });
+    return wide ? { ...base, status: <span className="standard-block__control">{base.status}{sw}</span> } : base;
+  };
+
+  // 共享标准目录固定置顶、独占一行：它不是「再一个目录」，而是多数 Agent 的共同落点
+  const standardRow = shown.find((r) => isStandardGroup(r.group)) ?? null;
+  const restRows = standardRow ? shown.filter((r) => r !== standardRow) : shown;
+  const items: EntityItem[] = restRows.map((row) => rowItem(row));
+  const feature = standardRow ? (
+    <StandardDirBlock
+      item={rowItem(standardRow, true)}
+      note={t('agents.openStandard.desc')}
+      divider={t('agents.openStandard.divider')}
+    />
+  ) : undefined;
 
   return (
     <Modal
@@ -186,6 +205,7 @@ export default function SkillDistributeModal({
             <EntityList
               title={`${filtered ? t('list.filtered') : t('skillDetail.distribute.list')} · ${shown.length}${filtered ? ' / ' + rows.length : ''}`}
               items={items}
+              feature={feature}
               hideToggle
               empty={<EmptyState title={filtered ? t('skillDetail.distribute.empty.match') : t('skillDetail.distribute.empty')} />}
             />

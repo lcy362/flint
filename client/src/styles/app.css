@@ -313,6 +313,52 @@
   padding: 0;
   overflow: hidden;
 }
+/* 开源生态推荐目录：独占一行的特写卡片 + 分割线（见 StandardDirBlock） */
+.standard-block {
+  display: flex;
+  flex-direction: column;
+}
+.standard-block .entity-card {
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  border-radius: var(--r-md);
+}
+.standard-block .entity-card__title {
+  font-size: var(--fs-18);
+  letter-spacing: -0.012em;
+}
+.standard-block .entity-card__desc {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  min-height: 0;
+  max-width: 82ch;
+  font-size: var(--fs-13);
+}
+.standard-block__note {
+  display: block;
+  margin-top: var(--sp-2);
+  color: var(--c-ink-2);
+}
+.standard-block__control {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.standard-block__divider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--sp-4);
+  padding-top: 10px;
+  border-top: 1px solid var(--c-line);
+  color: var(--c-ink-3);
+  font-size: var(--fs-12);
+}
+.standard-block__divider svg {
+  flex: none;
+  opacity: 0.75;
+}
+
 /* 只装列表的面板不是盒子：拆掉外框，卡片直接立在石面上（避免卡片套卡片） */
 .panel:has(.entity-grid),
 .panel:has(.entity-list) {

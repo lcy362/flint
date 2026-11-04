@@ -15,6 +15,7 @@ import Badge from '../components/ui/Badge';
 import { notInstalledBadge } from '../components/agent/agentBadges';
 import AgentNamesTitle from '../components/agent/AgentNamesTitle';
 import { groupAgentsByDir } from '../components/agent/agentGroups';
+import { isStandardGroup } from '../components/agent/agentGroupItems';
 import Chip from '../components/ui/Chip';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingBoundary from '../components/ui/LoadingBoundary';
@@ -402,7 +403,14 @@ function PresetDetail({
     () => (agents ?? []).filter((a) => a.preset === preset.name),
     [agents, preset.name]
   );
-  const appliedGroups = useMemo(() => groupAgentsByDir(appliedAgents), [appliedAgents]);
+  // 共享标准目录固定第一：它是多数 Agent 的共同落点，先于各 Agent 自己的目录
+  const appliedGroups = useMemo(
+    () =>
+      [...groupAgentsByDir(appliedAgents)].sort(
+        (a, b) => Number(isStandardGroup(b)) - Number(isStandardGroup(a))
+      ),
+    [appliedAgents]
+  );
   const activeDirs = useMemo(
     () => new Set((agents ?? []).filter((a) => a.active).map((a) => a.globalDir)),
     [agents]
