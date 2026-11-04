@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import NavRail from './components/layout/NavRail';
 import Topbar from './components/layout/Topbar';
 import { ToastProvider, useToast } from './components/ui/Toast';
@@ -49,10 +49,17 @@ export default function App() {
     navigate({ tab: t, sub: null, query: new URLSearchParams() });
   }, []);
 
+  /** 刷新按钮的 600ms 反馈计时器：卸载时清掉，避免销毁后再 setState */
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
+  }, []);
+
   const reloadAll = useCallback(() => {
     setReloading(true);
     emitReload();
-    setTimeout(() => setReloading(false), 600);
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(() => setReloading(false), 600);
   }, []);
 
   return (
