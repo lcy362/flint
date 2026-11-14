@@ -21,7 +21,7 @@ export function bodyText(dir: string, cache?: Map<string, BodyCache>): string {
     return '';
   }
   const hit = cache?.get(dir);
-  if (hit && hit.mtimeMs === mtimeMs) return hit.text;
+  if (hit?.mtimeMs === mtimeMs) return hit.text;
   const raw = readCachedUtf8(file);
   if (raw === undefined) return '';
   const text = raw.toLowerCase();

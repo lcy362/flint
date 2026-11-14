@@ -86,7 +86,7 @@ export function cachedContentHealthMap(skills: Skill[], ownSources: Set<string>)
   for (const s of skills) {
     if (!ownSources.has(s.source) || !s.dir) continue;
     const snap = healthSnaps.get(s.id);
-    if (!snap || snap.stamp !== contentStamp(s.dir)) {
+    if (snap?.stamp !== contentStamp(s.dir)) {
       if (snap) healthSnaps.delete(s.id);
       continue;
     }

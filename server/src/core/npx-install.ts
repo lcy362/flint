@@ -123,7 +123,7 @@ export function npxPkgIssue(pkg: string): string | undefined {
 /** 控制字符或空白：安装器参数 / 包名里出现即拒绝 */
 function hasControlOrWhitespace(s: string): boolean {
   for (let i = 0; i < s.length; i += 1) {
-    if (s.charCodeAt(i) <= 0x1f) return true;
+    if (s.codePointAt(i)! <= 0x1f) return true;
   }
   return /\s/.test(s);
 }
@@ -197,7 +197,7 @@ export function parseNpxCommand(cmd: string, opts: { knownPkg?: string } = {}): 
  * 非法字符净化成 `-`。结果一定是合法 id（与 dirNameFromUrl 同款保证）。
  */
 function isSlugChar(ch: string): boolean {
-  const c = ch.charCodeAt(0);
+  const c = ch.codePointAt(0)!;
   const digit = c >= 48 && c <= 57;
   const upper = c >= 65 && c <= 90;
   const lower = c >= 97 && c <= 122;
@@ -227,7 +227,7 @@ export function defaultIdFromPkg(pkg: string): string {
   const noScope = noVer.startsWith('@') ? noVer.slice(1) : noVer;
   const slug = toSlug(noScope);
   if (!slug) return 'npx-source';
-  return isSlugChar(slug[0]) && slug[0] !== '.' && slug[0] !== '_' && slug[0] !== '-' ? slug : `s-${slug}`;
+  return isSlugChar(slug[0]) && !'._-'.includes(slug[0]) ? slug : `s-${slug}`;
 }
 
 /** npx 来源的托管目录：与 git 克隆同根（`<flint 数据目录>/sources/<id>`） */

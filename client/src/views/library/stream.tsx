@@ -1,32 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, streamApi, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type SkillSecurityFinding, type GitCloneResult, type NpxInstallResult, type StreamProgress } from '../../api/types';
-import { skillViewToCard } from '../../components/skill/adapters';
-import SkillList from '../../components/skill/SkillList';
-import SkillDistributeModal from '../../components/skill/SkillDistributeModal';
-import { skillBadgeLegend } from '../../components/skill/SkillBadges';
-import EntityList, { type EntityItem } from '../../components/common/EntityList';
-import BadgeLegend from '../../components/common/BadgeLegend';
-import FoldButton from '../../components/common/FoldButton';
-import FilterBar from '../../components/common/FilterBar';
-import PageHeader from '../../components/ui/PageHeader';
-import Button from '../../components/ui/Button';
-import Modal from '../../components/ui/Modal';
-import Segment from '../../components/ui/Segment';
-import Badge from '../../components/ui/Badge';
-import EmptyState from '../../components/ui/EmptyState';
-import LoadingBoundary from '../../components/ui/LoadingBoundary';
-import Chip from '../../components/ui/Chip';
-import MultiSelect from '../../components/ui/MultiSelect';
-import { FieldInput, FieldSelect } from '../../components/ui/Field';
-import SwitchLabel from '../../components/ui/SwitchLabel';
-import { PathField, PathListField } from '../../components/ui/PathField';
-import Switch from '../../components/ui/Switch';
-import { useToast } from '../../components/ui/Toast';
-import { useAsync } from '../../state/useAsync';
-import { useCollapsed } from '../../state/collapse';
-import { useViewMode } from '../../state/viewMode';
-import { navigate, useQueryFlag, useQueryList, useQueryParam, useRoute } from '../../state/router';
-import { joinList, rich, useI18n, type TFunc } from '../../i18n';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { streamApi, type StreamProgress } from '../../api/types';
+import { useI18n, type TFunc } from '../../i18n';
 
 /** 流式执行日志面板：等宽、自动滚到底、只保留最近 N 行（进度行可能很多） */
 const LOG_KEEP = 300;

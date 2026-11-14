@@ -145,11 +145,6 @@ export function repoSkillRoot(repo: Repo): string {
   return repo.root ? expandTilde(repo.root) : path.join(expandTilde(repo.path), 'skills');
 }
 
-/** 全部自有仓库的 skill 根目录 */
-function repoSkillRoots(cfg: HubConfig): string[] {
-  return cfg.repos.map(repoSkillRoot);
-}
-
 /**
  * 共享标准目录的绝对路径：内置 Agent 的「额外读取」只落在这两个目录上
  * （`shared: 'agents'` → `~/.agents/skills`，`shared: 'config-agents'` → `~/.config/agents/skills`）。

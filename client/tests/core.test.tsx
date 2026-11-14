@@ -21,12 +21,6 @@ import {
   useRoute,
 } from '../src/state/router';
 import { I18nProvider, getLang, joinList, rich, translate, useI18n } from '../src/i18n';
-import type { ReactNode } from 'react';
-
-/** 包一层 i18n Provider，供依赖文案的组件 / hook 使用 */
-function wrap({ children }: { children: ReactNode }) {
-  return <I18nProvider>{children}</I18nProvider>;
-}
 
 /* ---------------- 站内请求 ---------------- */
 

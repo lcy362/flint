@@ -1,42 +1,11 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import express, { Router } from 'express';
 import { ConfigStore } from '../infra/config-store.js';
 import { log } from '../infra/logger.js';
-import { pickDirectory, pickFile } from '../infra/picker.js';
-import {
-  listAgents, agentSkillRows, agentOwnSkillRow, allAgentDefs, findAgentDef, resolveGlobalDir, effectiveAgentKey,
-  setPrimary, pruneAliasStrategies, expandTilde,
-} from '../core/agents.js';
-import { scanAll, detectLayoutAbs, scanDir, resolveLayout, invalidateScanCache } from '../core/scanner.js';
-import { previewRegister, idIssue, type RegisterPreviewInput } from '../core/register.js';
-import { cloneSourceRepo, gitUrlIssue } from '../core/source-clone.js';
-import { npxInstall, npxUpdate, npxPkgIssue, normalizeInstaller, parseArgs, parseNpxCommand } from '../core/npx-install.js';
-import { sseHead, sseSend, sseEnd, createLineEmitter, createProgressReporter } from './sse.js';
-import * as presets from '../core/presets.js';
-import * as active from '../core/active.js';
-import { syncActive, diffSync, deployOne, copySkill } from '../core/sync.js';
-import { collectCandidates } from '../core/integrate.js';
-import { addProject, syncProject, projectSkillRows, projectAddable, deployedAgents, pushProjectToRepo, takeoverProjectSkill, writeIndex, INDEX_NAME } from '../core/projects.js';
-import { readSkill } from '../core/skill.js';
-import { bodyText, firstHitContext, type BodyCache } from '../core/skillindex.js';
-import { detectStale, refreshSkill } from '../core/source-update.js';
-import { pullRepo, repoStatus } from '../core/repo-sync.js';
-import { importDirs, previewImportDirs } from '../core/import.js';
-import { previewCollect, collectAgentSkill, previewCollectSource, collectFromSource, projectCollectSource } from '../core/collect.js';
-import { migrateTagsToFrontmatter } from '../core/repo-tags.js';
-import { takeover } from '../core/takeover.js';
-import { applyFix } from '../core/fix.js';
-import { diagnose } from '../core/diagnose.js';
-import { cachedContentHealthMap, inspectSkill } from '../core/content.js';
-import { invalidateTextCache } from '../core/text-cache.js';
-import { mergeSkill } from '../core/merge.js';
-import { Repo, ForeignSource, CustomAgent, SyncMode } from '../config/types.js';
-import { agentCards, projectCards } from '../domain/cards.js';
-import { t } from '../i18n/index.js';
-import type { MsgKey } from '../i18n/en.js';
+import { effectiveAgentKey, pruneAliasStrategies } from '../core/agents.js';
+import { normalizeInstaller } from '../core/npx-install.js';
+import { ForeignSource, SyncMode } from '../config/types.js';
 /** 把第三方来源的可编辑字段写回去；installer 不合法时返回文案，调用方应 400 且不落库 */
 export function editForeignSource(cfg: ConfigStore, src: ForeignSource, body: Record<string, unknown>): string | undefined {
   const { name, path: p, layout, linked, kind, root, installer } = body;

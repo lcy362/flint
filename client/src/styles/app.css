@@ -1026,9 +1026,10 @@ html[data-theme='dark'] select.field {
     animation: spin 0.8s linear infinite;
   }
 }
+/* 小号 spinner：与 .spinner 同特异性，靠后定义覆盖尺寸，无需 !important */
 .spinner--sm {
-  width: 13px !important;
-  height: 13px !important;
+  width: 13px;
+  height: 13px;
   border-width: 2px;
 }
 
@@ -1517,11 +1518,6 @@ html[data-theme='dark'] select.field {
 .std-title__info {
   vertical-align: -1px;
   margin-left: 6px;
-}
-.detail-head .std-title {
-  color: var(--c-standard);
-}
-.std-title__info {
   flex: none;
   width: 15px;
   height: 15px;
@@ -1541,6 +1537,10 @@ html[data-theme='dark'] select.field {
   cursor: help;
   position: relative;
   transition: background var(--dur-150) var(--ease), color var(--dur-150) var(--ease);
+}
+/* 详情页标题沿用推荐目录色 */
+.detail-head .std-title {
+  color: var(--c-standard);
 }
 .std-title__info:hover,
 .std-title__info:focus-visible {

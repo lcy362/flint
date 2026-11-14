@@ -1,32 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, streamApi, type StateView, type RepoView, type SourceView, type SkillContent, type AgentCollectPreview, type AgentCollectItem, type ImportPreviewItem, type SkillSearchResp, type SkillCardView, type RepoStatus, type RegisterPreview, type SkillSecurityResult, type SkillSecurityFinding, type GitCloneResult, type NpxInstallResult, type StreamProgress } from '../../api/types';
-import { skillViewToCard } from '../../components/skill/adapters';
-import SkillList from '../../components/skill/SkillList';
-import SkillDistributeModal from '../../components/skill/SkillDistributeModal';
-import { skillBadgeLegend } from '../../components/skill/SkillBadges';
-import EntityList, { type EntityItem } from '../../components/common/EntityList';
-import BadgeLegend from '../../components/common/BadgeLegend';
-import FoldButton from '../../components/common/FoldButton';
-import FilterBar from '../../components/common/FilterBar';
-import PageHeader from '../../components/ui/PageHeader';
+import { useEffect, useRef, useState } from 'react';
+import { api, type RepoView, type SourceView, type RegisterPreview } from '../../api/types';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
-import Segment from '../../components/ui/Segment';
 import Badge from '../../components/ui/Badge';
-import EmptyState from '../../components/ui/EmptyState';
-import LoadingBoundary from '../../components/ui/LoadingBoundary';
-import Chip from '../../components/ui/Chip';
-import MultiSelect from '../../components/ui/MultiSelect';
 import { FieldInput, FieldSelect } from '../../components/ui/Field';
-import SwitchLabel from '../../components/ui/SwitchLabel';
-import { PathField, PathListField } from '../../components/ui/PathField';
-import Switch from '../../components/ui/Switch';
+import { PathField } from '../../components/ui/PathField';
 import { useToast } from '../../components/ui/Toast';
-import { useAsync } from '../../state/useAsync';
-import { useCollapsed } from '../../state/collapse';
-import { useViewMode } from '../../state/viewMode';
-import { navigate, useQueryFlag, useQueryList, useQueryParam, useRoute } from '../../state/router';
-import { joinList, rich, useI18n, type TFunc } from '../../i18n';
+import { rich, useI18n, type TFunc } from '../../i18n';
 
 /** 卡片上定位到的一条仓库：kind 与 API 路由对齐（repo → /repos，source → /sources） */
 export type WarehouseTarget = (RepoView & { kind: 'repo' }) | (SourceView & { kind: 'source' });
@@ -66,7 +46,7 @@ function baseNameOf(p: string): string {
 }
 
 function isSlugChar(ch: string): boolean {
-  const c = ch.charCodeAt(0);
+  const c = ch.codePointAt(0)!;
   const digit = c >= 48 && c <= 57;
   const upper = c >= 65 && c <= 90;
   const lower = c >= 97 && c <= 122;
@@ -96,7 +76,7 @@ function idFromPkg(pkg: string): string {
   const noScope = noVer.startsWith('@') ? noVer.slice(1) : noVer;
   const slug = toSlug(noScope);
   if (!slug) return '';
-  const head = slug.charCodeAt(0);
+  const head = slug.codePointAt(0)!;
   const alnum = (head >= 48 && head <= 57) || (head >= 65 && head <= 90) || (head >= 97 && head <= 122);
   return alnum ? slug : `s-${slug}`;
 }

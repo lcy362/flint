@@ -228,8 +228,9 @@ function treeStamp(dir: string, layout: 'flat' | 'nested', parts: string[]): voi
     return;
   }
   let names: string[] = [];
-  try { names = fs.readdirSync(dir); } catch { return; }
-  names.sort();
+  try { names = fs.readdirSync(dir);   } catch { return; }
+  // 显式给出比较函数：默认排序依赖引擎实现细节，指纹只要求稳定
+  names.sort((a, b) => a.localeCompare(b));
   for (const name of names) {
     const child = resolveChildDir(dir, name);
     if (!child) continue;
@@ -251,7 +252,7 @@ function scanRoot(root: string, source: string, layout: Layout): Skill[] {
   const stamp = sourceStamp(root, layout);
   const key = `${source}\0${layout}\0${root}`;
   const hit = scanCache.get(key);
-  if (hit && hit.stamp === stamp) return hit.skills;
+  if (hit?.stamp === stamp) return hit.skills;
   const byId = new Map<string, Skill>();
   for (const s of readCatalog(root, source)) byId.set(s.id, s);
   const resolved = resolveLayout(root, layout);

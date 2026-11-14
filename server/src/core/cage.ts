@@ -93,7 +93,7 @@ export function detectOutsideWrites(startedAt: number, exclude: string): string[
 
 /** 路径段字符：与原先 `[\w.@+-]` 一致，避免嵌套量词的回溯 */
 function isHomeSegChar(ch: string): boolean {
-  const c = ch.charCodeAt(0);
+  const c = ch.codePointAt(0)!;
   const digit = c >= 48 && c <= 57;
   const upper = c >= 65 && c <= 90;
   const lower = c >= 97 && c <= 122;
@@ -137,18 +137,21 @@ function readAbsHomePath(text: string, home: string, at: number): { value: strin
 export function parseDeclaredHomePaths(text: string): string[] {
   const home = os.homedir();
   const out = new Set<string>();
-  for (let i = 0; i < text.length; i += 1) {
+  let i = 0;
+  while (i < text.length) {
     const tilde = text[i] === '~' ? readTildePath(text, i) : undefined;
     if (tilde && tilde.value !== '~') {
       out.add(tilde.value);
-      i = tilde.next - 1;
+      i = tilde.next;
       continue;
     }
     const abs = text.startsWith(home, i) ? readAbsHomePath(text, home, i) : undefined;
     if (abs) {
       out.add(abs.value);
-      i = abs.next - 1;
+      i = abs.next;
+      continue;
     }
+    i += 1;
   }
   // 去掉被其它路径包含的（~/.claude 已在时不再单列 ~/.claude/skills）
   const list = [...out].sort((a, b) => a.length - b.length);

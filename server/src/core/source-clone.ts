@@ -42,7 +42,7 @@ export function gitUrlIssue(url: string): string | undefined {
 /** 控制字符或空白：Git 地址里出现即拒绝 */
 function hasControlOrWhitespace(s: string): boolean {
   for (let i = 0; i < s.length; i += 1) {
-    if (s.charCodeAt(i) <= 0x1f) return true;
+    if (s.codePointAt(i)! <= 0x1f) return true;
   }
   return /\s/.test(s);
 }
@@ -66,7 +66,7 @@ function stripGitSuffix(s: string): string {
 }
 
 function isSlugChar(ch: string): boolean {
-  const c = ch.charCodeAt(0);
+  const c = ch.codePointAt(0)!;
   const digit = c >= 48 && c <= 57;
   const upper = c >= 65 && c <= 90;
   const lower = c >= 97 && c <= 122;
@@ -91,7 +91,7 @@ export function dirNameFromUrl(url: string): string {
   const base = stripGitSuffix(lastUrlSegment(stripTrailingSlash(url.trim())));
   const slug = toSlug(base);
   if (!slug) return 'git-source';
-  const head = slug.charCodeAt(0);
+  const head = slug.codePointAt(0)!;
   const alnum = (head >= 48 && head <= 57) || (head >= 65 && head <= 90) || (head >= 97 && head <= 122);
   return alnum ? slug : `s-${slug}`;
 }

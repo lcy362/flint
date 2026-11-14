@@ -1,49 +1,21 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import express, { Router } from 'express';
-import { ConfigStore } from '../../infra/config-store.js';
+import { Router } from 'express';
 import { log } from '../../infra/logger.js';
-import { pickDirectory, pickFile } from '../../infra/picker.js';
-import {
-  listAgents, agentSkillRows, agentOwnSkillRow, allAgentDefs, findAgentDef, resolveGlobalDir, effectiveAgentKey,
-  setPrimary, pruneAliasStrategies, expandTilde,
-} from '../../core/agents.js';
-import { scanAll, detectLayoutAbs, scanDir, resolveLayout, invalidateScanCache } from '../../core/scanner.js';
-import { previewRegister, idIssue, type RegisterPreviewInput } from '../../core/register.js';
-import { cloneSourceRepo, gitUrlIssue } from '../../core/source-clone.js';
-import { npxInstall, npxUpdate, npxPkgIssue, normalizeInstaller, parseArgs, parseNpxCommand } from '../../core/npx-install.js';
-import { sseHead, sseSend, sseEnd, createLineEmitter, createProgressReporter } from '../sse.js';
+import { listAgents, agentSkillRows, agentOwnSkillRow, allAgentDefs, findAgentDef, resolveGlobalDir, setPrimary } from '../../core/agents.js';
 import * as presets from '../../core/presets.js';
 import * as active from '../../core/active.js';
-import { syncActive, diffSync, deployOne, copySkill } from '../../core/sync.js';
-import { collectCandidates } from '../../core/integrate.js';
-import { addProject, syncProject, projectSkillRows, projectAddable, deployedAgents, pushProjectToRepo, takeoverProjectSkill, writeIndex, INDEX_NAME } from '../../core/projects.js';
-import { readSkill } from '../../core/skill.js';
-import { bodyText, firstHitContext, type BodyCache } from '../../core/skillindex.js';
-import { detectStale, refreshSkill } from '../../core/source-update.js';
-import { pullRepo, repoStatus } from '../../core/repo-sync.js';
-import { importDirs, previewImportDirs } from '../../core/import.js';
-import { previewCollect, collectAgentSkill, previewCollectSource, collectFromSource, projectCollectSource } from '../../core/collect.js';
-import { migrateTagsToFrontmatter } from '../../core/repo-tags.js';
-import { takeover } from '../../core/takeover.js';
-import { applyFix } from '../../core/fix.js';
-import { diagnose } from '../../core/diagnose.js';
-import { cachedContentHealthMap, inspectSkill } from '../../core/content.js';
-import { invalidateTextCache } from '../../core/text-cache.js';
-import { mergeSkill } from '../../core/merge.js';
-import { Repo, ForeignSource, CustomAgent, SyncMode } from '../../config/types.js';
-import { agentCards, projectCards } from '../../domain/cards.js';
+import { syncActive, deployOne } from '../../core/sync.js';
+import { CustomAgent } from '../../config/types.js';
+import { agentCards } from '../../domain/cards.js';
 import { t } from '../../i18n/index.js';
-import type { MsgKey } from '../../i18n/en.js';
 import type { RouteCtx } from '../route-ctx.js';
 import {
   removeSkillEntry, applyDirOverrides, applyAgentStrategy,
 } from '../route-helpers.js';
 
 export function mountAgentRoutes(r: Router, ctx: RouteCtx): void {
-  const { cfg, library, touch, touchConfig, warehouses } = ctx;
+  const { cfg, library, touch } = ctx;
   // ---- custom agents（AG-03） ----
   r.get('/agents/custom', (_req, res) => res.json(cfg.data.customAgents));
   r.post('/agents/custom', (req, res) => {

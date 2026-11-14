@@ -59,6 +59,24 @@ function readUnit(s: string, i: number): { unit?: string; next: number } {
   return unit ? { unit, next: j + unit.length } : { next: j };
 }
 
+/** 从 i 起尝试读出 `数值[单位]/数值[单位]`，单位取右侧优先；不成立返回 undefined */
+function readBytesPairAt(detail: string, i: number): { received: number; total: number } | undefined {
+  const left = readAmount(detail, i);
+  if (!left) return undefined;
+  const leftUnit = readUnit(detail, left.next);
+  const slash = skipSpaces(detail, leftUnit.next);
+  if (detail[slash] !== '/') return undefined;
+  const right = readAmount(detail, slash + 1);
+  if (!right) return undefined;
+  const rightUnit = readUnit(detail, right.next);
+  const unit = rightUnit.unit ?? leftUnit.unit;
+  if (!unit) return undefined;
+  const received = toBytes(left.raw, unit);
+  const total = toBytes(right.raw, unit);
+  if (received === undefined || total === undefined) return undefined;
+  return { received, total };
+}
+
 /**
  * 字节对：`1.20/2.70 MiB`（单位只写在后一个数后面）或 `1.20 MiB/2.70 MiB`。
  * 必须带单位才算字节——`(3/3)` 那种对象计数不是字节，不能当下载量。
@@ -70,20 +88,8 @@ function parseBytesPair(detail: string): { received: number; total: number } | u
     if (ch < '0' || ch > '9') continue;
     const prev = detail[i - 1];
     if (prev === '.' || (prev >= '0' && prev <= '9')) continue;
-    const left = readAmount(detail, i);
-    if (!left) continue;
-    const leftUnit = readUnit(detail, left.next);
-    const slash = skipSpaces(detail, leftUnit.next);
-    if (detail[slash] !== '/') continue;
-    const right = readAmount(detail, slash + 1);
-    if (!right) continue;
-    const rightUnit = readUnit(detail, right.next);
-    const unit = rightUnit.unit ?? leftUnit.unit;
-    if (!unit) continue;
-    const received = toBytes(left.raw, unit);
-    const total = toBytes(right.raw, unit);
-    if (received === undefined || total === undefined) continue;
-    return { received, total };
+    const pair = readBytesPairAt(detail, i);
+    if (pair) return pair;
   }
   return undefined;
 }

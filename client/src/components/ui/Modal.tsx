@@ -40,7 +40,7 @@ export default function Modal({ open, title, onClose, footer, children, width }:
       );
       if (nodes.length === 0) return;
       const head = nodes[0];
-      const tail = nodes[nodes.length - 1];
+      const tail = nodes.at(-1)!;
       if (e.shiftKey && document.activeElement === head) {
         e.preventDefault();
         tail.focus();
