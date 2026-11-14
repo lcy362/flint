@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Skill, SKILL_FILE } from './skill.js';
+import { readCachedUtf8 } from './text-cache.js';
 import { SEC_RULES } from './security-rules.generated.js';
 import type { SecCategory, SecSeverity, SecRule } from './security-rules.generated.js';
 
@@ -107,17 +108,26 @@ function demote(sev: SecSeverity): SecSeverity {
   return 'info';
 }
 
-/** 读文本文件；缺失 / 超限 / 二进制一律返回 undefined */
+/** 读文本文件；缺失 / 超限 / 二进制一律返回 undefined。与扫描、搜索共用进程内正文缓存。 */
 function readTextFile(file: string): string | undefined {
-  try {
-    const st = fs.statSync(file);
-    if (!st.isFile() || st.size > MAX_FILE_BYTES) return undefined;
-    const buf = fs.readFileSync(file);
-    if (buf.includes(0)) return undefined; // 含 NUL 视为二进制
-    return buf.toString('utf-8');
-  } catch {
-    return undefined;
+  return readCachedUtf8(file, MAX_FILE_BYTES);
+}
+
+/**
+ * 内容体检戳：SKILL.md 与 scripts/ 下会被扫到的文件的 mtime + size。
+ * 戳不变就说明上次的健康摘要仍然有效，列表不必重跑规则。
+ */
+export function contentStamp(dir: string): string {
+  const parts: string[] = [];
+  for (const f of skillFiles(dir)) {
+    try {
+      const st = fs.statSync(f.abs);
+      parts.push(`${f.rel}:${st.mtimeMs}:${st.size}`);
+    } catch {
+      parts.push(`${f.rel}:missing`);
+    }
   }
+  return parts.join('|');
 }
 
 /** 列出技能内待扫描的文件：SKILL.md + scripts/ 下的脚本文本 */

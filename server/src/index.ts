@@ -51,7 +51,7 @@ function resync(reason: string = 'manual') {
 // 供自动化任务触发的句柄（可通过环境变量约定，或后续注册任务模块）
 export { resync };
 
-// 目录级 watcher 已退役：库扫描按请求现算（无缓存），自动投放链停用后它无事可做。
+// 目录级 watcher 已退役：库扫描走进程内指纹缓存（文件 mtime/size 变化或写操作后失效）。
 // 需要后台任务时在这里注入 onChanged / onConfigChanged，或从外部调用上面导出的 resync。
 app.use('/api', makeRouter(cfg));
 

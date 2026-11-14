@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { detectLayoutAbs, resolveLayout, scanDir, scanForeign, scanRepo } from '../src/core/scanner.js';
 import { ForeignSource, Repo } from '../src/config/types.js';
 import { tmpDir, writeSkill } from './helpers.js';
@@ -60,6 +60,14 @@ describe('detectLayoutAbs（布局判定）', () => {
     const det = detectLayoutAbs(skillsRoot);
     expect(scanDir(skillsRoot, 'probe', det.layout)).toHaveLength(det.count);
   });
+
+  it('布局判定不读取 SKILL.md', () => {
+    const { skillsRoot } = repoFixture();
+    const read = vi.spyOn(fs, 'readFileSync');
+    expect(detectLayoutAbs(skillsRoot)).toMatchObject({ layout: 'nested', count: 2 });
+    expect(read.mock.calls.some((c) => String(c[0]).endsWith('SKILL.md'))).toBe(false);
+    read.mockRestore();
+  });
 });
 
 describe('resolveLayout', () => {
@@ -86,6 +94,22 @@ describe('scanRepo（自有仓库恒为扁平）', () => {
     const res = scanRepo(repo);
     expect(names(res.skills)).toEqual(['alpha']);
     expect(res.skills[0].id).toBe('alpha@own');
+  });
+
+  it('SKILL.md 未改时不重复读盘，改了之后读到新描述', () => {
+    const { root, skillsRoot } = repoFixture();
+    const repo: Repo = { id: 'own', path: root };
+    expect(scanRepo(repo).skills.find((s) => s.name === 'alpha')?.description).toContain('alpha');
+    const read = vi.spyOn(fs, 'readFileSync');
+    expect(names(scanRepo(repo).skills)).toEqual(['alpha']);
+    expect(read.mock.calls.some((c) => String(c[0]).endsWith('SKILL.md'))).toBe(false);
+    read.mockRestore();
+    fs.writeFileSync(
+      path.join(skillsRoot, 'alpha', 'SKILL.md'),
+      '---\nname: alpha\ndescription: changed\n---\nBody\n',
+      'utf-8',
+    );
+    expect(scanRepo(repo).skills.find((s) => s.name === 'alpha')?.description).toBe('changed');
   });
 
   it('honors repo.root：自定义 skills 根优先', () => {

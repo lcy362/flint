@@ -1,30 +1,30 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { SKILL_FILE } from './skill.js';
+import { readCachedUtf8 } from './text-cache.js';
 
 export interface BodyCache { mtimeMs: number; text: string }
 
 /**
  * 读取一个技能目录的 SKILL.md 正文，小写归一化后返回。
  *
- * 用请求级短缓存（Map<dir, { mtimeMs, text }>）避免逐次磁盘 IO：
- * 调用方在单次操作（如一次搜索、一次诊断）里复用同一个 cache 实例即可。
- * 不缓存失效逻辑——mtime 变化时自然重建，也无需清理（短生命周期）。
- *
- * 这是 F3 正文搜索复用给 F1（安全扫描）、F2（frontmatter 校验）的共用基础设施。
+ * 正文来自进程级文件缓存（`text-cache`），安全扫描与 frontmatter 校验读的是同一份原文。
+ * 可选的 `cache` 只存小写结果，供单次搜索复用；mtime 变了会重读，不会把旧正文一直留着。
  */
 export function bodyText(dir: string, cache?: Map<string, BodyCache>): string {
   if (!dir) return '';
-  if (cache?.has(dir)) return cache.get(dir)!.text;
   const file = path.join(dir, SKILL_FILE);
-  let text = '';
   let mtimeMs = 0;
   try {
-    const st = fs.statSync(file);
-    mtimeMs = st.mtimeMs;
-    if (cache?.has(dir) && cache.get(dir)!.mtimeMs === mtimeMs) return cache.get(dir)!.text;
-    text = fs.readFileSync(file, 'utf-8').toLowerCase();
-  } catch { return ''; }
+    mtimeMs = fs.statSync(file).mtimeMs;
+  } catch {
+    return '';
+  }
+  const hit = cache?.get(dir);
+  if (hit && hit.mtimeMs === mtimeMs) return hit.text;
+  const raw = readCachedUtf8(file);
+  if (raw === undefined) return '';
+  const text = raw.toLowerCase();
   if (cache) cache.set(dir, { mtimeMs, text });
   return text;
 }

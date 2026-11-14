@@ -228,7 +228,42 @@ describe('useAsync', () => {
     mode = 'fail';
     act(() => result.current.reload());
     await waitFor(() => expect(result.current.error).toBe('boom'));
+    expect(result.current.data).toBe('data');
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('reload 完成前保留上一次的数据', async () => {
+    let release: (v: string) => void = () => {};
+    let n = 0;
+    const fn = vi.fn(() => {
+      n += 1;
+      if (n === 1) return Promise.resolve('first');
+      return new Promise<string>((resolve) => { release = resolve; });
+    });
+    const { result } = renderHook(() => useAsync(fn));
+    await waitFor(() => expect(result.current.data).toBe('first'));
+    act(() => result.current.reload());
+    expect(result.current.loading).toBe(false);
+    expect(result.current.data).toBe('first');
+    await act(async () => { release('second'); });
+    await waitFor(() => expect(result.current.data).toBe('second'));
+  });
+
+  it('依赖变化时丢掉上一份数据', async () => {
+    let release: (v: string) => void = () => {};
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => useAsync(
+        () => (id === 'a' ? Promise.resolve(id) : new Promise<string>((resolve) => { release = resolve; })),
+        [id],
+      ),
+      { initialProps: { id: 'a' } },
+    );
+    await waitFor(() => expect(result.current.data).toBe('a'));
+    rerender({ id: 'b' });
     expect(result.current.data).toBeNull();
+    expect(result.current.loading).toBe(true);
+    await act(async () => { release('b'); });
+    await waitFor(() => expect(result.current.data).toBe('b'));
   });
 
   it('非 Error 抛出物也能转成文案', async () => {

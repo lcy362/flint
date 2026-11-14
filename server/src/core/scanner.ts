@@ -53,10 +53,36 @@ function resolveChildDir(root: string, name: string): string | undefined {
 }
 
 /**
+ * 一次遍历同时数出「直接子目录里的技能」和「更深层的技能」。
+ * 技能目录不再下探，和 scanDir 一样：技能内部的子技能不算另一份。
+ */
+function countSkillLayers(root: string): { flat: number; deep: number } {
+  let flat = 0;
+  let deep = 0;
+  const walk = (dir: string, depth: number): void => {
+    let names: string[] = [];
+    try { names = fs.readdirSync(dir); } catch { return; }
+    for (const name of names) {
+      const child = resolveChildDir(dir, name);
+      if (!child) continue;
+      if (hasSkill(child)) {
+        if (depth === 0) flat += 1;
+        else deep += 1;
+      } else {
+        walk(child, depth + 1);
+      }
+    }
+  };
+  walk(root, 0);
+  return { flat, deep };
+}
+
+/**
  * 自动识别一个（已存在的）skill 目录的布局形式。
  * 根自身含 SKILL.md → 单 skill 仓库（flat，计数 1）；
- * 否则优先看 <path>/skills 子目录（仓库惯例），其次看 path 本身。
- * 直接子目录含 SKILL.md → flat；仅深层含 → nested；无技能 → 默认 flat（标准）。
+ * 否则优先看 path 本身，再看 <path>/skills 子目录（仓库惯例）。
+ * 直接子目录含 SKILL.md 且没有更深层技能 → flat；有技能落在分类子目录 → nested；无技能 → 默认 flat。
+ * 只走一遍目录树，按「顶层命中数」和「更深层命中数」判定，不把 SKILL.md 读出来解析。
  */
 export function detectLayoutAbs(absPath: string): { layout: 'flat' | 'nested'; count: number; root: string } {
   if (hasSkill(absPath)) return { layout: 'flat', count: 1, root: absPath };
@@ -65,14 +91,13 @@ export function detectLayoutAbs(absPath: string): { layout: 'flat' | 'nested'; c
   if (dirs.length && fs.existsSync(skillsChild) && fs.statSync(skillsChild).isDirectory()) dirs.push(skillsChild);
   for (const root of dirs) {
     // 判定以「技能实际落在哪一层」为准，而不是「根下有没有技能」。
-    // nested 扫描是 flat 的超集：两者结果一致 ⇒ 技能全在根下（扁平）；
-    // nested 更多 ⇒ 有技能落在分类子目录里，必须按嵌套读，否则它会静默消失。
-    const flat = scanDir(root, 'probe', 'flat');
-    const deep = scanDir(root, 'probe', 'nested');
-    if (deep.length === 0) continue;
-    return deep.length === flat.length
-      ? { layout: 'flat', count: flat.length, root }
-      : { layout: 'nested', count: deep.length, root };
+    // 更深层为 0 ⇒ 技能全在根下（扁平）；否则必须按嵌套读，否则分类子目录里的技能会静默消失。
+    const { flat, deep } = countSkillLayers(root);
+    const total = flat + deep;
+    if (total === 0) continue;
+    return deep === 0
+      ? { layout: 'flat', count: flat, root }
+      : { layout: 'nested', count: total, root };
   }
   return { layout: 'flat', count: 0, root: skillsChild };
 }
@@ -160,14 +185,80 @@ export function readCatalog(root: string, source: string): Skill[] {
   return [];
 }
 
-/** 扫描一个源目录：清单优先（有则补），再按布局扫描本体，按 id 去重 */
+/** 进程内扫描缓存：指纹是目录树里 SKILL.md 的 mtime + size，文件一变就失效 */
+const scanCache = new Map<string, { stamp: string; skills: Skill[] }>();
+
+/** 写操作后清掉扫描缓存。mtime 指纹本身也会在文件变化时失效，这里兜住同一次写入里 mtime 没跳的情况。 */
+export function invalidateScanCache(): void {
+  scanCache.clear();
+}
+
+function fileStamp(file: string): string {
+  try {
+    const st = fs.statSync(file);
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return 'missing';
+  }
+}
+
+/** 与 readCatalog 同一套「命中首个可用清单」规则，把清单文件和它指向的 SKILL.md 纳入指纹 */
+function catalogStamp(root: string, parts: string[]): void {
+  for (const rel of CATALOG_PATHS) {
+    const file = path.join(root, rel);
+    const entries = readCatalogFile(file);
+    if (!entries) continue;
+    parts.push(`cat:${rel}:${fileStamp(file)}`);
+    for (const e of entries) {
+      const dir = catalogEntryDir(root, e);
+      if (!hasSkill(dir)) continue;
+      parts.push(`catmd:${dir}:${fileStamp(path.join(dir, 'SKILL.md'))}`);
+    }
+    return;
+  }
+}
+
+/**
+ * 按 scanDir 的同一棵树收集指纹：技能目录只记 SKILL.md，不把技能内部文件算进来。
+ * auto 按 nested 走，这样深层新增技能也会让指纹变化。
+ */
+function treeStamp(dir: string, layout: 'flat' | 'nested', parts: string[]): void {
+  if (hasSkill(dir)) {
+    parts.push(`md:${dir}:${fileStamp(path.join(dir, 'SKILL.md'))}`);
+    return;
+  }
+  let names: string[] = [];
+  try { names = fs.readdirSync(dir); } catch { return; }
+  names.sort();
+  for (const name of names) {
+    const child = resolveChildDir(dir, name);
+    if (!child) continue;
+    if (hasSkill(child)) parts.push(`md:${child}:${fileStamp(path.join(child, 'SKILL.md'))}`);
+    else if (layout !== 'flat') treeStamp(child, 'nested', parts);
+  }
+}
+
+function sourceStamp(root: string, layout: Layout): string {
+  const parts: string[] = [];
+  catalogStamp(root, parts);
+  treeStamp(root, layout === 'flat' ? 'flat' : 'nested', parts);
+  return parts.join('\n');
+}
+
+/** 扫描一个源目录：清单优先（有则补），再按布局扫描本体，按 id 去重。指纹未变时直接返回上次结果。 */
 function scanRoot(root: string, source: string, layout: Layout): Skill[] {
   if (!fs.existsSync(root)) return [];
+  const stamp = sourceStamp(root, layout);
+  const key = `${source}\0${layout}\0${root}`;
+  const hit = scanCache.get(key);
+  if (hit && hit.stamp === stamp) return hit.skills;
   const byId = new Map<string, Skill>();
   for (const s of readCatalog(root, source)) byId.set(s.id, s);
   const resolved = resolveLayout(root, layout);
   for (const s of scanDir(root, source, resolved)) byId.set(s.id, s);
-  return [...byId.values()];
+  const skills = [...byId.values()];
+  scanCache.set(key, { stamp, skills });
+  return skills;
 }
 
 export function scanRepo(repo: Repo): { source: string; path: string; skills: Skill[] } {

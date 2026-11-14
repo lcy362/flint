@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Skill, SKILL_FILE, parseSkillMeta } from './skill.js';
+import { readCachedUtf8 } from './text-cache.js';
 
 /** 内容合法性问题种类（诊断 key 与 i18n 键一一对应） */
 export type IssueKind =
@@ -25,13 +26,8 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
  * 否则「缺 name」永远测不出来。
  */
 export function validateFrontmatter(skill: Skill): ContentIssue[] {
-  const file = path.join(skill.dir, SKILL_FILE);
-  let md = '';
-  try {
-    md = fs.readFileSync(file, 'utf-8');
-  } catch {
-    return []; // 无 SKILL.md 由扫描器负责过滤，不在此重复报
-  }
+  const md = readCachedUtf8(path.join(skill.dir, SKILL_FILE));
+  if (md === undefined) return []; // 无 SKILL.md 由扫描器负责过滤，不在此重复报
   const meta = parseSkillMeta(md);
   if (!meta.ok) return [{ kind: 'yaml' }];
 

@@ -46,7 +46,7 @@ node bin/flint.mjs --no-open    # 按 npm 包的方式启一次（后台驻留�
 ```
 server/src/
 ├─ index.ts         # 入口：装配 ConfigStore / Router，resync（供自动化任务按需调用）
-├─ api/routes.ts    # 全部 REST 路由（唯一 HTTP 出口）
+├─ api/routes.ts    # 装配 REST 路由（唯一 HTTP 出口）；实现按技能库 / 智能体 / 项目拆在 api/routes/
 ├─ api/sse.ts       # SSE 流式协议（start / log / progress / done / error）+ 行规整与进度节流
 ├─ config/          # types.ts（数据模型）/ store.ts（加载·迁移·保存）/ defaults.ts
 ├─ core/            # 领域逻辑：scan / sync / agents / tags / collect / takeover / projects / diagnose / fix / security / validate / progress（下载进度解析） ...
@@ -58,7 +58,7 @@ client/src/
 ├─ App.tsx          # 布局 + tab 分发（6 个一级页面）
 ├─ api/types.ts     # 前端类型契约（与后端 domain/cards.ts 对齐）
 ├─ state/           # router（hash 路由）/ store（全局 bus）/ viewMode / collapse / useAsync
-├─ views/           # Library / Agents / Presets / Projects / Health / Settings
+├─ views/           # Library / Agents / Presets / Projects / Health / Settings；技能库弹窗与详情在 views/library/
 ├─ components/      # ui / common（EntityList·FilterBar）/ skill / agent / layout
 └─ styles/          # tokens.css（设计 token）/ base.css / app.css
 

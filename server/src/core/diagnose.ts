@@ -10,6 +10,7 @@ import { log } from '../infra/logger.js';
 import { t } from '../i18n/index.js';
 import type { MsgKey } from '../i18n/en.js';
 import { scanSecurity } from './security.js';
+import { rememberSkillHealth } from './content.js';
 import type { SecFinding } from './security.js';
 import { validateAll } from './validate.js';
 import type { ContentIssue } from './validate.js';
@@ -306,6 +307,14 @@ function checkContent(cfg: ConfigStore, deps: Deps, groups: DiagGroups): void {
       });
     }
   }
+
+  const findingsById = new Map<string, SecFinding[]>();
+  for (const f of findings) {
+    const arr = findingsById.get(f.skillId) ?? [];
+    arr.push(f);
+    findingsById.set(f.skillId, arr);
+  }
+  for (const s of skills) rememberSkillHealth(s, findingsById.get(s.id) ?? [], issues.get(s.id) ?? []);
 
   if (problems === 0) {
     groups.content.push({ key: 'content', status: 'ok', message: t('diag.contentAllOk', { n: skills.length }) });

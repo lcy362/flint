@@ -6,7 +6,8 @@ import { once } from 'node:events';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeRouter } from '../src/api/routes.js';
-import { contentHealthMap, healthOf, inspectSkill } from '../src/core/content.js';
+import { cachedContentHealthMap, contentHealthMap, healthOf, inspectSkill, invalidateHealthCache } from '../src/core/content.js';
+import { invalidateTextCache } from '../src/core/text-cache.js';
 import type { ConfigStore } from '../src/infra/config-store.js';
 import { makeStore, tmpDir, writeSkill } from './helpers.js';
 
@@ -99,14 +100,46 @@ describe('contentHealthMap / inspectSkill', () => {
   });
 });
 
+describe('cachedContentHealthMap', () => {
+  const own = new Set(['default']);
+  const risky = () => ({
+    id: 'risky@default', name: 'risky', source: 'default', dir: path.join(ctx.skillsRoot, 'risky'), tags: [] as string[],
+  });
+
+  it('没检测过不带摘要；检测之后复用；文件改了就作废', () => {
+    invalidateHealthCache();
+    const sk = risky();
+    const file = path.join(sk.dir, 'SKILL.md');
+    const original = fs.readFileSync(file, 'utf-8');
+    try {
+      expect(cachedContentHealthMap([sk], own).has(sk.id)).toBe(false);
+      inspectSkill(sk, own);
+      expect(cachedContentHealthMap([sk], own).get(sk.id)).toEqual({ error: 1, warn: 1 });
+      fs.writeFileSync(file, '---\nname: risky\ndescription: ok\n---\nclean\n', 'utf-8');
+      expect(cachedContentHealthMap([sk], own).has(sk.id)).toBe(false);
+    } finally {
+      fs.writeFileSync(file, original);
+      invalidateHealthCache();
+      invalidateTextCache();
+    }
+  });
+});
+
 describe('内容体检 HTTP 接口', () => {
-  it('/state 只为有问题的自有仓库技能带 health', async () => {
-    const res = await fetch(`${api}/state`);
-    const body = await res.json();
-    const byName = (n: string) => body.skills.find((s: { name: string }) => s.name === n);
-    expect(byName('risky').health).toEqual({ error: 1, warn: 1 });
-    expect(byName('clean').health).toBeUndefined();
-    expect(byName('extrisky').health).toBeUndefined();
+  it('/state 不重跑体检，只回传尚未过期的上次摘要', async () => {
+    invalidateHealthCache();
+    const byName = (body: { skills: { name: string; health?: { error: number; warn: number } }[] }, n: string) =>
+      body.skills.find((s) => s.name === n);
+    const first = await (await fetch(`${api}/state`)).json();
+    expect(byName(first, 'risky')?.health).toBeUndefined();
+
+    const sec = await fetch(`${api}/skills/${encodeURIComponent('risky@default')}/security`);
+    expect(sec.status).toBe(200);
+
+    const second = await (await fetch(`${api}/state`)).json();
+    expect(byName(second, 'risky')?.health).toEqual({ error: 1, warn: 1 });
+    expect(byName(second, 'clean')?.health).toBeUndefined();
+    expect(byName(second, 'extrisky')?.health).toBeUndefined();
   });
 
   it('/skills/:id/security 返回本地化明细', async () => {

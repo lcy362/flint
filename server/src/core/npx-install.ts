@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { hasSkill } from './skill.js';
 import { sourcesDir } from './source-clone.js';
@@ -17,7 +18,9 @@ import { t } from '../i18n/index.js';
  * 安全纪律（与 core/git.ts、core/source-clone.ts 一致）：
  * - 只用异步 spawn，绝不 spawnSync（同步会冻住事件循环）；
  * - argv 数组传参、shell:false，杜绝选项注入与 shell 元字符；
- * - cwd 一律收敛在托管目录（`<flint 数据目录>/sources/<id>`），安装器只能写到这里；
+ * - cwd 一律收敛在托管目录（`<flint 数据目录>/sources/<id>`）；
+ * - 子进程的 HOME / USERPROFILE / XDG_* 指到笼子里的 `home/`，安装器按家目录探测时写不到用户真实的 Agent 目录；
+ * - npm 缓存与 `~/.npmrc` 仍用真实路径，避免每次重下依赖、也避免丢私有源配置；
  * - 非交互 env（CI / GIT_TERMINAL_PROMPT / npm_config_yes）防止挂起；
  * - detached + 超时杀进程组，npx 首次要下载包，超时给足 10 分钟；
  * - 托管目录自动 git init：每次安装 / 更新前后各存一个快照提交，用户可 diff / 回滚，
@@ -51,9 +54,37 @@ function cleanupPartialInstall(dir: string): void {
 /** 子进程输出最多回传的字符数（尾部，错误信息通常在末尾） */
 const LOG_TAIL = 8000;
 
-/** 非交互环境：装死「无人值守」，交互式安装器要么用默认值要么快速失败，绝不挂起 */
-function npxEnv(): NodeJS.ProcessEnv {
-  return { ...process.env, CI: '1', GIT_TERMINAL_PROMPT: '0', npm_config_yes: 'true' };
+/** 安装器看到的家目录：`<笼子>/home`。探测 ~/.claude、~/.agents 时落在笼子里，而不是用户真实家目录。 */
+export function cageHomeDir(dir: string): string {
+  return path.join(dir, 'home');
+}
+
+/** 父进程真正使用的 npm 缓存。子进程必须指向同一处，下载进度监视才看得到。 */
+function realNpmCache(): string {
+  return process.env.npm_config_cache || path.join(os.homedir(), '.npm');
+}
+
+/**
+ * 子进程环境：家目录换成笼子，npm 缓存和用户 npmrc 保持真实路径。
+ * 非交互：装死「无人值守」，交互式安装器要么用默认值要么快速失败，绝不挂起。
+ */
+function npxEnv(dir: string): NodeJS.ProcessEnv {
+  const home = cageHomeDir(dir);
+  fs.mkdirSync(home, { recursive: true });
+  const userconfig = path.join(os.homedir(), '.npmrc');
+  return {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    npm_config_cache: realNpmCache(),
+    ...(fs.existsSync(userconfig) ? { npm_config_userconfig: userconfig } : {}),
+    CI: '1',
+    GIT_TERMINAL_PROMPT: '0',
+    npm_config_yes: 'true',
+  };
 }
 
 /**
@@ -235,7 +266,7 @@ export function runNpx(
       cwd: dir,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
-      env: npxEnv(),
+      env: npxEnv(dir),
     });
     let out = '';
     let done = false;
@@ -435,7 +466,7 @@ export async function npxInstall(input: NpxInstallInput): Promise<NpxInstallResu
 
   const startedAt = Date.now();
   const r = await runNpx(input.pkg, args, dir, NPX_TIMEOUT_MS, input.onOutput, input.onProgress);
-  // 笼外写入检测：安装器可能通过 HOME 探测到真实 Agent 目录并写入（C19 的已知边界）
+  // 笼外写入检测：HOME 已指到笼子。这里只抓绕过家目录、直接写绝对路径的情况。
   const escaped = detectEscapedWrites(startedAt, dir, r.declared ?? []);
   if (!r.ok) {
     const message = npxFailMessage(r);

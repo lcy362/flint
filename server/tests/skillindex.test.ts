@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { bodyText, firstHitContext } from '../src/core/skillindex.js';
 import { tmpDir } from './helpers.js';
 
@@ -16,16 +16,28 @@ describe('bodyText', () => {
     expect(bodyText(tmpDir())).toBe('');
   });
 
-  it('同一 cache 命中不重复读盘（修改内容后旧 cache 仍可复用）', () => {
+  it('mtime 变化后重新读取', () => {
     const dir = tmpDir();
     fs.mkdirSync(dir, { recursive: true });
     const f = path.join(dir, 'SKILL.md');
     fs.writeFileSync(f, 'alpha', 'utf-8');
     const cache = new Map<string, { mtimeMs: number; text: string }>();
     expect(bodyText(dir, cache)).toBe('alpha');
-    // mtime 未变：即使磁盘内容变化，命中缓存（短生命周期内可接受）
     fs.writeFileSync(f, 'beta', 'utf-8');
+    expect(bodyText(dir, cache)).toBe('beta');
+  });
+
+  it('mtime 未变时第二次读取不碰磁盘', () => {
+    const dir = tmpDir();
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), 'alpha', 'utf-8');
+    const cache = new Map<string, { mtimeMs: number; text: string }>();
     expect(bodyText(dir, cache)).toBe('alpha');
+    const read = vi.spyOn(fs, 'readFileSync');
+    expect(bodyText(dir, cache)).toBe('alpha');
+    expect(bodyText(dir)).toBe('alpha');
+    expect(read).not.toHaveBeenCalled();
+    read.mockRestore();
   });
 
   it('cache 为空 Map 时每次都会重新读（无需触碰）', () => {
