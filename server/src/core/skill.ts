@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
+import { readCachedUtf8 } from './text-cache.js';
 
 export const SKILL_FILE = 'SKILL.md';
 
@@ -55,9 +56,8 @@ export function parseSkillMeta(md: string): { ok: boolean; name?: string; descri
 }
 
 export function readSkill(dir: string): Skill | undefined {
-  const skillmd = path.join(dir, SKILL_FILE);
-  if (!fs.existsSync(skillmd)) return undefined;
-  const raw = fs.readFileSync(skillmd, 'utf-8');
+  const raw = readCachedUtf8(path.join(dir, SKILL_FILE));
+  if (raw === undefined) return undefined;
   const meta = parseSkillMeta(raw);
   return {
     id: '',

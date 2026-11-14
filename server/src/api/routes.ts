@@ -10,7 +10,7 @@ import {
   listAgents, agentSkillRows, agentOwnSkillRow, allAgentDefs, findAgentDef, resolveGlobalDir, effectiveAgentKey,
   setPrimary, pruneAliasStrategies, expandTilde,
 } from '../core/agents.js';
-import { scanAll, detectLayoutAbs, scanDir, resolveLayout } from '../core/scanner.js';
+import { scanAll, detectLayoutAbs, scanDir, resolveLayout, invalidateScanCache } from '../core/scanner.js';
 import { previewRegister, idIssue, type RegisterPreviewInput } from '../core/register.js';
 import { cloneSourceRepo, gitUrlIssue } from '../core/source-clone.js';
 import { npxInstall, npxUpdate, npxPkgIssue, normalizeInstaller, parseArgs, parseNpxCommand } from '../core/npx-install.js';
@@ -30,7 +30,8 @@ import { migrateTagsToFrontmatter } from '../core/repo-tags.js';
 import { takeover } from '../core/takeover.js';
 import { applyFix } from '../core/fix.js';
 import { diagnose } from '../core/diagnose.js';
-import { contentHealthMap, inspectSkill } from '../core/content.js';
+import { cachedContentHealthMap, inspectSkill } from '../core/content.js';
+import { invalidateTextCache } from '../core/text-cache.js';
 import { mergeSkill } from '../core/merge.js';
 import { Repo, ForeignSource, CustomAgent, SyncMode } from '../config/types.js';
 import { agentCards, projectCards } from '../domain/cards.js';
@@ -182,8 +183,13 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
     });
     next();
   });
-  // 结构性变更后的通知钩子：由入口按需注入（自动同步链已停用，当前没有订阅者）
-  const touch = () => opts?.onChanged?.();
+  // 结构性变更后的通知钩子：由入口按需注入（自动同步链已停用，当前没有订阅者）。
+  // 同时丢掉扫描结果和正文缓存，下一次读取按目录指纹重建。
+  const touch = () => {
+    invalidateScanCache();
+    invalidateTextCache();
+    opts?.onChanged?.();
+  };
   const touchConfig = () => opts?.onConfigChanged?.();
 
   const library = () => scanAll(cfg.data.repos, cfg.data.foreignSources);
@@ -192,9 +198,9 @@ export function makeRouter(cfg: ConfigStore, opts?: { onChanged?: () => void; on
 
   r.get('/state', (_req, res) => {
     const lib = library();
-    // 内容体检摘要（F1/F2）：只算自有仓库技能，供技能库列表标记「有问题的技能」。
-    // 明细按需走 /skills/:id/security，避免每次 /state 都回传全量命中。
-    const health = contentHealthMap(lib.skills, new Set(cfg.data.repos.map((r) => r.id)));
+    // 内容体检摘要（F1/F2）：只回传诊断或详情页已经算过、且文件尚未改动的计数。
+    // 全量规则扫描在 /diagnose 与 /skills/:id/security，列表不再每次重跑。
+    const health = cachedContentHealthMap(lib.skills, new Set(cfg.data.repos.map((r) => r.id)));
     const skills = lib.skills.map((s) => ({
       id: s.id, name: s.name, source: s.source, dir: s.dir,
       description: s.description, version: s.version,

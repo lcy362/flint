@@ -83,7 +83,8 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 | 模块 | 职责 |
 |------|------|
 | `core/skill.ts` | 读取 / 解析 `SKILL.md` frontmatter（name / description / version / tags，兼容顶层 `tags` 与 `metadata.tags`）。 |
-| `core/scanner.ts` | 扫描仓库 / 外部源：自有仓库**恒按扁平**读取，外部源支持布局识别（flat / nested / auto，深层存在技能即判 nested）、带索引清单（catalog）读取、聚合 `scanAll`；**单 skill 仓库识别**——根自身含 `SKILL.md` 时整目录视为一个 skill，其 `skills/` 子目录属于内部子技能，不再单独识别。 |
+| `core/scanner.ts` | 扫描仓库 / 外部源：自有仓库**恒按扁平**读取，外部源支持布局识别（flat / nested / auto，深层存在技能即判 nested）、带索引清单（catalog）读取、聚合 `scanAll`。结果按目录树里 `SKILL.md` 的 mtime + size 做进程内缓存，文件变化或写操作后失效。**单 skill 仓库识别**——根自身含 `SKILL.md` 时整目录视为一个 skill，其 `skills/` 子目录属于内部子技能，不再单独识别。 |
+| `core/text-cache.ts` | 进程内正文缓存（按文件 mtime + size）。扫描、正文搜索、安全扫描、frontmatter 校验共用同一次读取。 |
 | `core/tags.ts` | `effectiveTags`：`config.skillMeta` 覆盖优先，回落 frontmatter。 |
 | `core/repo-tags.ts` | 把 `skillMeta` 标签写回 `SKILL.md` frontmatter（保留其它字段与正文）。 |
 | `core/agents.ts` | 内置 Agent 清单、路径解析、同目录归并与**主 Agent** 判定、`agentSkillRows`（**只读目录**的某 Agent 完整技能行并集）、`isManagedLinkTarget` / `repoSkillRoots`。 |
@@ -100,7 +101,7 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 | `core/security.ts` | 内容安全扫描：危险回调 / 凭据 / 提示注入 / 混淆载荷（F1）。 |
 | `core/validate.ts` | SKILL.md frontmatter 契约校验：缺 name/description、name 与目录名不一致（F2）。 |
 | `core/security-rules.generated.ts` | 由 `server/rules/security/*.yaml` 生成的规则常量（勿手改）。 |
-| `core/content.ts` | 内容体检统一入口：健康摘要与单技能检测（诊断 / 列表 / 详情三处共用同一口径）。 |
+| `core/content.ts` | 内容体检统一入口：全量规则在诊断与单技能检测时跑，并把 error/warn 计数按文件戳记下；列表只读这份尚未过期的摘要。 |
 | `core/fix.ts` | 按诊断项 key 分发就地修复。 |
 | `core/picker.ts` | 系统原生目录 / 文件选择器（macOS osascript / Windows PowerShell / Linux zenity·kdialog）。 |
 | `domain/cards.ts` | `AgentSkillRow` / `ProjectSkillRow` → `SkillCardView`（reason / store / state / actions）。 |
@@ -142,7 +143,7 @@ interface HubConfig {
 ### 5.1 数据资产：两个世界
 
 - **文件系统世界（本体，唯一可信副本）**：仓库 skill 目录、第三方源目录、Agent 全局目录（软链 / 复制 / 自带本体）、`<project>/.agents/skills`（本体）、`<project>/.<agent>/skills`（软链 → `.agents`）。标签载体为 `SKILL.md` frontmatter。
-- **config 世界（管理元数据）**：只存**不可从文件系统推导的用户决策**。config 里**没有 skill 本体的注册表**——资产库列表每次由 `scanAll` 实时扫描得出，文件系统本身就是资产清单。
+- **config 世界（管理元数据）**：只存**不可从文件系统推导的用户决策**。config 里**没有 skill 本体的注册表**——资产库列表由 `scanAll` 从文件系统得出（进程内按 `SKILL.md` 的 mtime + size 缓存，不把清单写入 config）。文件系统本身就是资产清单。
 
 ---
 
@@ -275,7 +276,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/state` | 资产库聚合视图：activeAgents / skills / presets / repos / sources / customAgents / settings / home。每个 skill 另带 `health`（内容体检摘要，error/warn 计数；仅自有仓库且存在问题时出现），供技能库列表标记 |
+| GET | `/state` | 资产库聚合视图：activeAgents / skills / presets / repos / sources / customAgents / settings / home。每个 skill 可带 `health`（上次内容体检的 error/warn 计数；仅自有仓库、有问题、且对应文件尚未改动时出现）。`/state` 不重跑规则 |
 | GET / PUT | `/settings` | 默认同步方式 |
 
 **技能**
@@ -283,7 +284,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/skills/:id/content` | SKILL.md 正文 + 附带文件列表 |
-| GET | `/skills/:id/security` | 内容体检明细（F1/F2）：按需扫描单个技能，返回本地化命中与契约问题；第三方只读来源返回 `own:false` |
+| GET | `/skills/:id/security` | 内容体检明细（F1/F2）：按需扫描单个技能，返回本地化命中与契约问题，并把摘要留给之后的 `/state`；第三方只读来源返回 `own:false` |
 | PATCH | `/skills/:id` | 保存标签（归一化后写入 `skillMeta`） |
 | POST | `/skills/merge` | 同名合并仲裁 |
 | GET | `/skills/:name/agents` | 分发总览（只读）：这条技能在各智能体自身目录里的存在情况。聚合查询、不扫技能库——技能详情「分发到智能体」弹窗反查已分发清单用，避免逐目录调 `/agents/:key/skills` 造成 N 次技能库重扫 |
@@ -372,7 +373,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 - `state/store.ts`：全局 reload 总线（`emitReload` / `subscribe`）+ 主题记忆。
 - `state/viewMode.ts`：卡片 / 列表偏好，全局共享并持久化。
 - `state/collapse.ts`：折叠态持久化（localStorage）。
-- `state/useAsync.ts`：请求 + loading/error + reload 封装。
+- `state/useAsync.ts`：请求 + loading/error + reload 封装。刷新时保留上一份数据，新结果回来再替换；依赖变了才丢掉旧数据。
 
 ### 12.3 统一展示契约
 

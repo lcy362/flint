@@ -1,5 +1,5 @@
 import { Skill } from './skill.js';
-import { scanSkillSecurity } from './security.js';
+import { contentStamp, scanSkillSecurity } from './security.js';
 import type { SecFinding } from './security.js';
 import { validateFrontmatter } from './validate.js';
 import type { ContentIssue } from './validate.js';
@@ -8,10 +8,25 @@ import type { ContentIssue } from './validate.js';
  * 内容体检（F1 + F2）的统一入口。
  *
  * 三处消费同一套检查，保证口径一致：
- * - `diagnose` 的 content 维度（全量，产出 DiagItem）
- * - `/state` 的技能摘要（每个技能带 error/warn 计数，供列表标记）
- * - `/skills/:id/security` 明细（详情页主动运行 / 重跑）
+ * - `diagnose` 的 content 维度（全量，产出 DiagItem，并记下摘要）
+ * - `/state` 的技能摘要（只回传尚未过期的上次计数，不在列表上重跑规则）
+ * - `/skills/:id/security` 明细（详情页主动运行 / 重跑，并记下摘要）
  */
+
+interface HealthSnap { stamp: string; health?: ContentHealth }
+
+/** 上次体检的摘要。文件戳变了就作废，列表不再拿旧计数冒充现状。 */
+const healthSnaps = new Map<string, HealthSnap>();
+
+/** 把一次真实扫描的计数记下来，供之后的 /state 复用 */
+export function rememberSkillHealth(skill: Skill, findings: SecFinding[], issues: ContentIssue[]): void {
+  if (!skill.id || !skill.dir) return;
+  healthSnaps.set(skill.id, { stamp: contentStamp(skill.dir), health: healthOf(findings, issues) });
+}
+
+export function invalidateHealthCache(): void {
+  healthSnaps.clear();
+}
 
 /** 单个技能的内容问题计数。error=安全高危；warn=安全提示 + frontmatter 契约问题。 */
 export interface ContentHealth { error: number; warn: number }
@@ -42,20 +57,40 @@ export function healthOf(findings: SecFinding[], issues: ContentIssue[]): Conten
 /** 检测单个技能；非自有仓库直接返回 own:false（前端据此提示「第三方来源不检测」） */
 export function inspectSkill(skill: Skill, ownSources: Set<string>): SkillInspection {
   if (!ownSources.has(skill.source)) return { own: false, findings: [], issues: [] };
-  return {
-    own: true,
-    findings: scanSkillSecurity(skill),
-    issues: validateFrontmatter(skill),
-  };
+  const findings = scanSkillSecurity(skill);
+  const issues = validateFrontmatter(skill);
+  rememberSkillHealth(skill, findings, issues);
+  return { own: true, findings, issues };
 }
 
-/** 一批技能的内容健康摘要（仅自有仓库；无问题的技能不出现在结果里） */
+/** 一批技能的内容健康摘要（仅自有仓库；无问题的技能不出现在结果里）。会跑全量规则，并更新摘要缓存。 */
 export function contentHealthMap(skills: Skill[], ownSources: Set<string>): Map<string, ContentHealth> {
   const out = new Map<string, ContentHealth>();
   for (const s of skills) {
     if (!ownSources.has(s.source)) continue;
-    const health = healthOf(scanSkillSecurity(s), validateFrontmatter(s));
+    const findings = scanSkillSecurity(s);
+    const issues = validateFrontmatter(s);
+    const health = healthOf(findings, issues);
+    rememberSkillHealth(s, findings, issues);
     if (health) out.set(s.id, health);
+  }
+  return out;
+}
+
+/**
+ * /state 用的摘要：只返回文件戳仍对得上的上次计数。
+ * 没扫过、或 SKILL.md / scripts 已经变了，就不带 health，等诊断或详情页重新检测。
+ */
+export function cachedContentHealthMap(skills: Skill[], ownSources: Set<string>): Map<string, ContentHealth> {
+  const out = new Map<string, ContentHealth>();
+  for (const s of skills) {
+    if (!ownSources.has(s.source) || !s.dir) continue;
+    const snap = healthSnaps.get(s.id);
+    if (!snap || snap.stamp !== contentStamp(s.dir)) {
+      if (snap) healthSnaps.delete(s.id);
+      continue;
+    }
+    if (snap.health) out.set(s.id, snap.health);
   }
   return out;
 }

@@ -160,14 +160,80 @@ export function readCatalog(root: string, source: string): Skill[] {
   return [];
 }
 
-/** 扫描一个源目录：清单优先（有则补），再按布局扫描本体，按 id 去重 */
+/** 进程内扫描缓存：指纹是目录树里 SKILL.md 的 mtime + size，文件一变就失效 */
+const scanCache = new Map<string, { stamp: string; skills: Skill[] }>();
+
+/** 写操作后清掉扫描缓存。mtime 指纹本身也会在文件变化时失效，这里兜住同一次写入里 mtime 没跳的情况。 */
+export function invalidateScanCache(): void {
+  scanCache.clear();
+}
+
+function fileStamp(file: string): string {
+  try {
+    const st = fs.statSync(file);
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return 'missing';
+  }
+}
+
+/** 与 readCatalog 同一套「命中首个可用清单」规则，把清单文件和它指向的 SKILL.md 纳入指纹 */
+function catalogStamp(root: string, parts: string[]): void {
+  for (const rel of CATALOG_PATHS) {
+    const file = path.join(root, rel);
+    const entries = readCatalogFile(file);
+    if (!entries) continue;
+    parts.push(`cat:${rel}:${fileStamp(file)}`);
+    for (const e of entries) {
+      const dir = catalogEntryDir(root, e);
+      if (!hasSkill(dir)) continue;
+      parts.push(`catmd:${dir}:${fileStamp(path.join(dir, 'SKILL.md'))}`);
+    }
+    return;
+  }
+}
+
+/**
+ * 按 scanDir 的同一棵树收集指纹：技能目录只记 SKILL.md，不把技能内部文件算进来。
+ * auto 按 nested 走，这样深层新增技能也会让指纹变化。
+ */
+function treeStamp(dir: string, layout: 'flat' | 'nested', parts: string[]): void {
+  if (hasSkill(dir)) {
+    parts.push(`md:${dir}:${fileStamp(path.join(dir, 'SKILL.md'))}`);
+    return;
+  }
+  let names: string[] = [];
+  try { names = fs.readdirSync(dir); } catch { return; }
+  names.sort();
+  for (const name of names) {
+    const child = resolveChildDir(dir, name);
+    if (!child) continue;
+    if (hasSkill(child)) parts.push(`md:${child}:${fileStamp(path.join(child, 'SKILL.md'))}`);
+    else if (layout !== 'flat') treeStamp(child, 'nested', parts);
+  }
+}
+
+function sourceStamp(root: string, layout: Layout): string {
+  const parts: string[] = [];
+  catalogStamp(root, parts);
+  treeStamp(root, layout === 'flat' ? 'flat' : 'nested', parts);
+  return parts.join('\n');
+}
+
+/** 扫描一个源目录：清单优先（有则补），再按布局扫描本体，按 id 去重。指纹未变时直接返回上次结果。 */
 function scanRoot(root: string, source: string, layout: Layout): Skill[] {
   if (!fs.existsSync(root)) return [];
+  const stamp = sourceStamp(root, layout);
+  const key = `${source}\0${layout}\0${root}`;
+  const hit = scanCache.get(key);
+  if (hit && hit.stamp === stamp) return hit.skills;
   const byId = new Map<string, Skill>();
   for (const s of readCatalog(root, source)) byId.set(s.id, s);
   const resolved = resolveLayout(root, layout);
   for (const s of scanDir(root, source, resolved)) byId.set(s.id, s);
-  return [...byId.values()];
+  const skills = [...byId.values()];
+  scanCache.set(key, { stamp, skills });
+  return skills;
 }
 
 export function scanRepo(repo: Repo): { source: string; path: string; skills: Skill[] } {
