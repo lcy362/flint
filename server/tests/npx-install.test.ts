@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { gitExec } from '../src/core/git.js';
@@ -199,6 +200,15 @@ describe('npxInstall / npxUpdate（笼子内执行与快照）', () => {
         'const rest = process.argv.slice(4); // --yes <pkg> <rest...>',
         "if (rest.includes('fail')) { console.error('boom'); process.exit(1); }",
         "if (rest.includes('noop')) { console.log('noop'); process.exit(0); }",
+        "if (rest.includes('to-home')) {",
+        "  const home = process.env.HOME;",
+        "  if (!home) { console.error('no home'); process.exit(1); }",
+        "  const dest = path.join(home, '.claude', 'skills', 'fake');",
+        "  fs.mkdirSync(dest, { recursive: true });",
+        "  fs.writeFileSync(path.join(dest, 'SKILL.md'), '---\\nname: fake\\ndescription: home skill\\n---\\nBody\\n');",
+        "  console.log('installed into ' + home);",
+        "  process.exit(0);",
+        "}",
         'const cwd = process.cwd();',
         "const dir = path.join(cwd, '.claude', 'skills', 'fake');",
         "fs.mkdirSync(dir, { recursive: true });",
@@ -231,6 +241,19 @@ describe('npxInstall / npxUpdate（笼子内执行与快照）', () => {
     expect(fs.existsSync(path.join(dir, '.git'))).toBe(true);
     // 建议根可直接用于登记
     expect(r.suggestedRoot).toBe(path.join(dir, '.claude', 'skills'));
+  });
+
+  it('安装器按 HOME 落盘时写进笼子里的 home/，扫得到技能，且不改父进程的 HOME', async (ctx) => {
+    if (!(await hasGit())) ctx.skip();
+    const parentHome = process.env.HOME;
+    const dir = path.join(tmpDir('flint-npx-home-'), 'impeccable');
+    const r = await npxInstall({ pkg: 'impeccable', args: ['to-home'], dir });
+    expect(r.ok).toBe(true);
+    expect(process.env.HOME).toBe(parentHome);
+    const skill = path.join(dir, 'home', '.claude', 'skills', 'fake', 'SKILL.md');
+    expect(fs.existsSync(skill)).toBe(true);
+    expect(r.suggestedRoot).toBe(path.join(dir, 'home', '.claude', 'skills'));
+    expect(fs.existsSync(path.join(os.homedir(), '.claude', 'skills', 'fake', 'SKILL.md'))).toBe(false);
   });
 
   it('更新：默认重跑安装命令，产物有变化即 updated', async (ctx) => {

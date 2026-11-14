@@ -36,7 +36,10 @@ flint/  (local-skills-hub)
 ├─ server/
 │  ├─ src/
 │  │  ├─ index.ts          # 入口：装配 ConfigStore / Router，resync（自动同步已停用）
-│  │  ├─ api/routes.ts     # 全部 REST 路由
+│  │  ├─ api/routes.ts     # 装配 REST 路由（唯一 HTTP 出口）
+│  │  ├─ api/route-ctx.ts  # 路由共享上下文
+│  │  ├─ api/route-helpers.ts
+│  │  └─ api/routes/       # skills / agents / projects / system
 │  │  ├─ config/           # types.ts / store.ts / defaults.ts
 │  │  ├─ core/             # 领域逻辑（见 §4）
 │  │  ├─ domain/cards.ts   # 领域行 → 前端展示契约
@@ -395,7 +398,7 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 - **乐观更新 + 串行提交**：Agent 页「直接添加技能」与预设页「按技能纳入」用本地草稿即时反映，请求进串行队列，避免连点时后发先至。
 - **路径输入统一可调起系统选择器**：`components/ui/PathField.tsx`（`PathField` / `PathListField`）；相对路径（如 `.my-tool/skills`）因选择器无法表达，保留纯文本输入并注明。
-- **技能详情是页面，不是弹窗**：`views/Library.tsx` 的 `SkillDetail`（列表 / 详情按 `route.sub` 互斥渲染，与 Agent / 项目详情同一形态）提供元数据 + 标签编辑 + 来源追溯 + `SKILL.md` 预览；「分发到智能体」是详情页头部按钮打开的弹窗。
+- **技能详情是页面，不是弹窗**：`views/library/SkillDetail.tsx` 的 `SkillDetail`（列表 / 详情按 `route.sub` 互斥渲染，与 Agent / 项目详情同一形态）提供元数据 + 标签编辑 + 来源追溯 + `SKILL.md` 预览；「分发到智能体」是详情页头部按钮打开的弹窗。
 - **分发入口可以有多处，逻辑与 UI 只有一套**：技能详情里的「分发到智能体」（`components/skill/SkillDistributeModal.tsx`）只是把智能体详情页的两个接口搬到技能视角——`POST /agents/:key/skills`（添加）与 `DELETE /agents/:key/skills/:name`（移除）；已分发清单走一次聚合只读查询 `GET /skills/:name/agents`（只读共享目录读到的行不计入）。列表按「一个实际目录一行」归并（`groupAgentsByDir`），卡片直接复用 `agentGroupItem`，搜索口径（名称 / key / 目录）与「只看已安装」也与智能体页一致，只是多出一个分发开关；开关对所有落盘的行都可用（关闭＝把落点从该目录移除：软链只解除链接、真实目录 / 副本删掉），关闭前先弹确认。视图沿用全站偏好（缺省卡片），切换器在同一筛选栏上。开关成功后就地改这一行的状态（乐观更新，与预设页的高频开关同一约定），不整份重拉——失败保持原状并由 toast 说明原因（部署接口 HTTP 200 但 `failed` 非空的「静默失败」也按失败处理）。
 
 ---
@@ -434,9 +437,9 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 - **C14 标签落在生态共识位置**：优先 `SKILL.md` frontmatter 顶层 `tags`（社区 40+ 工具原生读取、随 git 版本化）；本工具对暂未回写的标签以 `skillMeta` 暂存并提供迁移。
 - **C15 多布局宽容读取**：外部源支持 flat / nested / 带索引清单；**自有仓库恒为扁平**（只认根下的 `SKILL.md`，分类子目录里的技能由诊断报出、不静默丢弃）。发现一律**以 `SKILL.md` 存在为准**，不以目录深度为准；单 skill 仓库（根自身含 `SKILL.md`，如 patent-disclosure-skill）整体识别为一个 skill，`skills/` 下的子技能不单独列出。
-- **C19 npx 安装器笼子（EK-07）**：第三方包的安装命令只在托管目录 `<flint 数据目录>/sources/<id>` 内执行——cwd 隔离 + 非交互 env（`CI` / `GIT_TERMINAL_PROMPT` / `npm_config_yes`）+ 异步 spawn 带超时（禁 `spawnSync`、禁 shell 拼接、argv 传参）+ 目录自动 `git init`（安装 / 更新前后各存快照提交，可 diff 可回滚；同时保证「从 cwd 向上探测项目根」的安装器收敛在笼内）。**用户只填一条原始命令**（`npx impeccable skills install`）：服务端解析出包名与参数（引号感知切分，`npx` 前缀与 `--yes` 可省），不要求用户拆成「包名 + 参数」两栏。flint 不认识任何具体包：跑什么、落下什么、登记什么，全凭用户给的命令与安装后的扫描结果；预览 0 技能即拒绝登记（C22）。安装器绕过笼子写入真实 Agent 目录时**不自动清理**（只动自己的，C13 的自动边界在此同样适用），但会**如实告知**（C21），出路是手动删除或归集 + 接管收编。安装超时 10 分钟（首次全新安装要下载包 + 给各 harness 装技能，实测可超过 5 分钟），另有 5 分钟「无输出看门狗」：安装器长时间不出声（实测 impeccable 打印完 `Detected harnesses` 后会静默卡住）就提前收场并说明原因；失败时清掉本次新建笼子里的半成品（已有来源的目录不动）。前端配套一条静默兜底（6 分钟无事件即中断），防止服务端重启 / 断网后界面永远停在「进行中」。npx 来源的更新 = 在笼内重跑安装命令（`installer.updateArgs` 优先，否则重跑安装命令），不走 git pull。**长任务一律 SSE 流式**（`/sources/clone`、`/sources/npx`、`/repos/:id/npx-update`）：子进程输出按 `\r` / `\n` 规整成行、限长 + 120ms 合流限流后以 `start / log / progress / done / error` 事件实时下发，前端日志面板自动滚底、只留最近 300 行；参数校验错误发生在开流之前，仍走普通 JSON + 4xx。
+- **C19 npx 安装器笼子（EK-07）**：第三方包的安装命令只在托管目录 `<flint 数据目录>/sources/<id>` 内执行——cwd 隔离 + 子进程 `HOME` / `USERPROFILE` / `XDG_*` 指到 `<笼子>/home`（按家目录探测的安装器写进笼子，扫得到技能）+ npm 缓存与 `~/.npmrc` 仍用真实路径 + 非交互 env（`CI` / `GIT_TERMINAL_PROMPT` / `npm_config_yes`）+ 异步 spawn 带超时（禁 `spawnSync`、禁 shell 拼接、argv 传参）+ 目录自动 `git init`（安装 / 更新前后各存快照提交，可 diff 可回滚；同时保证「从 cwd 向上探测项目根」的安装器收敛在笼内）。**用户只填一条原始命令**（`npx impeccable skills install`）：服务端解析出包名与参数（引号感知切分，`npx` 前缀与 `--yes` 可省），不要求用户拆成「包名 + 参数」两栏。flint 不认识任何具体包：跑什么、落下什么、登记什么，全凭用户给的命令与安装后的扫描结果；预览 0 技能即拒绝登记（C22）。安装器绕过笼子写入真实 Agent 目录时**不自动清理**（只动自己的，C13 的自动边界在此同样适用），但会**如实告知**（C21），出路是手动删除或归集 + 接管收编。安装超时 10 分钟（首次全新安装要下载包 + 给各 harness 装技能，实测可超过 5 分钟），另有 5 分钟「无输出看门狗」：安装器长时间不出声（实测 impeccable 打印完 `Detected harnesses` 后会静默卡住）就提前收场并说明原因；失败时清掉本次新建笼子里的半成品（已有来源的目录不动）。前端配套一条静默兜底（6 分钟无事件即中断），防止服务端重启 / 断网后界面永远停在「进行中」。npx 来源的更新 = 在笼内重跑安装命令（`installer.updateArgs` 优先，否则重跑安装命令），不走 git pull。**长任务一律 SSE 流式**（`/sources/clone`、`/sources/npx`、`/repos/:id/npx-update`）：子进程输出按 `\r` / `\n` 规整成行、限长 + 120ms 合流限流后以 `start / log / progress / done / error` 事件实时下发，前端日志面板自动滚底、只留最近 300 行；参数校验错误发生在开流之前，仍走普通 JSON + 4xx。
 - **C20 下载进度只报真实值**：进度事件的字段是 `percent`（0–100，有确切百分比才给）/ `received`（已传输字节）/ `total` / `stage`。git 侧强制 `--progress`（stderr 非 TTY 时 git 默认全静默），从 `Receiving objects: 45% (…/…, 1.20/2.70 MiB)` 解析真实百分比与字节；npm 在非 TTY 下不渲染进度条，改用 npx 缓存目录（`<npm 缓存>/_npx`）的实际增长量作为「已下载多少」的真实指标。**拿不到百分比就不给百分比**——前端此时画不定进度条 + 体积文本，绝不用估算值或动画冒充真实比例。缓存体积连续两次不变即判定下载结束，阶段切到「正在安装」，避免进度条停在某个数字上让人以为卡死。
-- **C21 笼外写入如实告知**：笼子只约束 cwd，安装器仍能通过 HOME 探测到用户的真实 Agent 目录并写入（实测 impeccable 会写 `~/.claude/agents`、`~/.grok/skills`、`~/.config/opencode/skills`）。flint **只报不改**：安装结束后取「安装器输出里声明过的家目录位置」∩「本次运行期间确实被改动的路径」，把交集作为 `escaped` 随结果返回，登记弹窗直接列出（要求两个信号同时成立，避免把用户同时在跑的 IDE 写自己的配置目录误报成安装器越界）。清理仍走人工：Agent 页手动删除，或「归集 + 接管」收编。
+- **C21 笼外写入如实告知**：子进程的家目录在笼子内。安装器若改用绝对路径写到真实家目录，flint **只报不改**：安装结束后取「安装器输出里声明过的家目录位置」∩「本次运行期间确实被改动的路径」，把交集作为 `escaped` 随结果返回，登记弹窗直接列出（要求两个信号同时成立，避免把用户同时在跑的 IDE 写自己的配置目录误报成安装器越界）。清理仍走人工：Agent 页手动删除，或「归集 + 接管」收编。
 - **C22 导入流程禁 0 技能**：Git 克隆 / npx 安装带来的登记（前端带 `requireSkills`）若扫不到技能 → 前端禁用「确认登记」+ 后端 400 兜底，避免留下永远空着的来源；手动登记是用户的明确选择，不拦（可以先登记后补内容）。
 
 ### 边界类
@@ -464,12 +467,12 @@ skillMeta[id].tags（优先） → frontmatter tags / metadata.tags（回退）
 
 ## 15. 已知问题与待决
 
-以下问题来自真实浏览器实测（2026-11-01，impeccable 全量安装），**当前未修**，记录在此备查。
+以下问题来自真实浏览器实测（2026-11-01，impeccable 全量安装）。K1、K2 已修，其余仍待决。
 
 | # | 问题 | 实测现象 | 现状 / 候选方案 |
 | --- | --- | --- | --- |
-| K1 | **笼子只约束 cwd，不隔离 HOME** | 安装器通过 HOME 探测到真实 Agent 目录并写入（实测 `~/.claude/agents`、`~/.claude/skills`、`~/.config/opencode/skills|commands`、`~/.hermes/skills`、`~/.qoder/skills`、`~/.dsh/skills`、`~/.agents/skills`），还会自建 `~/.impeccable/` 放 engine 二进制，甚至在用户项目目录里留下工作产物 | flint **只报不改**（C13 边界），登记弹窗列出被写位置（C21）。候选方案：给子进程受控 `HOME`（`<cage>/home`），让安装器根本探测不到真实目录；代价是技能落点变深（`<cage>/home/.claude/skills`），需同步改「技能扫描根推导」与登记路径推断。**待决：先做隔离，还是保持只报不改** |
-| K2 | **安装器把技能装到笼外时，笼内是空的** | 同一轮安装里笼内扫描到 0 技能 → 导入流程按 C22 拦截登记，技能实际在用户目录里 | **部分已修**：安装器给多个 harness 各装一份同名副本时（`--scope=project` 实测 7 份），扫描根推导已改为取其中一份的 skills 根，不再退回笼根导致 0 技能（2026-11-02 修）。仍待决的是「安装器只装全局、不装项目」的情形：笼内确实为空 → 仍会被 C22 拦住。正解仍是 K1 的 HOME 隔离；或允许登记时把笼外技能一并归集（与「归集 + 接管」合并） |
+| K1 | **笼子只约束 cwd，不隔离 HOME** | 安装器通过 HOME 探测到真实 Agent 目录并写入 | **已修**：子进程 `HOME` / `USERPROFILE` / `XDG_*` 指到 `<笼子>/home`。按家目录探测的落点在笼子内，`suggestScanRoot` 沿目录树找到 skills 根（例如 `<笼子>/home/.claude/skills`）。npm 缓存与 `~/.npmrc` 仍用真实路径。绕过家目录的绝对路径写入仍由 C21 报告、不自动清理 |
+| K2 | **安装器把技能装到笼外时，笼内是空的** | 只装全局、不装项目时笼内 0 技能，登记被 C22 拦住 | **已修**：全局安装现在落在 `<笼子>/home` 下，扫描根推导能看到这些技能。多 harness 同名副本仍取第一份的 skills 根（2026-11-02） |
 | K3 | **npm 侧拿不到下载百分比** | npm 在非 TTY 下不渲染进度条，只能给「已下载 X MB」（真实值） | 已按 C20 处理：不给百分比、不伪造比例。彻底解决需 npm 侧支持（当前 npm 无对应开关） |
 | K4 | **全新安装耗时长** | 实测 7~8 分钟（下载包 + 给 7 个 harness 装技能），期间只有开头的几行输出 | 已放宽超时到 10 分钟 + 5 分钟静默看门狗；慢的根因是安装器逐个 harness 安装，不是 flint 的问题 |
 | K5 | **进度体积累计口径** | 用 npx 缓存目录体积近似「已下载量」，命中缓存复用的场景下不会增长 → 无进度事件 | 属可接受近似；缓存命中时本就没东西可下 |
