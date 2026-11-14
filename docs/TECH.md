@@ -83,7 +83,7 @@ Express Router (api/routes.ts)  ── 解析请求、校验、调 core、触发
 | 模块 | 职责 |
 |------|------|
 | `core/skill.ts` | 读取 / 解析 `SKILL.md` frontmatter（name / description / version / tags，兼容顶层 `tags` 与 `metadata.tags`）。 |
-| `core/scanner.ts` | 扫描仓库 / 外部源：自有仓库**恒按扁平**读取，外部源支持布局识别（flat / nested / auto，深层存在技能即判 nested）、带索引清单（catalog）读取、聚合 `scanAll`。结果按目录树里 `SKILL.md` 的 mtime + size 做进程内缓存，文件变化或写操作后失效。**单 skill 仓库识别**——根自身含 `SKILL.md` 时整目录视为一个 skill，其 `skills/` 子目录属于内部子技能，不再单独识别。 |
+| `core/scanner.ts` | 扫描仓库 / 外部源：自有仓库**恒按扁平**读取，外部源支持布局识别（flat / nested / auto，一次遍历同时数出顶层与更深层技能，深层存在即判 nested）、带索引清单（catalog）读取、聚合 `scanAll`。结果按目录树里 `SKILL.md` 的 mtime + size 做进程内缓存，文件变化或写操作后失效。**单 skill 仓库识别**——根自身含 `SKILL.md` 时整目录视为一个 skill，其 `skills/` 子目录属于内部子技能，不再单独识别。 |
 | `core/text-cache.ts` | 进程内正文缓存（按文件 mtime + size）。扫描、正文搜索、安全扫描、frontmatter 校验共用同一次读取。 |
 | `core/tags.ts` | `effectiveTags`：`config.skillMeta` 覆盖优先，回落 frontmatter。 |
 | `core/repo-tags.ts` | 把 `skillMeta` 标签写回 `SKILL.md` frontmatter（保留其它字段与正文）。 |

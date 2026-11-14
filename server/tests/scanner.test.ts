@@ -60,6 +60,14 @@ describe('detectLayoutAbs（布局判定）', () => {
     const det = detectLayoutAbs(skillsRoot);
     expect(scanDir(skillsRoot, 'probe', det.layout)).toHaveLength(det.count);
   });
+
+  it('布局判定不读取 SKILL.md', () => {
+    const { skillsRoot } = repoFixture();
+    const read = vi.spyOn(fs, 'readFileSync');
+    expect(detectLayoutAbs(skillsRoot)).toMatchObject({ layout: 'nested', count: 2 });
+    expect(read.mock.calls.some((c) => String(c[0]).endsWith('SKILL.md'))).toBe(false);
+    read.mockRestore();
+  });
 });
 
 describe('resolveLayout', () => {
